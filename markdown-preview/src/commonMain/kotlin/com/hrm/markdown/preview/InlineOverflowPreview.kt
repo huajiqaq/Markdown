@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.hrm.markdown.renderer.Markdown
+import com.hrm.markdown.renderer.MarkdownComponents
 
 private const val FillingWidgetUrl = "preview://fill"
 private const val ScrollingWidgetUrl = "preview://scroll"
@@ -101,13 +102,13 @@ private fun InlineOverflowPreview() {
                 markdown = inlineOverflowMarkdown,
                 modifier = Modifier.fillMaxSize(),
                 // Fixed image dimensions provide real inline slots; all demo content is local.
-                imageContent = { data, modifier ->
+                components = MarkdownComponents(image = { data, modifier ->
                     when (data.url) {
                         FillingWidgetUrl -> FillingInlineWidget(modifier)
                         ScrollingWidgetUrl -> ScrollingInlineWidget(modifier)
                         else -> Text(data.altText, modifier = modifier)
                     }
-                },
+                }),
             )
         }
     }

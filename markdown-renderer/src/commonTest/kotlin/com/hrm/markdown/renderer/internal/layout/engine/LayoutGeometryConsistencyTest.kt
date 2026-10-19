@@ -119,11 +119,8 @@ class LayoutGeometryConsistencyTest {
                 theme = theme,
                 config = MarkdownConfig.Default,
                 codeTheme = null,
-                imageRenderer = null,
-                onLinkClick = null,
                 directiveRegistry = MarkdownDirectiveRegistry.Empty,
                 isStreaming = false,
-                enableSelection = false,
             )
         }
         val renderDocument = remember(markdown, facadeState) {

@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrm.markdown.renderer.Markdown
+import com.hrm.markdown.renderer.MarkdownComponents
 import com.hrm.markdown.renderer.MarkdownTheme
 
 private val listAlignmentMarkdown = """
@@ -125,7 +126,7 @@ private fun ListAlignmentPreview() {
                 markdown = listAlignmentMarkdown,
                 modifier = Modifier.fillMaxSize(),
                 theme = theme.copy(bodyStyle = theme.bodyStyle.copy(fontSize = fontSize, lineHeight = fontSize * 1.5f)),
-                imageContent = { data, modifier ->
+                components = MarkdownComponents(image = { data, modifier ->
                     Box(
                         modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center,
@@ -136,7 +137,7 @@ private fun ListAlignmentPreview() {
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
-                },
+                }),
             )
         }
     }

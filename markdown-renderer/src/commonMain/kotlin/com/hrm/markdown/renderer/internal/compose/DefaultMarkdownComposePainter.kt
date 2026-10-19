@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
@@ -19,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
+import com.hrm.markdown.renderer.LocalMarkdownDirectiveRegistry
 import com.hrm.markdown.renderer.LocalMarkdownTheme
 import com.hrm.markdown.renderer.MarkdownRenderMode
 import com.hrm.markdown.renderer.block.FencedCodeBlockRenderer
@@ -78,8 +80,10 @@ import com.hrm.markdown.renderer.internal.core.model.TabBlockModel
 import com.hrm.markdown.renderer.internal.core.model.TableBlockModel
 import com.hrm.markdown.renderer.internal.core.model.ThematicBreakBlockModel
 import com.hrm.markdown.renderer.internal.core.model.TocBlockModel
+import com.hrm.markdown.renderer.internal.layout.LayoutTokens
 import com.hrm.markdown.renderer.internal.layout.engine.MarkdownLayoutSource
 import com.hrm.markdown.renderer.internal.layout.inline.LayoutInlineRunPlacement
+import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutBlockModel
 import com.hrm.markdown.renderer.internal.layout.model.LayoutBibliographyBlockModel
 import com.hrm.markdown.renderer.internal.layout.model.LayoutColumnsBlockModel
 import com.hrm.markdown.renderer.internal.layout.model.LayoutDefinitionListBlockModel
@@ -96,7 +100,6 @@ import com.hrm.markdown.renderer.internal.layout.model.LayoutWidgetBlockModel
 import com.hrm.markdown.renderer.internal.selection.LocalMarkdownSelectionController
 import com.hrm.markdown.renderer.internal.selection.selectableBlock
 import kotlinx.coroutines.flow.distinctUntilChanged
-import com.hrm.markdown.renderer.internal.layout.LayoutTokens
 
 internal object DefaultMarkdownComposePainter : MarkdownComposePainter {
     @Composable
@@ -190,7 +193,7 @@ private fun PrefetchNextMarkdownBlock(
 }
 
 @Composable
-private fun PaintBlock(block: com.hrm.markdown.renderer.internal.layout.model.InternalLayoutBlockModel) {
+private fun PaintBlock(block: InternalLayoutBlockModel) {
     when (block) {
         is LayoutRenderBlockModel -> PaintRenderBlock(block)
         is LayoutListBlockModel -> RenderListLayoutBlockModel(
@@ -375,7 +378,7 @@ private fun PaintRenderBlock(block: LayoutRenderBlockModel) {
                     verticalArrangement = Arrangement.spacedBy(LocalMarkdownTheme.current.blockSpacing / 2),
                 ) {
                     renderBlock.entries.forEach { entry ->
-                        androidx.compose.material3.Text(
+                        Text(
                             text = "${"  ".repeat((entry.level - 1).coerceAtLeast(0))}• ${entry.text}",
                             style = LocalMarkdownTheme.current.bodyStyle,
                             color = LocalMarkdownTheme.current.linkColor,
@@ -390,7 +393,7 @@ private fun PaintRenderBlock(block: LayoutRenderBlockModel) {
         )
 
         is DirectiveBlockModel -> {
-            val renderer = com.hrm.markdown.renderer.LocalMarkdownDirectiveRegistry.current
+            val renderer = LocalMarkdownDirectiveRegistry.current
                 .findBlockDirectiveRenderer(renderBlock.tagName)
             if (renderer != null) {
                 renderer(
@@ -531,7 +534,7 @@ private fun PaintRenderBlockChildren(
 
 @Composable
 private fun PaintLayoutBlockColumn(
-    blocks: List<com.hrm.markdown.renderer.internal.layout.model.InternalLayoutBlockModel>,
+    blocks: List<InternalLayoutBlockModel>,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -543,7 +546,7 @@ private fun PaintLayoutBlockColumn(
 
 @Composable
 private fun PaintLayoutBlockChildren(
-    blocks: List<com.hrm.markdown.renderer.internal.layout.model.InternalLayoutBlockModel>,
+    blocks: List<InternalLayoutBlockModel>,
 ) {
     for (block in blocks) {
         key(block.identity.stableId) {
@@ -557,7 +560,7 @@ private fun PaintCompiledBlock(block: InternalRenderBlockModel) {
     PaintRenderBlock(
         LayoutRenderBlockModel(
             identity = block.identity,
-            frame = com.hrm.markdown.renderer.internal.layout.model.LayoutRect(
+            frame = LayoutRect(
                 left = 0f,
                 top = 0f,
                 width = 0f,

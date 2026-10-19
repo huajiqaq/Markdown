@@ -24,9 +24,9 @@ import com.hrm.markdown.renderer.internal.layout.model.LayoutWidgetBlockModel
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNotSame
-import kotlin.test.assertNotEquals
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -166,7 +166,7 @@ class MarkdownLatexConfigTest {
             val host = remember { MarkdownEngineHost() }
             val document = remember { MarkdownParser().parse("\$$formula\$\n\n\$\$\n$formula\n\$\$") }
             val facade = RendererFacadeState(
-                theme, config, null, null, null, MarkdownDirectiveRegistry.Empty, false, false,
+                theme, config, null, MarkdownDirectiveRegistry.Empty, false,
             )
             val layout = host.layout(
                 renderDocument = host.compile(document, facade),

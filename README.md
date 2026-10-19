@@ -280,6 +280,52 @@ cache invalidation.
 
 ---
 
+## Interaction and standard block slots
+
+`MarkdownInteractions` groups typed link, citation (`[@key]`) and image callbacks. When no link callback is supplied, links use Compose `LocalUriHandler`.
+
+```kotlin
+import androidx.compose.ui.unit.dp
+import com.hrm.markdown.renderer.Markdown
+import com.hrm.markdown.renderer.MarkdownBlockSlot
+import com.hrm.markdown.renderer.MarkdownComponents
+import com.hrm.markdown.renderer.MarkdownConfig
+import com.hrm.markdown.renderer.MarkdownInteractions
+import com.hrm.markdown.renderer.MarkdownSoftBreakPolicy
+
+Markdown(
+    markdown = text,
+    interactions = MarkdownInteractions(
+        onLinkClick = { url -> /* navigate */ },
+        onCitationClick = { event -> /* event.key, event.anchorBoundsInWindow */ },
+        onImageClick = { event ->
+            // Read event.gallery only when opening a document-order image viewer.
+            val gallery = event.gallery
+            // gallery.images[gallery.initialIndex] is the clicked occurrence.
+        },
+    ),
+    config = MarkdownConfig(softBreakPolicy = MarkdownSoftBreakPolicy.LineBreak),
+    components = MarkdownComponents(
+        codeBlockHeader = MarkdownBlockSlot(48.dp) { code ->
+            TextButton(onClick = { runCode(code.code, code.language) }) { Text("Run") }
+        },
+        tableToolbar = MarkdownBlockSlot(48.dp) { table ->
+            Text("${table.rowCount} rows / ${table.columnCount} columns")
+        },
+    ),
+)
+```
+
+`runCode` above is a host application action. Image loading still uses Coil by default; `components.image` can replace it, and both custom images and figures share the image action. The host owns the preview UI and reference data. Coordinates are optional window-space pixels. Occurrence IDs distinguish repeated URLs within one rendered document and are not persistent storage IDs. `event.gallery` is a lazy snapshot of all document images, including offscreen content; it preserves the clicked revision when streaming continues.
+
+Callbacks bind after layout, so replacing an action does not reparse or remeasure the document. Slots reserve their explicit, finite, non-negative height before layout; keep their content inside that height, including at increased font scales. Toolbars remain outside horizontal scrolling, and their text is excluded from Markdown copy. Both slots are additive; existing code titles, syntax highlighting and table layout remain active. `MarkdownTableInfo.rowCount` includes the header row.
+
+For content with a height limit, use Markdown's default internal scrolling. When an outer `Column` provides `verticalScroll`, set `enableScroll = false` so Markdown measures its complete content and the outer viewport handles vertical scrolling.
+
+Soft breaks default to `Space`; `LineBreak` changes display and copy without mutating the AST or restarting a streaming parser. Hard breaks are unaffected. `MarkdownHtml.render(markdown, config = ...)` applies the same policy; an explicit `softBreak` string overrides it. The AST export overload accepts `softBreakPolicy` directly. Component chrome and action callbacks do not change HTML export.
+
+---
+
 ## 🎨 Theming
 
 ```kotlin
@@ -300,7 +346,7 @@ Markdown(
         codeBlockBackground = Color(0xFFF5F5F5),
         // ...and much more
     ),
-    onLinkClick = { url -> /* handle click */ },
+    interactions = MarkdownInteractions(onLinkClick = { url -> /* handle click */ }),
 )
 ```
 
@@ -551,14 +597,14 @@ Built-in Coil3 handles images automatically. Need custom rendering? Easy:
 ```kotlin
 Markdown(
     markdown = markdownText,
-    imageContent = { data, modifier ->
+    components = MarkdownComponents(image = { data, modifier ->
         // data.url, data.altText, data.width, data.height available
         AsyncImage(
             model = data.url,
             contentDescription = data.altText,
             modifier = modifier,
         )
-    },
+    }),
 )
 ```
 

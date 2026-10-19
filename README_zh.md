@@ -276,6 +276,52 @@ Markdown(
 
 ---
 
+## 交互与标准组件插槽
+
+通过 `MarkdownInteractions` 统一配置链接、引用（`[@key]`）和图片回调。未配置链接回调时使用 Compose 的 `LocalUriHandler` 打开链接。
+
+```kotlin
+import androidx.compose.ui.unit.dp
+import com.hrm.markdown.renderer.Markdown
+import com.hrm.markdown.renderer.MarkdownBlockSlot
+import com.hrm.markdown.renderer.MarkdownComponents
+import com.hrm.markdown.renderer.MarkdownConfig
+import com.hrm.markdown.renderer.MarkdownInteractions
+import com.hrm.markdown.renderer.MarkdownSoftBreakPolicy
+
+Markdown(
+    markdown = text,
+    interactions = MarkdownInteractions(
+        onLinkClick = { url -> /* navigate */ },
+        onCitationClick = { event -> /* event.key, event.anchorBoundsInWindow */ },
+        onImageClick = { event ->
+            // Read event.gallery only when opening a document-order image viewer.
+            val gallery = event.gallery
+            // gallery.images[gallery.initialIndex] is the clicked occurrence.
+        },
+    ),
+    config = MarkdownConfig(softBreakPolicy = MarkdownSoftBreakPolicy.LineBreak),
+    components = MarkdownComponents(
+        codeBlockHeader = MarkdownBlockSlot(48.dp) { code ->
+            TextButton(onClick = { runCode(code.code, code.language) }) { Text("Run") }
+        },
+        tableToolbar = MarkdownBlockSlot(48.dp) { table ->
+            Text("${table.rowCount} rows / ${table.columnCount} columns")
+        },
+    ),
+)
+```
+
+示例中的 `runCode` 由宿主应用实现。图片默认继续使用 Coil 加载，也可通过 `components.image` 自定义；行内图片、HTML 图片和 Figure 共用点击入口。预览界面与引用来源由业务管理。事件坐标是可空的窗口像素矩形；实例 ID 用于区分当前文档中的重复 URL，不应持久化。`event.gallery` 按需生成包含离屏图片的文档顺序快照；流式内容继续更新时，已触发事件仍保留点击时的版本。
+
+回调在布局后绑定，更新处理函数不会重新解析或测量正文。操作栏使用显式、有限、非负的高度，布局引擎提前预留空间；增大系统字号时也应给插槽足够高度。工具栏位于横向滚动区域外，文字不进入 Markdown 复制内容。插槽为附加内容，原有代码标题、高亮和表格布局继续保留。`MarkdownTableInfo.rowCount` 包含表头行。
+
+内容区域有高度限制时，使用 Markdown 默认的内部滚动。若外层 `Column` 已通过 `verticalScroll` 负责滚动，则设置 `enableScroll = false`，让 Markdown 按完整内容高度布局，由外层视口统一处理垂直滚动。
+
+软换行默认为 `Space`；`LineBreak` 同步改变显示与复制文本，不修改 AST，不重启流式 Parser，也不改变硬换行。`MarkdownHtml.render(markdown, config = ...)` 使用同一策略，显式 `softBreak` 字符串优先；AST 导出重载可直接传 `softBreakPolicy`。操作栏和交互回调不影响 HTML 导出。
+
+---
+
 ## 🎨 主题定制
 
 ```kotlin
@@ -296,7 +342,7 @@ Markdown(
         codeBlockBackground = Color(0xFFF5F5F5),
         // ...更多属性
     ),
-    onLinkClick = { url -> /* 处理链接点击 */ },
+    interactions = MarkdownInteractions(onLinkClick = { url -> /* 处理链接点击 */ }),
 )
 ```
 
@@ -543,14 +589,14 @@ HTML，不进行半截渲染。
 ```kotlin
 Markdown(
     markdown = markdownText,
-    imageContent = { data, modifier ->
+    components = MarkdownComponents(image = { data, modifier ->
         // data.url, data.altText, data.width, data.height 均可获取
         AsyncImage(
             model = data.url,
             contentDescription = data.altText,
             modifier = modifier,
         )
-    },
+    }),
 )
 ```
 

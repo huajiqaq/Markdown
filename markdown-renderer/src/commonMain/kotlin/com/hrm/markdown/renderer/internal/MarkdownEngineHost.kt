@@ -1,12 +1,13 @@
 package com.hrm.markdown.renderer.internal
 
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.graphics.luminance
+import com.hrm.latex.renderer.measure.LatexMeasurerState
 import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.renderer.DiagramHostRegistry
-import com.hrm.latex.renderer.measure.LatexMeasurerState
+import com.hrm.markdown.renderer.MarkdownComponents
 import com.hrm.markdown.renderer.MarkdownTheme
 import com.hrm.markdown.renderer.internal.compose.DefaultMarkdownComposePainter
 import com.hrm.markdown.renderer.internal.compose.MarkdownComposePainter
@@ -17,11 +18,11 @@ import com.hrm.markdown.renderer.internal.core.compile.RenderThemeSnapshot
 import com.hrm.markdown.renderer.internal.core.model.InternalRenderDocumentModel
 import com.hrm.markdown.renderer.internal.layout.engine.DefaultMarkdownLayoutEngine
 import com.hrm.markdown.renderer.internal.layout.engine.LayoutEnvironment
+import com.hrm.markdown.renderer.internal.layout.engine.MarkdownBlockLayoutCache
 import com.hrm.markdown.renderer.internal.layout.engine.MarkdownLayoutEngine
 import com.hrm.markdown.renderer.internal.layout.engine.MarkdownLayoutSession
-import com.hrm.markdown.renderer.internal.layout.engine.MarkdownBlockLayoutCache
-import com.hrm.markdown.renderer.internal.layout.inline.InlineLayoutRuntime
 import com.hrm.markdown.renderer.internal.layout.inline.InlineLayoutMetricsSnapshot
+import com.hrm.markdown.renderer.internal.layout.inline.InlineLayoutRuntime
 import com.hrm.markdown.renderer.internal.layout.inline.inlineLayoutEpoch
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutDocumentModel
 
@@ -62,6 +63,7 @@ internal class MarkdownEngineHost(
         latexMeasurer: LatexMeasurerState,
         diagramHostRegistry: DiagramHostRegistry,
         layoutDirection: LayoutDirection = LayoutDirection.Ltr,
+        components: MarkdownComponents = MarkdownComponents.Default,
     ): InternalLayoutDocumentModel {
         return layoutEngine.layout(
             document = renderDocument,
@@ -76,6 +78,7 @@ internal class MarkdownEngineHost(
                 latexMeasurer = latexMeasurer,
                 diagramHostRegistry = diagramHostRegistry,
                 layoutDirection = layoutDirection,
+                components = components,
             ),
         )
     }
@@ -92,6 +95,7 @@ internal class MarkdownEngineHost(
         latexMeasurer: LatexMeasurerState,
         diagramHostRegistry: DiagramHostRegistry,
         layoutDirection: LayoutDirection = LayoutDirection.Ltr,
+        components: MarkdownComponents = MarkdownComponents.Default,
     ): MarkdownLayoutSession = MarkdownLayoutSession(
         document = renderDocument,
         environment = createLayoutEnvironment(
@@ -105,6 +109,7 @@ internal class MarkdownEngineHost(
             latexMeasurer = latexMeasurer,
             diagramHostRegistry = diagramHostRegistry,
             layoutDirection = layoutDirection,
+            components = components,
         ),
         engine = layoutEngine,
         sharedBlockCache = blockLayoutCache,
@@ -121,6 +126,7 @@ internal class MarkdownEngineHost(
         latexMeasurer: LatexMeasurerState,
         diagramHostRegistry: DiagramHostRegistry,
         layoutDirection: LayoutDirection,
+        components: MarkdownComponents,
     ): LayoutEnvironment = LayoutEnvironment(
         viewportWidth = viewportWidth,
         blockSpacing = blockSpacing,
@@ -135,6 +141,8 @@ internal class MarkdownEngineHost(
         compileEnvironment = facadeState.toCompileEnvironment(),
         latexConfig = facadeState.config.latexConfig,
         diagramHostRegistry = diagramHostRegistry,
+        codeBlockHeaderHeightPx = with(density) { components.codeBlockHeader?.height?.roundToPx()?.toFloat() ?: 0f },
+        tableToolbarHeightPx = with(density) { components.tableToolbar?.height?.roundToPx()?.toFloat() ?: 0f },
         inlineLayoutRuntime = inlineLayoutRuntime,
         inlineLayoutEpoch = inlineLayoutEpoch(
             theme = facadeState.theme,
@@ -158,6 +166,7 @@ internal fun RendererFacadeState.toCompileEnvironment(): RenderCompileEnvironmen
         config = RenderConfigSnapshot(
             enableHeadingNumbering = config.enableHeadingNumbering,
             streaming = isStreaming,
+            softBreakPolicy = config.softBreakPolicy,
         ),
         directiveRegistry = directiveRegistry,
     )

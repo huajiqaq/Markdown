@@ -61,22 +61,22 @@ typealias MarkdownImageRenderer = @Composable (data: MarkdownImageData, modifier
 /**
  * 用于在组件树中传递自定义图片渲染器的 CompositionLocal。
  *
- * 默认值为 null，表示使用内置的默认渲染器（纯文本占位显示）。
- * 外部调用者可以通过 [Markdown] 的 `imageContent` 参数提供自定义实现，
+ * 默认值为 null，表示使用内置 Coil 渲染器。
+ * 外部调用者可以通过 [Markdown] 的 `components.image` 插槽提供自定义实现，
  * 例如使用 Coil、Kamel、Ktor 等图片加载库。
  *
  * 使用示例：
  * ```kotlin
  * Markdown(
  *     markdown = "![alt](https://example.com/image.png =200x300)",
- *     imageContent = { data, modifier ->
+ *     components = MarkdownComponents(image = { data, modifier ->
  *         // 使用 Coil 或其他图片加载库
  *         AsyncImage(
  *             model = data.url,
  *             contentDescription = data.altText,
  *             modifier = modifier,
  *         )
- *     },
+ *     }),
  * )
  * ```
  */
@@ -88,7 +88,7 @@ internal val LocalImageRenderer = compositionLocalOf<MarkdownImageRenderer?> { n
  * 使用 Coil3 的 [AsyncImage] 从网络或本地加载图片。
  * 加载过程中显示 loading 指示器，加载失败时显示替代文本。
  *
- * 外部使用者也可通过 [Markdown] 的 `imageContent` 参数传入自定义图片加载实现来覆盖此行为。
+ * 外部使用者也可通过 [Markdown] 的 `components.image` 插槽传入自定义图片加载实现来覆盖此行为。
  */
 @Composable
 internal fun DefaultMarkdownImage(

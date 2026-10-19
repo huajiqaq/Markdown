@@ -10,20 +10,21 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.AlignmentLine
 import androidx.compose.ui.layout.HorizontalAlignmentLine
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import com.hrm.markdown.renderer.internal.layout.inline.LayoutInlineRunPlacement
 import com.hrm.markdown.renderer.internal.layout.inline.runPlacements
@@ -78,7 +79,7 @@ internal fun PaintInlineLayoutContent(
                         item.stableKey,
                         onTextLayout != null || onTextItemLayout != null,
                     ) {
-                        BasicText(
+                        MarkdownInteractiveText(
                             text = item.text,
                             modifier = Modifier.clipToBounds().semantics {
                                 traversalIndex = itemIndex.toFloat()
@@ -86,8 +87,6 @@ internal fun PaintInlineLayoutContent(
                             // InlineFlowLayout owns line spacing. Paint with the same
                             // line-height-free style used to measure the fixed run bounds.
                             style = textPaintStyle,
-                            maxLines = 1,
-                            softWrap = false,
                             onTextLayout = if (onTextLayout != null || onTextItemLayout != null) {
                                 { result ->
                                     onTextLayout?.invoke(result)
@@ -201,7 +200,7 @@ private fun buildInlinePaintItems(
     block: LayoutInlineBlockModel,
     placements: List<LayoutInlineRunPlacement>,
     style: TextStyle,
-    textMeasurer: androidx.compose.ui.text.TextMeasurer,
+    textMeasurer: TextMeasurer,
 ): List<InlinePaintItem> {
     val items = ArrayList<InlinePaintItem>()
     val textPlacements = ArrayList<LayoutInlineRunPlacement>()
@@ -250,7 +249,7 @@ private fun canMergeTextPlacements(
 private fun buildInlineTextPaintItems(
     placements: List<LayoutInlineRunPlacement>,
     style: TextStyle,
-    textMeasurer: androidx.compose.ui.text.TextMeasurer,
+    textMeasurer: TextMeasurer,
 ): List<InlineTextPaintItem> {
     val merged = buildInlineTextPaintItem(placements)
     if (placements.size == 1) {

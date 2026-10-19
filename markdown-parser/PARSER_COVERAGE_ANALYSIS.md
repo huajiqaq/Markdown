@@ -4,6 +4,8 @@
 
 > **行内布局说明**：超宽行内公式和组件的占位宽度限制为可用行宽，绘制层按向上取整到整像素的有限自然宽度测量内容，并提供横向滚动；填满占位空间和自带横向滚动的组件遵循相同约束。此行为不改变解析语法及覆盖统计。
 
+> **渲染扩展说明**：引用（`[@key]`）、图片与链接通过 `MarkdownInteractions` 提供类型化交互；默认链接交由 Compose `LocalUriHandler`。图片图集按需从当前文档模型提取，并区分重复 URL。`MarkdownComponents` 提供显式高度的代码块标题/操作栏和表格工具栏，参与嵌套布局计算，且不进入正文复制。`MarkdownConfig.softBreakPolicy` 可选择软换行显示为空格或换行，保持 AST 与解析状态不变；Compose 复制和 HTML 导出遵循对应策略。以上均属于 renderer 能力，不增加语法覆盖项。
+
 ## 1. 块级结构 — 标题
 
 ### ✅ 已支持
@@ -628,7 +630,7 @@
 - ✅ 不跨行（遇到换行终止）
 - ✅ 空 `[[]]` 不解析（优雅降级）
 
-> **备注**: `InlineParser.tryAppendWikiLink()` 在检测到 `[[` 时触发，扫描到 `]]` 闭合标记生成 `WikiLink` 叶节点。支持 `|` 分隔的可选显示文本。渲染器使用 `LinkAnnotation.Clickable` 以 "wikilink" 标签触发 `onLinkClick` 回调。
+> **备注**: `InlineParser.tryAppendWikiLink()` 在检测到 `[[` 时触发，扫描到 `]]` 闭合标记生成 `WikiLink` 叶节点。支持 `|` 分隔的可选显示文本。渲染器使用 `LinkAnnotation.Clickable` 以 "wikilink" 标签触发 `MarkdownInteractions.onLinkClick` 回调。
 
 #### Ruby 注音（扩展）
 - ✅ `{漢字|かんじ}` 基础 Ruby 注音标注

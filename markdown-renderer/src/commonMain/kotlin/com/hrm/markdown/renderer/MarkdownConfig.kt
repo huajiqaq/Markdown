@@ -2,6 +2,7 @@ package com.hrm.markdown.renderer
 
 import androidx.compose.runtime.Immutable
 import com.hrm.latex.renderer.model.LatexConfig
+import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.flavour.ExtendedFlavour
 import com.hrm.markdown.parser.flavour.MarkdownFlavour
 
@@ -51,7 +52,7 @@ import com.hrm.markdown.parser.flavour.MarkdownFlavour
  * @param enableAsciiEmoticons 是否启用 ASCII 表情自动转换（如 `:)` → 😊），默认关闭。
  * @param enableLinting 是否启用语法验证/Linting，默认关闭。
  * @param enableHeadingNumbering 是否启用标题自动编号（如 1, 1.1, 1.1.1），默认关闭。
- * @param appendCoalesceThreshold LLM 流式 [com.hrm.markdown.parser.MarkdownParser.append] 合并阈值（字符数）。
+ * @param appendCoalesceThreshold LLM 流式 [MarkdownParser.append] 合并阈值（字符数）。
  *   `0`（默认）：每次 append 立即增量解析，行为与历史版本一致。
  *   `> 0`：未跨换行符且累积 < 阈值的小 chunk 会被缓冲，多个 token 合并为一次解析；
  *   推荐 LLM 流式场景设为 `16`，可减少 60-80% 的总流式耗时；代价是"正在写的最后一行"
@@ -69,6 +70,8 @@ data class MarkdownConfig(
     val enableHeadingNumbering: Boolean = false,
     val appendCoalesceThreshold: Int = 0,
     val latexConfig: LatexConfig = LatexConfig(),
+    /** Display policy only; changing it does not restart the parser or streaming session. */
+    val softBreakPolicy: MarkdownSoftBreakPolicy = MarkdownSoftBreakPolicy.Space,
 ) {
     companion object {
         /** 默认配置：ExtendedFlavour，全功能。 */
@@ -81,3 +84,6 @@ data class MarkdownConfig(
         val LlmStreaming = MarkdownConfig(appendCoalesceThreshold = 16)
     }
 }
+
+/** Rendering of Markdown soft line breaks; explicit hard breaks are unaffected. */
+enum class MarkdownSoftBreakPolicy { Space, LineBreak }

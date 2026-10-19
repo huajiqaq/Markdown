@@ -5,13 +5,16 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -22,7 +25,9 @@ import com.hrm.markdown.parser.ast.TableBody
 import com.hrm.markdown.parser.ast.TableCell
 import com.hrm.markdown.parser.ast.TableHead
 import com.hrm.markdown.parser.ast.TableRow
+import com.hrm.markdown.renderer.LocalMarkdownComponents
 import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.MarkdownTableInfo
 import com.hrm.markdown.renderer.inline.InlineLayoutBlockText
 import com.hrm.markdown.renderer.inline.rememberInlineModel
 import com.hrm.markdown.renderer.internal.core.model.TableBlockModel
@@ -57,15 +62,17 @@ internal fun TableRenderer(
         .coerceAtLeast(allRows.maxOfOrNull { it.first.children.filterIsInstance<TableCell>().size } ?: 1)
         .coerceAtLeast(1)
 
-    AutoTableViewport(modifier) { availableWidthPx ->
-        // 自定义表格布局
-        TableLayout(
-            allRows = allRows,
-            alignments = node.columnAlignments,
-            columnCount = columnCount,
-            availableWidthPx = availableWidthPx,
-            modifier = Modifier.border(width = 1.dp, color = theme.tableBorderColor),
-        )
+    TableChrome(MarkdownTableInfo(allRows.size, columnCount), modifier) { viewportModifier ->
+        AutoTableViewport(viewportModifier) { availableWidthPx ->
+            // 自定义表格布局
+            TableLayout(
+                allRows = allRows,
+                alignments = node.columnAlignments,
+                columnCount = columnCount,
+                availableWidthPx = availableWidthPx,
+                modifier = Modifier.border(width = 1.dp, color = theme.tableBorderColor),
+            )
+        }
     }
 }
 
@@ -171,14 +178,16 @@ internal fun RenderTableBlockModel(
     val columnCount = model.columnAlignments.size
         .coerceAtLeast(model.rows.maxOfOrNull { it.cells.size } ?: 1)
         .coerceAtLeast(1)
-    AutoTableViewport(modifier) { availableWidthPx ->
-        TableBlockModelLayout(
-            rows = model.rows,
-            alignments = model.columnAlignments,
-            columnCount = columnCount,
-            availableWidthPx = availableWidthPx,
-            modifier = Modifier.border(width = 1.dp, color = theme.tableBorderColor),
-        )
+    TableChrome(MarkdownTableInfo(model.rows.size, columnCount), modifier) { viewportModifier ->
+        AutoTableViewport(viewportModifier) { availableWidthPx ->
+            TableBlockModelLayout(
+                rows = model.rows,
+                alignments = model.columnAlignments,
+                columnCount = columnCount,
+                availableWidthPx = availableWidthPx,
+                modifier = Modifier.border(width = 1.dp, color = theme.tableBorderColor),
+            )
+        }
     }
 }
 
@@ -190,31 +199,33 @@ internal fun RenderTableLayoutBlockModel(
     val theme = LocalMarkdownTheme.current
     val columnWidthsPx = roundTableDimensionsPx(model.columnWidths)
     val rowHeightsPx = roundTableDimensionsPx(model.rows.map { it.frame.height })
-    AutoTableViewport(modifier) { _ ->
-        TableGridLayout(
-            rowCount = model.rows.size,
-            columnCount = columnWidthsPx.size,
-            availableWidthPx = null,
-            fixedColumnWidthsPx = columnWidthsPx,
-            fixedRowHeightsPx = rowHeightsPx,
-            modifier = Modifier.border(width = 1.dp, color = theme.tableBorderColor),
-        ) {
-            for (row in model.rows) {
-                for (cell in row.cells) {
-                    val alignment = Table.Alignment.entries.getOrElse(cell.alignmentOrdinal) {
-                        Table.Alignment.NONE
+    TableChrome(MarkdownTableInfo(model.rows.size, columnWidthsPx.size), modifier) { viewportModifier ->
+        AutoTableViewport(viewportModifier) { _ ->
+            TableGridLayout(
+                rowCount = model.rows.size,
+                columnCount = columnWidthsPx.size,
+                availableWidthPx = null,
+                fixedColumnWidthsPx = columnWidthsPx,
+                fixedRowHeightsPx = rowHeightsPx,
+                modifier = Modifier.border(width = 1.dp, color = theme.tableBorderColor),
+            ) {
+                for (row in model.rows) {
+                    for (cell in row.cells) {
+                        val alignment = Table.Alignment.entries.getOrElse(cell.alignmentOrdinal) {
+                            Table.Alignment.NONE
+                        }
+                        TableBlockModelCellRenderer(
+                            cell = cell.cell,
+                            alignment = alignment,
+                            isHeader = cell.isHeader,
+                            modifier = Modifier
+                                .border(0.5.dp, theme.tableBorderColor)
+                                .let {
+                                    if (cell.isHeader) it.background(theme.tableHeaderBackground) else it
+                                }
+                                .padding(theme.tableCellPadding),
+                        )
                     }
-                    TableBlockModelCellRenderer(
-                        cell = cell.cell,
-                        alignment = alignment,
-                        isHeader = cell.isHeader,
-                        modifier = Modifier
-                            .border(0.5.dp, theme.tableBorderColor)
-                            .let {
-                                if (cell.isHeader) it.background(theme.tableHeaderBackground) else it
-                            }
-                            .padding(theme.tableCellPadding),
-                    )
                 }
             }
         }
@@ -378,4 +389,17 @@ private fun computeColumnWidthsPx(
         availableWidth = availableWidthPx?.toFloat(),
     )
     return roundTableDimensionsPx(widths)
+}
+
+@Composable
+private fun TableChrome(info: MarkdownTableInfo, modifier: Modifier, content: @Composable (Modifier) -> Unit) {
+    val slot = LocalMarkdownComponents.current.tableToolbar
+    if (slot == null) {
+        content(modifier)
+    } else {
+        Column(modifier.fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth().height(slot.height).clipToBounds()) { slot.content(info) }
+            content(Modifier)
+        }
+    }
 }

@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.hrm.markdown.renderer.Markdown
+import com.hrm.markdown.renderer.MarkdownInteractions
 
 private val accessibilityMarkdown = """
 # 阅读与导航
@@ -46,7 +47,7 @@ internal val accessibilityPreviewGroup = PreviewGroup(
                     Markdown(
                         markdown = accessibilityMarkdown,
                         enableScroll = false,
-                        onLinkClick = { lastLink = "已打开：$it" },
+                        interactions = MarkdownInteractions(onLinkClick = { lastLink = "已打开：$it" }),
                     )
                 }
             },

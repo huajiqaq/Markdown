@@ -19,16 +19,17 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hrm.codehigh.renderer.InlineCode as CodeHighInlineCode
 import com.hrm.codehigh.renderer.InlineCodeDefaults
 import com.hrm.codehigh.renderer.measureInlineCodeSize
 import com.hrm.codehigh.theme.CodeTheme
 import com.hrm.latex.renderer.measure.LatexMeasurerState
 import com.hrm.markdown.parser.core.CharacterUtils
-import com.hrm.markdown.renderer.DefaultMarkdownImage
-import com.hrm.markdown.renderer.LocalImageRenderer
 import com.hrm.markdown.renderer.MarkdownImageData
 import com.hrm.markdown.renderer.MarkdownTheme
 import com.hrm.markdown.renderer.internal.adapter.createDirectiveInlineRenderScope
+import com.hrm.markdown.renderer.internal.compose.CitationAnnotationTag
+import com.hrm.markdown.renderer.internal.compose.RenderInteractiveMarkdownImage
 import com.hrm.markdown.renderer.internal.core.model.DirectiveInlineWidgetModel
 import com.hrm.markdown.renderer.internal.core.model.ImageWidgetModel
 import com.hrm.markdown.renderer.internal.core.model.InlineAtom
@@ -45,7 +46,6 @@ import com.hrm.markdown.renderer.internal.layout.inline.InlineFlowInput
 import com.hrm.markdown.renderer.internal.layout.inline.InlineFlowSegment
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 import kotlin.math.ceil
-import com.hrm.codehigh.renderer.InlineCode as CodeHighInlineCode
 
 internal fun buildInlineRenderResultFromModel(
     model: InlineModel,
@@ -234,19 +234,16 @@ private fun AnnotatedString.Builder.renderTextAtom(
             }
 
             "citation" -> {
-                withLink(
-                    LinkAnnotation.Clickable(
-                        tag = "citation",
-                        styles = TextLinkStyles(
-                            style = SpanStyle(
-                                color = theme.linkColor,
-                                fontSize = theme.footnoteStyle.fontSize,
-                                baselineShift = BaselineShift.Superscript,
-                            )
-                        ),
-                        linkInteractionListener = { },
-                    )
-                ) { appendText() }
+                pushStringAnnotation(
+                    CitationAnnotationTag,
+                    "${atom.identity.stableId}:${clickMark.payload["key"].orEmpty()}",
+                )
+                withStyle(SpanStyle(
+                    color = theme.linkColor,
+                    fontSize = theme.footnoteStyle.fontSize,
+                    baselineShift = BaselineShift.Superscript,
+                )) { appendText() }
+                pop()
             }
 
             else -> appendText()
@@ -405,12 +402,9 @@ private fun AnnotatedString.Builder.renderImageWidget(
             height = widget.height,
             attributes = widget.attributes,
         )
-        val customRenderer = LocalImageRenderer.current
-        if (customRenderer != null) {
-            customRenderer(imageData, Modifier)
-        } else {
-            DefaultMarkdownImage(data = imageData)
-        }
+        RenderInteractiveMarkdownImage(
+            imageData, widget.identity.stableId,
+        )
     }
 }
 

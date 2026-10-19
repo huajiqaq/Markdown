@@ -21,13 +21,14 @@ import com.hrm.markdown.parser.ast.FootnoteDefinition
 import com.hrm.markdown.parser.ast.FrontMatter
 import com.hrm.markdown.parser.ast.Heading
 import com.hrm.markdown.parser.ast.HtmlBlock
+import com.hrm.markdown.parser.ast.Image
 import com.hrm.markdown.parser.ast.IndentedCodeBlock
 import com.hrm.markdown.parser.ast.InlineCode
+import com.hrm.markdown.parser.ast.LeafNode
 import com.hrm.markdown.parser.ast.LinkReferenceDefinition
 import com.hrm.markdown.parser.ast.ListBlock
 import com.hrm.markdown.parser.ast.ListItem
 import com.hrm.markdown.parser.ast.MathBlock
-import com.hrm.markdown.parser.ast.LeafNode
 import com.hrm.markdown.parser.ast.Node
 import com.hrm.markdown.parser.ast.PageBreak
 import com.hrm.markdown.parser.ast.Paragraph
@@ -42,10 +43,11 @@ import com.hrm.markdown.parser.ast.TableRow
 import com.hrm.markdown.parser.ast.Text
 import com.hrm.markdown.parser.ast.ThematicBreak
 import com.hrm.markdown.parser.ast.TocPlaceholder
+import com.hrm.markdown.renderer.MarkdownSoftBreakPolicy
 import com.hrm.markdown.renderer.internal.core.identity.renderIdentityFromText
 import com.hrm.markdown.renderer.internal.core.identity.renderIdentityFromValues
-import com.hrm.markdown.renderer.internal.core.model.AdmonitionBlockModel
 import com.hrm.markdown.renderer.internal.core.model.AbbreviationMetadata
+import com.hrm.markdown.renderer.internal.core.model.AdmonitionBlockModel
 import com.hrm.markdown.renderer.internal.core.model.BibliographyDefinitionBlockModel
 import com.hrm.markdown.renderer.internal.core.model.BibliographyEntryBlockModel
 import com.hrm.markdown.renderer.internal.core.model.BlockQuoteBlockModel
@@ -63,8 +65,8 @@ import com.hrm.markdown.renderer.internal.core.model.DirectiveBlockModel
 import com.hrm.markdown.renderer.internal.core.model.FallbackContainerBlockModel
 import com.hrm.markdown.renderer.internal.core.model.FallbackLeafBlockModel
 import com.hrm.markdown.renderer.internal.core.model.FigureBlockModel
-import com.hrm.markdown.renderer.internal.core.model.FootnoteDefinitionMetadata
 import com.hrm.markdown.renderer.internal.core.model.FootnoteDefinitionBlockModel
+import com.hrm.markdown.renderer.internal.core.model.FootnoteDefinitionMetadata
 import com.hrm.markdown.renderer.internal.core.model.FrontMatterMetadata
 import com.hrm.markdown.renderer.internal.core.model.HeadingBlockModel
 import com.hrm.markdown.renderer.internal.core.model.HtmlBlockModel
@@ -91,6 +93,7 @@ private data class CompileContext(
     val identities: RenderIdentityProvider,
     val headingNumbers: Map<Node, String>,
     val tocEntries: List<TocEntryBlockModel>,
+    val softBreakPolicy: MarkdownSoftBreakPolicy,
 )
 
 object DefaultRenderModelCompiler : RenderModelCompiler {
@@ -107,6 +110,7 @@ object DefaultRenderModelCompiler : RenderModelCompiler {
                 emptyMap()
             },
             tocEntries = collectHeadingEntries(document),
+            softBreakPolicy = environment.config.softBreakPolicy,
         )
         val blocks = compileBlocks(blockNodes, context)
         return InternalRenderDocumentModel(
@@ -170,6 +174,7 @@ private fun compileBlock(
                 node.children,
                 context.identities.semanticRevision(node),
                 identity.stableId,
+                context.softBreakPolicy,
             ),
         )
 
@@ -181,6 +186,7 @@ private fun compileBlock(
                 node.children,
                 context.identities.semanticRevision(node),
                 identity.stableId,
+                context.softBreakPolicy,
             ),
         )
 
@@ -192,6 +198,7 @@ private fun compileBlock(
                 node.children,
                 context.identities.semanticRevision(node),
                 identity.stableId,
+                context.softBreakPolicy,
             ),
         )
 
@@ -318,6 +325,7 @@ private fun compileBlock(
                             child.children,
                             context.identities.semanticRevision(child),
                             childIdentity.stableId,
+                            context.softBreakPolicy,
                         ),
                     )
                     is DefinitionDescription -> DefinitionDescriptionBlockModel(
@@ -427,6 +435,7 @@ private fun compileTableRow(
                     cell.children,
                     context.identities.semanticRevision(cell),
                     cellIdentity.stableId,
+                    context.softBreakPolicy,
                 ),
             )
         },
@@ -503,7 +512,7 @@ private fun extractPlainText(node: Node): String = buildString {
     when (node) {
         is Text -> append(node.literal)
         is InlineCode -> append(node.literal)
-        is com.hrm.markdown.parser.ast.Image -> node.children.forEach { append(extractPlainText(it)) }
+        is Image -> node.children.forEach { append(extractPlainText(it)) }
         is ContainerNode -> node.children.forEach { append(extractPlainText(it)) }
         else -> Unit
     }

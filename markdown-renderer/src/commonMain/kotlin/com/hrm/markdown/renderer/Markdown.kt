@@ -13,12 +13,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.hrm.codehigh.theme.CodeTheme
 import com.hrm.markdown.parser.ast.Document
+import com.hrm.markdown.parser.log.HLog
+import com.hrm.markdown.renderer.internal.core.compile.computeSemanticRevision
+import com.hrm.markdown.runtime.MarkdownDirectivePipeline
 import com.hrm.markdown.runtime.MarkdownDirectivePlugin
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
-import com.hrm.markdown.runtime.MarkdownDirectivePipeline
-import com.hrm.markdown.parser.log.HLog
 import com.hrm.markdown.runtime.MarkdownSourceMap
-import com.hrm.markdown.renderer.internal.core.compile.computeSemanticRevision
 
 /**
  * Markdown 渲染器的顶层 Composable 入口。
@@ -54,8 +54,8 @@ import com.hrm.markdown.renderer.internal.core.compile.computeSemanticRevision
  * @param enableSelection 是否启用文本选择（自研选区层 overlay，支持跨 block 连续选中并复用系统复制菜单；与渲染模式正交，长文档仍走虚拟化渲染）
  * @param header Markdown 内容前方插槽，会和正文处于同一滚动容器中
  * @param footer Markdown 内容后方插槽，会和正文处于同一滚动容器中
- * @param imageContent 自定义图片渲染组件，null 则使用默认占位渲染
- * @param onLinkClick 链接点击回调
+ * @param components 图片渲染、固定高度的代码块操作栏与表格工具栏插槽。
+ * @param interactions 链接、引用和图片交互回调；在绘制层绑定，不参与正文测量。
  * @param directivePlugins Markdown 指令插件列表，用于接入输入转换器和 directive 自定义渲染器
  */
 @Composable
@@ -71,9 +71,9 @@ fun Markdown(
     enableSelection: Boolean = true,
     header: (@Composable () -> Unit)? = null,
     footer: (@Composable () -> Unit)? = null,
-    imageContent: MarkdownImageRenderer? = null,
-    onLinkClick: ((String) -> Unit)? = null,
     directivePlugins: List<MarkdownDirectivePlugin> = emptyList(),
+    components: MarkdownComponents = MarkdownComponents.Default,
+    interactions: MarkdownInteractions = MarkdownInteractions.Default,
 ) {
     val directiveRegistry = remember(directivePlugins) { MarkdownDirectiveRegistry(directivePlugins) }
     val runtimePipeline = remember(directiveRegistry) { MarkdownDirectivePipeline(directiveRegistry) }
@@ -109,10 +109,10 @@ fun Markdown(
             enableSelection = enableSelection,
             header = header,
             footer = footer,
-            imageContent = imageContent,
-            onLinkClick = onLinkClick,
             directiveRegistry = directiveRegistry,
             sourceMap = snapshot.sourceMap,
+            components = components,
+            interactions = interactions,
         )
     }
 }
@@ -129,8 +129,8 @@ fun Markdown(
  * @param enableSelection 是否启用文本选择（自研选区层 overlay，支持跨 block 连续选中并复用系统复制菜单；与渲染模式正交，长文档仍走虚拟化渲染）
  * @param header Markdown 内容前方插槽，会和正文处于同一滚动容器中
  * @param footer Markdown 内容后方插槽，会和正文处于同一滚动容器中
- * @param imageContent 自定义图片渲染组件，null 则使用默认占位渲染
- * @param onLinkClick 链接点击回调
+ * @param components 图片渲染、固定高度的代码块操作栏与表格工具栏插槽。
+ * @param interactions 链接、引用和图片交互回调；在绘制层绑定，不参与正文测量。
  * @param directivePlugins Markdown 指令插件列表，用于接入 directive 自定义渲染器
  */
 @Composable
@@ -147,9 +147,9 @@ fun Markdown(
     enableSelection: Boolean = true,
     header: (@Composable () -> Unit)? = null,
     footer: (@Composable () -> Unit)? = null,
-    imageContent: MarkdownImageRenderer? = null,
-    onLinkClick: ((String) -> Unit)? = null,
     directivePlugins: List<MarkdownDirectivePlugin> = emptyList(),
+    components: MarkdownComponents = MarkdownComponents.Default,
+    interactions: MarkdownInteractions = MarkdownInteractions.Default,
 ) {
     val directiveRegistry = remember(directivePlugins) { MarkdownDirectiveRegistry(directivePlugins) }
     MarkdownDocumentRenderer(
@@ -164,11 +164,11 @@ fun Markdown(
         enableSelection = enableSelection,
         header = header,
         footer = footer,
-        imageContent = imageContent,
-        onLinkClick = onLinkClick,
         directiveRegistry = directiveRegistry,
         sourceMap = MarkdownSourceMap.Identity,
         documentRevision = computeSemanticRevision(document),
+        components = components,
+        interactions = interactions,
     )
 }
 

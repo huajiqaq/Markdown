@@ -1,9 +1,12 @@
 package com.hrm.markdown.renderer.internal.layout.engine
 
 import androidx.compose.ui.unit.LayoutDirection
+import com.hrm.markdown.renderer.internal.childBlocks
 import com.hrm.markdown.renderer.internal.core.identity.RenderIdentity
-import com.hrm.markdown.renderer.internal.core.model.InternalRenderDocumentModel
+import com.hrm.markdown.renderer.internal.core.model.CodeBlockModel
 import com.hrm.markdown.renderer.internal.core.model.InternalRenderBlockModel
+import com.hrm.markdown.renderer.internal.core.model.InternalRenderDocumentModel
+import com.hrm.markdown.renderer.internal.core.model.TableBlockModel
 import com.hrm.markdown.renderer.internal.layout.inline.InlineLayoutEpoch
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutBlockModel
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutDocumentMetadata
@@ -89,6 +92,8 @@ internal class MarkdownBlockLayoutCache(
         val blockSpacingBits: Int,
         val layoutDirection: LayoutDirection,
         val epoch: InlineLayoutEpoch,
+        val codeBlockHeaderHeightBits: Int,
+        val tableToolbarHeightBits: Int,
     )
 
     private val values = LinkedHashMap<Key, InternalLayoutBlockModel>()
@@ -103,6 +108,7 @@ internal class MarkdownBlockLayoutCache(
         environment: LayoutEnvironment,
         compute: () -> InternalLayoutBlockModel,
     ): InternalLayoutBlockModel {
+        val componentKinds = if (environment.codeBlockHeaderHeightPx == 0f && environment.tableToolbarHeightPx == 0f) 0 else block.componentKinds()
         val key = Key(
             stableId = block.identity.stableId,
             contentRevision = block.identity.contentRevision,
@@ -112,6 +118,8 @@ internal class MarkdownBlockLayoutCache(
             blockSpacingBits = environment.blockSpacing.toBits(),
             layoutDirection = environment.layoutDirection,
             epoch = environment.inlineLayoutEpoch,
+            codeBlockHeaderHeightBits = if (componentKinds and 1 != 0) environment.codeBlockHeaderHeightPx.toBits() else 0,
+            tableToolbarHeightBits = if (componentKinds and 2 != 0) environment.tableToolbarHeightPx.toBits() else 0,
         )
         values[key]?.let {
             hitCount++
@@ -126,4 +134,11 @@ internal class MarkdownBlockLayoutCache(
         }
         return value
     }
+}
+
+/** Only affected blocks (or their containers) miss when slot dimensions change. */
+private fun InternalRenderBlockModel.componentKinds(): Int = when (this) {
+    is CodeBlockModel -> 1
+    is TableBlockModel -> 2
+    else -> childBlocks().fold(0) { kinds, child -> kinds or child.componentKinds() }
 }

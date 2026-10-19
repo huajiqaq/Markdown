@@ -113,7 +113,7 @@ private fun AccessibilitySample(
             document = MarkdownParser().parse(source),
             theme = MarkdownTheme.light(),
             enableScroll = scroll,
-            onLinkClick = onLinkClick,
+            interactions = MarkdownInteractions(onLinkClick = onLinkClick),
         )
     }
 }

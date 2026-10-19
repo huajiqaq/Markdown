@@ -1,0 +1,103 @@
+package com.hrm.markdown.renderer.internal
+
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Rect
+import com.hrm.markdown.renderer.*
+import com.hrm.markdown.renderer.internal.core.model.*
+
+/** Stable dispatch target. Cached geometry and content never capture host callbacks. */
+@Stable
+internal class MarkdownInteractionController {
+    var citationEnabled by mutableStateOf(false)
+        private set
+    var imageEnabled by mutableStateOf(false)
+        private set
+    private var onCitationClick: ((MarkdownCitationClickEvent) -> Unit)? = null
+    private var onImageClick: ((MarkdownImageClickEvent) -> Unit)? = null
+    private var document: InternalRenderDocumentModel? = null
+
+    fun update(
+        document: InternalRenderDocumentModel,
+        handlers: MarkdownInteractions,
+    ) {
+        this.document = document
+        this.onCitationClick = handlers.onCitationClick
+        this.onImageClick = handlers.onImageClick
+        citationEnabled = handlers.onCitationClick != null
+        imageEnabled = handlers.onImageClick != null
+    }
+
+    fun citation(key: String, id: Long, bounds: Rect?) {
+        onCitationClick?.invoke(MarkdownCitationClickEvent(
+            key, id, document?.identity?.contentRevision ?: 0L, bounds,
+        ))
+    }
+
+    fun image(data: MarkdownImageData, id: Long, bounds: Rect?) {
+        val callback = onImageClick ?: return
+        val snapshot = document
+        callback(MarkdownImageClickEvent(
+            image = data,
+            occurrenceId = id,
+            documentRevision = snapshot?.identity?.contentRevision ?: 0L,
+            anchorBoundsInWindow = bounds,
+            gallery = {
+                val images = snapshot?.blocks?.imageOccurrences().orEmpty()
+                MarkdownImageGallery(images, images.indexOfFirst { it.occurrenceId == id })
+            },
+        ))
+    }
+}
+
+internal val LocalMarkdownInteractions = compositionLocalOf<MarkdownInteractionController?> { null }
+
+internal fun List<InternalRenderBlockModel>.imageOccurrences(): List<MarkdownImageOccurrence> = buildList {
+    fun inline(model: InlineModel) {
+        for (atom in model.atoms) {
+            val widget = (atom as? WidgetAtom)?.widget ?: continue
+            when (widget) {
+                is ImageWidgetModel -> add(MarkdownImageOccurrence(widget.identity.stableId,
+                    MarkdownImageData(widget.url, widget.altText, widget.title, widget.width, widget.height, widget.attributes)))
+                is SpoilerWidgetModel -> inline(widget.content)
+                else -> Unit
+            }
+        }
+    }
+    fun visit(block: InternalRenderBlockModel) {
+        when (block) {
+            is ParagraphBlockModel -> inline(block.inline)
+            is HtmlParagraphBlockModel -> inline(block.inline)
+            is HeadingBlockModel -> inline(block.inline)
+            is TableBlockModel -> block.rows.forEach { row -> row.cells.forEach { inline(it.inline) } }
+            is FigureBlockModel -> add(MarkdownImageOccurrence(block.identity.stableId,
+                MarkdownImageData(block.imageUrl, block.caption, block.caption, block.imageWidth, block.imageHeight, block.attributes)))
+            is DefinitionListBlockModel -> block.items.forEach {
+                when (it) {
+                    is DefinitionTermBlockModel -> inline(it.inline)
+                    is DefinitionDescriptionBlockModel -> it.children.forEach(::visit)
+                }
+            }
+            else -> block.childBlocks().forEach(::visit)
+        }
+    }
+    this@imageOccurrences.forEach(::visit)
+}
+
+internal fun InternalRenderBlockModel.childBlocks(): List<InternalRenderBlockModel> = when (this) {
+    is BlockQuoteBlockModel -> children
+    is AdmonitionBlockModel -> children
+    is CustomContainerBlockModel -> children
+    is DirectiveBlockModel -> children
+    is HtmlContainerBlockModel -> children
+    is FallbackContainerBlockModel -> children
+    is FootnoteDefinitionBlockModel -> children
+    is ListBlockModel -> items.flatMap { it.children }
+    is ColumnsLayoutBlockModel -> columns.flatMap { it.children }
+    is TabBlockModel -> items.flatMap { it.children }
+    is DefinitionListBlockModel -> items.filterIsInstance<DefinitionDescriptionBlockModel>().flatMap { it.children }
+    else -> emptyList()
+}

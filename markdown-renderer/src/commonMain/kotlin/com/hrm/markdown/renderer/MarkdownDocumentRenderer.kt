@@ -9,17 +9,22 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.rememberTextMeasurer
 import com.hrm.codehigh.theme.CodeTheme
 import com.hrm.markdown.parser.ast.Document
+import com.hrm.markdown.renderer.internal.LocalMarkdownInteractions
 import com.hrm.markdown.renderer.internal.MarkdownEngineHost
+import com.hrm.markdown.renderer.internal.MarkdownInteractionController
 import com.hrm.markdown.renderer.internal.RendererFacadeState
 import com.hrm.markdown.renderer.internal.compose.ComposeRenderEnvironment
 import com.hrm.markdown.renderer.internal.core.compile.computeSemanticRevision
@@ -29,6 +34,7 @@ import com.hrm.markdown.renderer.internal.selection.SelectionHandlesHost
 import com.hrm.markdown.renderer.internal.selection.SelectionToolbarHost
 import com.hrm.markdown.renderer.internal.selection.markdownSelectionGestures
 import com.hrm.markdown.renderer.internal.selection.rememberMarkdownSelectionController
+import com.hrm.markdown.renderer.internal.toCompileEnvironment
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 import com.hrm.markdown.runtime.MarkdownSourceMap
 
@@ -45,11 +51,11 @@ internal fun MarkdownDocumentRenderer(
     enableSelection: Boolean = true,
     header: (@Composable () -> Unit)? = null,
     footer: (@Composable () -> Unit)? = null,
-    imageContent: MarkdownImageRenderer? = null,
-    onLinkClick: ((String) -> Unit)? = null,
     directiveRegistry: MarkdownDirectiveRegistry = MarkdownDirectiveRegistry.Empty,
     sourceMap: MarkdownSourceMap = MarkdownSourceMap.Identity,
     documentRevision: Long = document.contentHash,
+    components: MarkdownComponents = MarkdownComponents.Default,
+    interactions: MarkdownInteractions = MarkdownInteractions.Default,
 ) {
     val latexState = rememberMarkdownLatexState(config.latexConfig)
     val renderMode = remember(enableScroll) {
@@ -62,41 +68,40 @@ internal fun MarkdownDocumentRenderer(
         documentRevision.takeIf { it != 0L } ?: computeSemanticRevision(document)
     ProvideMarkdownTheme(theme) {
         val engineHost = remember { MarkdownEngineHost() }
+        val interactionController = remember { MarkdownInteractionController() }
+        val uriHandler = LocalUriHandler.current
+        val currentOnLinkClick = rememberUpdatedState(interactions.onLinkClick ?: uriHandler::openUri)
+        val stableOnLinkClick: (String) -> Unit = remember {
+            { target -> currentOnLinkClick.value.invoke(target) }
+        }
         val facadeState = remember(
             theme,
             config,
             codeTheme,
-            imageContent,
-            onLinkClick,
             directiveRegistry,
             isStreaming,
-            enableSelection,
         ) {
             RendererFacadeState(
                 theme = theme,
                 config = config,
                 codeTheme = codeTheme,
-                imageRenderer = imageContent,
-                onLinkClick = onLinkClick,
                 directiveRegistry = directiveRegistry,
                 isStreaming = isStreaming,
-                enableSelection = enableSelection,
             )
         }
+        val compileEnvironment = facadeState.toCompileEnvironment()
         val internalRenderDocument = remember(
             engineHost,
             document,
             renderDocumentRevision,
-            theme,
-            config,
-            directiveRegistry,
-            isStreaming,
+            compileEnvironment,
         ) {
             engineHost.compile(
                 document = document,
                 facadeState = facadeState,
             )
         }
+        SideEffect { interactionController.update(internalRenderDocument, interactions) }
         val density = LocalDensity.current
         val layoutDirection = LocalLayoutDirection.current
         val latexMeasurer = latexState.measurer
@@ -117,7 +122,7 @@ internal fun MarkdownDocumentRenderer(
                 enableScroll = enableScroll,
                 scrollState = scrollState,
                 lazyListState = lazyListState,
-                onLinkClick = onLinkClick,
+                onLinkClick = stableOnLinkClick,
             )
             val layoutSource = remember(
                 engineHost,
@@ -131,6 +136,8 @@ internal fun MarkdownDocumentRenderer(
                 textMeasurer,
                 latexMeasurer,
                 diagramHostRegistry,
+                components.codeBlockHeader?.height,
+                components.tableToolbar?.height,
             ) {
                 if (renderMode == MarkdownRenderMode.LazyColumn) {
                     engineHost.layoutSession(
@@ -145,6 +152,7 @@ internal fun MarkdownDocumentRenderer(
                         latexMeasurer = latexMeasurer,
                         diagramHostRegistry = diagramHostRegistry,
                         layoutDirection = layoutDirection,
+                        components = components,
                     )
                 } else {
                     EagerMarkdownLayoutSource(
@@ -160,6 +168,7 @@ internal fun MarkdownDocumentRenderer(
                             latexMeasurer = latexMeasurer,
                             diagramHostRegistry = diagramHostRegistry,
                             layoutDirection = layoutDirection,
+                            components = components,
                         )
                     )
                 }
@@ -183,16 +192,18 @@ internal fun MarkdownDocumentRenderer(
             ) {
                 CompositionLocalProvider(
                     LocalMarkdownSelectionController provides selectionController,
+                    LocalMarkdownInteractions provides interactionController,
+                    LocalMarkdownComponents provides components,
                     LocalMarkdownSourceMap provides sourceMap,
                     LocalMarkdownLatexState provides latexState,
                 ) {
                     ProvideRendererContext(
                         document = document,
-                        onLinkClick = onLinkClick,
+                        onLinkClick = stableOnLinkClick,
                         onFootnoteClick = navigationController.onFootnoteClick,
                         onFootnoteBackClick = navigationController.onFootnoteBackClick,
                         footnoteNavigationState = navigationController.footnoteNavigationState,
-                        imageContent = imageContent,
+                        imageContent = components.image,
                         config = config,
                         codeTheme = codeTheme,
                         isStreaming = isStreaming,

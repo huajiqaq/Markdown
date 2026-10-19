@@ -8,9 +8,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.ast.Document
+import com.hrm.markdown.parser.flavour.MarkdownFlavour
 import com.hrm.markdown.runtime.MarkdownDirectivePipeline
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 import com.hrm.markdown.runtime.MarkdownSourceMap
+import com.hrm.markdown.runtime.MarkdownTransformResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -26,9 +28,10 @@ internal fun rememberStreamingDocument(
     markdown: String,
     isStreaming: Boolean,
     config: MarkdownConfig = MarkdownConfig.Default,
-    runtimePipeline: MarkdownDirectivePipeline = MarkdownDirectivePipeline(MarkdownDirectiveRegistry.Empty),
+    runtimePipeline: MarkdownDirectivePipeline = remember { MarkdownDirectivePipeline(MarkdownDirectiveRegistry.Empty) },
 ): StreamingMarkdownSnapshot? {
-    val parser = remember(config) { config.newParser() }
+    val parserOptions = config.parserOptions()
+    val parser = remember(parserOptions) { parserOptions.newParser() }
     var snapshotState by remember(parser, runtimePipeline) {
         mutableStateOf(StreamingMarkdownState())
     }
@@ -40,7 +43,7 @@ internal fun rememberStreamingDocument(
                 transformMutex.withLock { runtimePipeline.transform(markdown) }
             }
         } else {
-            com.hrm.markdown.runtime.MarkdownTransformResult(markdown)
+            MarkdownTransformResult(markdown)
         }
         val documentState = updateStreamingDocumentState(
             markdown = transformed.markdown,
@@ -53,7 +56,7 @@ internal fun rememberStreamingDocument(
                 withContext(Dispatchers.Default) {
                     // Full parses own a disposable parser. Cancellation can leave a synchronous
                     // parse running, but it can no longer race with the stateful streaming parser.
-                    config.newParser().parse(value)
+                    parserOptions.newParser().parse(value)
                 }
             }
         )
@@ -77,12 +80,24 @@ internal data class StreamingMarkdownSnapshot(
     val sourceMap: MarkdownSourceMap,
 )
 
-private fun MarkdownConfig.newParser(): MarkdownParser = MarkdownParser(
-    flavour = flavour,
-    customEmojiMap = customEmojiMap,
-    enableAsciiEmoticons = enableAsciiEmoticons,
-    enableLinting = enableLinting,
-    appendCoalesceThreshold = appendCoalesceThreshold,
+internal data class MarkdownParserOptions(
+    val flavour: MarkdownFlavour,
+    val customEmojiMap: Map<String, String>,
+    val enableAsciiEmoticons: Boolean,
+    val enableLinting: Boolean,
+    val appendCoalesceThreshold: Int,
+) {
+    fun newParser() = MarkdownParser(
+        flavour = flavour,
+        customEmojiMap = customEmojiMap,
+        enableAsciiEmoticons = enableAsciiEmoticons,
+        enableLinting = enableLinting,
+        appendCoalesceThreshold = appendCoalesceThreshold,
+    )
+}
+
+internal fun MarkdownConfig.parserOptions() = MarkdownParserOptions(
+    flavour, customEmojiMap.toMap(), enableAsciiEmoticons, enableLinting, appendCoalesceThreshold,
 )
 
 internal data class StreamingDocumentState<T>(

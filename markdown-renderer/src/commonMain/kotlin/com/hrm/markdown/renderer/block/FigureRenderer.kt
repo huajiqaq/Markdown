@@ -13,13 +13,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrm.markdown.parser.ast.Figure
-import com.hrm.markdown.renderer.DefaultMarkdownImage
-import com.hrm.markdown.renderer.LocalImageRenderer
 import com.hrm.markdown.renderer.LocalMarkdownTheme
 import com.hrm.markdown.renderer.MarkdownImageData
+import com.hrm.markdown.renderer.internal.compose.RenderInteractiveMarkdownImage
+import com.hrm.markdown.renderer.internal.core.identity.RenderIdentity
 import com.hrm.markdown.renderer.internal.core.model.FigureBlockModel
-import com.hrm.markdown.renderer.internal.layout.model.LayoutFigureBlockModel
 import com.hrm.markdown.renderer.internal.layout.LayoutTokens
+import com.hrm.markdown.renderer.internal.layout.model.LayoutFigureBlockModel
 
 /**
  * Figure 渲染器：将 Figure 节点渲染为图片 + 标题（figcaption）。
@@ -33,7 +33,7 @@ internal fun FigureRenderer(
 ) {
     RenderFigureBlockModel(
         model = FigureBlockModel(
-            identity = com.hrm.markdown.renderer.internal.core.identity.RenderIdentity(
+            identity = RenderIdentity(
                 stableId = node.stableKey.toLong(),
                 contentRevision = node.contentHash,
                 layoutRevision = node.contentHash,
@@ -55,7 +55,6 @@ internal fun RenderFigureBlockModel(
     modifier: Modifier = Modifier,
 ) {
     val theme = LocalMarkdownTheme.current
-    val customRenderer = LocalImageRenderer.current
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -70,11 +69,9 @@ internal fun RenderFigureBlockModel(
             height = model.imageHeight,
             attributes = model.attributes,
         )
-        if (customRenderer != null) {
-            customRenderer(imageData, Modifier)
-        } else {
-            DefaultMarkdownImage(data = imageData)
-        }
+        RenderInteractiveMarkdownImage(
+            imageData, model.identity.stableId,
+        )
 
         // 渲染 figcaption（标题）
         if (model.caption.isNotEmpty()) {

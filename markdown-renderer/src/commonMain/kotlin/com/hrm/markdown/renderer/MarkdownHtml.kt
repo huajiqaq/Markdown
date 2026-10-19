@@ -7,9 +7,9 @@ import com.hrm.markdown.parser.html.HtmlDirectiveInlineSnapshot
 import com.hrm.markdown.parser.html.HtmlRenderer
 import com.hrm.markdown.runtime.DirectiveBlockSnapshot
 import com.hrm.markdown.runtime.DirectiveInlineSnapshot
+import com.hrm.markdown.runtime.MarkdownDirectivePipeline
 import com.hrm.markdown.runtime.MarkdownDirectivePlugin
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
-import com.hrm.markdown.runtime.MarkdownDirectivePipeline
 
 /**
  * 高层 HTML 导出入口：统一走 runtime transform pipeline，避免绕过插件导致输出不一致。
@@ -19,7 +19,7 @@ object MarkdownHtml {
         markdown: String,
         config: MarkdownConfig = MarkdownConfig.Default,
         directivePlugins: List<MarkdownDirectivePlugin> = emptyList(),
-        softBreak: String = "\n",
+        softBreak: String? = null,
         escapeHtml: Boolean = false,
         xhtml: Boolean = true,
     ): String {
@@ -37,7 +37,7 @@ object MarkdownHtml {
         return render(
             document = document,
             directivePlugins = directivePlugins,
-            softBreak = softBreak,
+            softBreak = softBreak ?: config.softBreakPolicy.htmlSoftBreak(xhtml),
             escapeHtml = escapeHtml,
             xhtml = xhtml,
         )
@@ -46,13 +46,14 @@ object MarkdownHtml {
     fun render(
         document: Document,
         directivePlugins: List<MarkdownDirectivePlugin> = emptyList(),
-        softBreak: String = "\n",
+        softBreak: String? = null,
         escapeHtml: Boolean = false,
         xhtml: Boolean = true,
+        softBreakPolicy: MarkdownSoftBreakPolicy = MarkdownSoftBreakPolicy.Space,
     ): String {
         val registry = MarkdownDirectiveRegistry(directivePlugins)
         val renderer = HtmlRenderer(
-            softBreak = softBreak,
+            softBreak = softBreak ?: softBreakPolicy.htmlSoftBreak(xhtml),
             escapeHtml = escapeHtml,
             xhtml = xhtml,
             directiveBlockFallback = { snapshot: HtmlDirectiveBlockSnapshot ->
@@ -76,4 +77,9 @@ object MarkdownHtml {
         )
         return renderer.render(document)
     }
+}
+
+private fun MarkdownSoftBreakPolicy.htmlSoftBreak(xhtml: Boolean): String = when (this) {
+    MarkdownSoftBreakPolicy.Space -> "\n"
+    MarkdownSoftBreakPolicy.LineBreak -> if (xhtml) "<br />\n" else "<br>\n"
 }

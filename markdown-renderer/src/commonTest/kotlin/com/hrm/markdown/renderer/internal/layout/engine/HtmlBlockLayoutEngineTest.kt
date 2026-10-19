@@ -13,10 +13,10 @@ import com.hrm.markdown.renderer.MarkdownConfig
 import com.hrm.markdown.renderer.MarkdownTheme
 import com.hrm.markdown.renderer.internal.MarkdownEngineHost
 import com.hrm.markdown.renderer.internal.RendererFacadeState
+import com.hrm.markdown.renderer.internal.layout.inline.runPlacements
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutDocumentModel
 import com.hrm.markdown.renderer.internal.layout.model.LayoutInlineBlockModel
 import com.hrm.markdown.renderer.internal.layout.model.LayoutRenderBlockModel
-import com.hrm.markdown.renderer.internal.layout.inline.runPlacements
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 import kotlin.math.floor
 import kotlin.test.Test
@@ -36,11 +36,8 @@ class HtmlBlockLayoutEngineTest {
                 theme = theme,
                 config = MarkdownConfig.Default,
                 codeTheme = null,
-                imageRenderer = null,
-                onLinkClick = null,
                 directiveRegistry = MarkdownDirectiveRegistry.Empty,
                 isStreaming = false,
-                enableSelection = false,
             )
             val host = MarkdownEngineHost()
             val renderDocument = host.compile(
@@ -97,11 +94,8 @@ class HtmlBlockLayoutEngineTest {
                 theme = theme,
                 config = MarkdownConfig.Default,
                 codeTheme = null,
-                imageRenderer = null,
-                onLinkClick = null,
                 directiveRegistry = MarkdownDirectiveRegistry.Empty,
                 isStreaming = false,
-                enableSelection = false,
             )
             val host = MarkdownEngineHost()
             val renderDocument = host.compile(

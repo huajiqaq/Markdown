@@ -29,6 +29,8 @@ internal data class LayoutEnvironment(
     val diagramHostRegistry: DiagramHostRegistry,
     val inlineLayoutRuntime: InlineLayoutRuntime,
     val inlineLayoutEpoch: InlineLayoutEpoch,
+    val codeBlockHeaderHeightPx: Float = 0f,
+    val tableToolbarHeightPx: Float = 0f,
 ) {
     val orderedListMarkerMetrics by lazy(LazyThreadSafetyMode.NONE) {
         measureOrderedListMarkerMetrics(markdownTheme.bodyStyle, density, textMeasurer)

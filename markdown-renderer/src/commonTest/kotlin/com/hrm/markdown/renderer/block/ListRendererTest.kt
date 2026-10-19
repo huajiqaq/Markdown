@@ -9,8 +9,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.layout.AlignmentLine
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.positionInRoot
@@ -18,14 +18,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.text.TextLayoutResult
@@ -36,18 +36,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.ast.ListBlock
-import com.hrm.markdown.renderer.LocalMarkdownTheme
 import com.hrm.markdown.renderer.LocalMarkdownLatexState
+import com.hrm.markdown.renderer.LocalMarkdownTheme
 import com.hrm.markdown.renderer.Markdown
+import com.hrm.markdown.renderer.MarkdownComponents
 import com.hrm.markdown.renderer.MarkdownConfig
-import com.hrm.markdown.renderer.MarkdownImageRenderer
 import com.hrm.markdown.renderer.MarkdownTheme
 import com.hrm.markdown.renderer.rememberMarkdownLatexState
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlin.math.abs
 
 @OptIn(ExperimentalTestApi::class)
 class ListRendererTest {
@@ -143,9 +143,9 @@ class ListRendererTest {
     @Test
     fun should_keepCheckboxAtTop_when_taskStartsWithImage() = runComposeUiTest {
         setContent {
-            ListSample("- [x] ![任务图片](preview://image)\n\n  图片后的正文", imageContent = { _, modifier ->
+            ListSample("- [x] ![任务图片](preview://image)\n\n  图片后的正文", components = MarkdownComponents(image = { _, modifier ->
                 Box(modifier.height(72.dp).testTag("task-image"))
-            })
+            }))
         }
         waitForIdle()
         val imageTop = onNodeWithTag("task-image", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
@@ -203,9 +203,9 @@ class ListRendererTest {
             "- ![列表图片](preview://image) 图片之后的同段说明",
         )) runComposeUiTest {
             setContent {
-                ListSample(markdown, imageContent = { _, modifier ->
+                ListSample(markdown, components = MarkdownComponents(image = { _, modifier ->
                     Box(modifier.height(72.dp).testTag("list-image"))
-                })
+                }))
             }
             waitForIdle()
             assertEquals(
@@ -272,7 +272,7 @@ private fun ListSample(
     width: Int = 360,
     style: TextStyle = MarkdownTheme.light().bodyStyle,
     enableScroll: Boolean = false,
-    imageContent: MarkdownImageRenderer? = null,
+    components: MarkdownComponents = MarkdownComponents.Default,
     density: Density = Density(1f),
 ) {
     val document = remember(markdown) { MarkdownParser().parse(markdown) }
@@ -284,7 +284,7 @@ private fun ListSample(
                 theme = MarkdownTheme.light().copy(bodyStyle = style),
                 enableScroll = enableScroll,
                 enableSelection = false,
-                imageContent = imageContent,
+                components = components,
             )
         }
     }

@@ -9,16 +9,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.platform.Clipboard
+import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.Constraints
+import com.hrm.markdown.renderer.internal.core.model.CodeBlockModel
 import com.hrm.markdown.renderer.internal.core.model.InternalRenderBlockModel
 import com.hrm.markdown.renderer.internal.layout.inline.LayoutInlineRunPlacement
 import com.hrm.markdown.renderer.internal.layout.inline.textMeasurementStyle
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutBlockModel
+import com.hrm.markdown.renderer.internal.layout.model.LayoutColumnsBlockModel
+import com.hrm.markdown.renderer.internal.layout.model.LayoutDefinitionDescriptionGroup
+import com.hrm.markdown.renderer.internal.layout.model.LayoutDefinitionListBlockModel
+import com.hrm.markdown.renderer.internal.layout.model.LayoutFootnoteBlockModel
 import com.hrm.markdown.renderer.internal.layout.model.LayoutInlineBlockModel
+import com.hrm.markdown.renderer.internal.layout.model.LayoutListBlockModel
+import com.hrm.markdown.renderer.internal.layout.model.LayoutRenderBlockModel
+import com.hrm.markdown.renderer.internal.layout.model.LayoutTabBlockModel
+import com.hrm.markdown.renderer.internal.layout.model.LayoutTableBlockModel
 import com.hrm.markdown.renderer.internal.layout.model.LayoutTextRun
+import com.hrm.markdown.renderer.internal.layout.model.LayoutWidgetBlockModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -68,23 +80,23 @@ internal class MarkdownSelectionController(
         fun registerTree(block: InternalLayoutBlockModel) {
             registerVisibleBlock(block)
             when (block) {
-                is com.hrm.markdown.renderer.internal.layout.model.LayoutListBlockModel ->
+                is LayoutListBlockModel ->
                     block.items.forEach { item -> item.children.forEach(::registerTree) }
-                is com.hrm.markdown.renderer.internal.layout.model.LayoutColumnsBlockModel ->
+                is LayoutColumnsBlockModel ->
                     block.columns.forEach { column -> column.children.forEach(::registerTree) }
-                is com.hrm.markdown.renderer.internal.layout.model.LayoutTabBlockModel ->
+                is LayoutTabBlockModel ->
                     block.tabs.forEach { tab -> tab.children.forEach(::registerTree) }
-                is com.hrm.markdown.renderer.internal.layout.model.LayoutFootnoteBlockModel -> {
+                is LayoutFootnoteBlockModel -> {
                     block.leadChild?.let(::registerTree)
                     block.trailingChildren.forEach(::registerTree)
                 }
-                is com.hrm.markdown.renderer.internal.layout.model.LayoutDefinitionListBlockModel ->
+                is LayoutDefinitionListBlockModel ->
                     block.items.forEach { item ->
-                        if (item is com.hrm.markdown.renderer.internal.layout.model.LayoutDefinitionDescriptionGroup) {
+                        if (item is LayoutDefinitionDescriptionGroup) {
                             item.children.forEach(::registerTree)
                         }
                     }
-                is com.hrm.markdown.renderer.internal.layout.model.LayoutRenderBlockModel ->
+                is LayoutRenderBlockModel ->
                     block.children.forEach(::registerTree)
                 else -> Unit
             }
@@ -224,7 +236,15 @@ internal class MarkdownSelectionController(
         val actualSize = registry.snapshotOf(entry.stableId)?.size
         val width = actualSize?.width?.toFloat() ?: geometry.block.frame.width
         val height = actualSize?.height?.toFloat() ?: geometry.block.frame.height
-        return listOf(Rect(0f, 0f, width, height))
+        val top = when (geometry.block) {
+            is LayoutTableBlockModel ->
+                geometry.block.contentFrame.top - geometry.block.frame.top
+            is LayoutWidgetBlockModel ->
+                if (geometry.block.block is CodeBlockModel)
+                    geometry.block.contentFrame.top - geometry.block.frame.top else 0f
+            else -> 0f
+        }.coerceIn(0f, height)
+        return listOf(Rect(0f, top, width, height))
     }
 
     fun beginSelectionAt(windowOffset: Offset) {
@@ -397,9 +417,9 @@ internal class MarkdownSelectionController(
     }
 
     /**
-     * 当前选区在 window 坐标系下的并集包围盒，供 [androidx.compose.ui.platform.TextToolbar.showMenu]
+     * 当前选区在 window 坐标系下的并集包围盒，供 [TextToolbar.showMenu]
      * 定位浮动菜单使用。遍历所有可见且参与选区的 block，把其 block-local 高亮矩形经
-     * [androidx.compose.ui.layout.LayoutCoordinates.localToWindow] 映射后求并集；无可见选区时返回 null。
+     * [LayoutCoordinates.localToWindow] 映射后求并集；无可见选区时返回 null。
      */
     fun selectionBoundsInWindow(): Rect? {
         if (state.range == null) return null

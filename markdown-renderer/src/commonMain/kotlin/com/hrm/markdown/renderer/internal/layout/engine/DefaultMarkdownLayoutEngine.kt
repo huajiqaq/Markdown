@@ -7,16 +7,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hrm.markdown.parser.ast.Table
 import com.hrm.markdown.renderer.internal.core.identity.RenderIdentity
 import com.hrm.markdown.renderer.internal.core.identity.renderIdentityFromText
 import com.hrm.markdown.renderer.internal.core.identity.renderIdentityFromValues
 import com.hrm.markdown.renderer.internal.core.model.AdmonitionBlockModel
 import com.hrm.markdown.renderer.internal.core.model.BibliographyDefinitionBlockModel
 import com.hrm.markdown.renderer.internal.core.model.BlockQuoteBlockModel
+import com.hrm.markdown.renderer.internal.core.model.BlockWidgetModel
 import com.hrm.markdown.renderer.internal.core.model.CodeBlockModel
 import com.hrm.markdown.renderer.internal.core.model.ColumnsLayoutBlockModel
 import com.hrm.markdown.renderer.internal.core.model.CustomContainerBlockModel
+import com.hrm.markdown.renderer.internal.core.model.DefinitionDescriptionBlockModel
 import com.hrm.markdown.renderer.internal.core.model.DefinitionListBlockModel
+import com.hrm.markdown.renderer.internal.core.model.DefinitionTermBlockModel
 import com.hrm.markdown.renderer.internal.core.model.DiagramBlockModel
 import com.hrm.markdown.renderer.internal.core.model.DirectiveBlockModel
 import com.hrm.markdown.renderer.internal.core.model.FallbackContainerBlockModel
@@ -38,12 +42,12 @@ import com.hrm.markdown.renderer.internal.core.model.TableBlockModel
 import com.hrm.markdown.renderer.internal.core.model.TextAtom
 import com.hrm.markdown.renderer.internal.core.model.ThematicBreakBlockModel
 import com.hrm.markdown.renderer.internal.core.model.TocBlockModel
-import com.hrm.markdown.renderer.internal.layout.inline.buildInlineLayoutBlockFromModel
-import com.hrm.markdown.renderer.internal.layout.list.listItemContentIndentPx
-import com.hrm.markdown.renderer.internal.layout.list.OrderedListMarkerWidth
-import com.hrm.markdown.renderer.internal.layout.list.orderedListMarkerDigitCount
 import com.hrm.markdown.renderer.internal.layout.LayoutTokens
 import com.hrm.markdown.renderer.internal.layout.columns.resolveColumnWidths
+import com.hrm.markdown.renderer.internal.layout.inline.buildInlineLayoutBlockFromModel
+import com.hrm.markdown.renderer.internal.layout.list.OrderedListMarkerWidth
+import com.hrm.markdown.renderer.internal.layout.list.listItemContentIndentPx
+import com.hrm.markdown.renderer.internal.layout.list.orderedListMarkerDigitCount
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutBlockModel
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutDocumentMetadata
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutDocumentModel
@@ -688,7 +692,7 @@ private fun layoutTableBlock(
             val cellLeft = cursorX
             cursorX += columnWidth
             val alignment =
-                block.columnAlignments.getOrElse(colIndex) { com.hrm.markdown.parser.ast.Table.Alignment.NONE }
+                block.columnAlignments.getOrElse(colIndex) { Table.Alignment.NONE }
             val style = environment.tableCellTextStyle(alignment, row.isHeader)
             val innerHeight = cell?.let {
                 environment.measureInlineBlock(
@@ -714,7 +718,7 @@ private fun layoutTableBlock(
                     height = innerHeight,
                 ),
                 cell = cell,
-                alignmentOrdinal = block.columnAlignments.getOrElse(colIndex) { com.hrm.markdown.parser.ast.Table.Alignment.NONE }.ordinal,
+                alignmentOrdinal = block.columnAlignments.getOrElse(colIndex) { Table.Alignment.NONE }.ordinal,
                 isHeader = row.isHeader,
             )
         }
@@ -760,7 +764,7 @@ private fun layoutDefinitionListBlock(
     var cursorY = contentTop
     val items = block.items.map { item ->
         when (item) {
-            is com.hrm.markdown.renderer.internal.core.model.DefinitionTermBlockModel -> {
+            is DefinitionTermBlockModel -> {
                 val inline = layoutInlineBlock(
                     identity = item.identity,
                     model = item.inline,
@@ -782,7 +786,7 @@ private fun layoutDefinitionListBlock(
                 group
             }
 
-            is com.hrm.markdown.renderer.internal.core.model.DefinitionDescriptionBlockModel -> {
+            is DefinitionDescriptionBlockModel -> {
                 val (children, bottom) = layoutBlocks(
                     item.children,
                     contentLeft + indent,
@@ -1020,7 +1024,7 @@ private fun layoutBibliographyBlock(
 
 private fun layoutWidgetBlock(
     block: InternalRenderBlockModel,
-    widget: com.hrm.markdown.renderer.internal.core.model.BlockWidgetModel,
+    widget: BlockWidgetModel,
     left: Float,
     top: Float,
     width: Float,
@@ -1097,7 +1101,9 @@ private fun blockInsets(
             bottom = LayoutTokens.BibliographyPadding.toPx(),
         )
 
-        is CodeBlockModel,
+        is CodeBlockModel -> LayoutInsets(top = environment.codeBlockHeaderHeightPx)
+        is TableBlockModel -> LayoutInsets(top = environment.tableToolbarHeightPx)
+
         is MathBlockModel,
         is DiagramBlockModel,
         is HtmlBlockModel -> LayoutInsets()

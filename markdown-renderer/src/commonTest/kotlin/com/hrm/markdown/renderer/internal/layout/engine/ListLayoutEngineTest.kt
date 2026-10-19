@@ -4,9 +4,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.v2.runComposeUiTest
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,11 +49,8 @@ class ListLayoutEngineTest {
                     theme = theme,
                     config = MarkdownConfig.Default,
                     codeTheme = null,
-                    imageRenderer = null,
-                    onLinkClick = null,
                     directiveRegistry = MarkdownDirectiveRegistry.Empty,
                     isStreaming = false,
-                    enableSelection = false,
                 )
                 val host = MarkdownEngineHost()
                 document = host.layout(
@@ -127,11 +124,8 @@ class ListLayoutEngineTest {
                     theme = theme,
                     config = MarkdownConfig.Default,
                     codeTheme = null,
-                    imageRenderer = null,
-                    onLinkClick = null,
                     directiveRegistry = MarkdownDirectiveRegistry.Empty,
                     isStreaming = false,
-                    enableSelection = false,
                 )
                 val host = MarkdownEngineHost()
                 document = host.layout(
@@ -182,11 +176,8 @@ class ListLayoutEngineTest {
                 theme = theme,
                 config = MarkdownConfig.Default,
                 codeTheme = null,
-                imageRenderer = null,
-                onLinkClick = null,
                 directiveRegistry = MarkdownDirectiveRegistry.Empty,
                 isStreaming = false,
-                enableSelection = false,
             )
             unorderedIndentPx = density.listItemContentIndentPx(
                 theme = theme,

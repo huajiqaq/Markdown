@@ -46,11 +46,8 @@ class MarkdownLayoutSessionTest {
                         theme = theme,
                         config = MarkdownConfig.Default,
                         codeTheme = null,
-                        imageRenderer = null,
-                        onLinkClick = null,
                         directiveRegistry = MarkdownDirectiveRegistry.Empty,
                         isStreaming = true,
-                        enableSelection = false,
                     )
                 }
                 val documents = remember {
@@ -116,11 +113,8 @@ class MarkdownLayoutSessionTest {
                         theme = theme,
                         config = MarkdownConfig.Default,
                         codeTheme = null,
-                        imageRenderer = null,
-                        onLinkClick = null,
                         directiveRegistry = MarkdownDirectiveRegistry.Empty,
                         isStreaming = false,
-                        enableSelection = false,
                     )
                 }
                 val renderDocument = remember {
@@ -193,11 +187,8 @@ class MarkdownLayoutSessionTest {
                         theme = theme,
                         config = MarkdownConfig.Default,
                         codeTheme = null,
-                        imageRenderer = null,
-                        onLinkClick = null,
                         directiveRegistry = MarkdownDirectiveRegistry.Empty,
                         isStreaming = false,
-                        enableSelection = false,
                     )
                 }
                 val renderDocument = remember {

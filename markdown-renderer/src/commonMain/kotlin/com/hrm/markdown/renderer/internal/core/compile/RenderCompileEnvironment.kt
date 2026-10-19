@@ -1,5 +1,6 @@
 package com.hrm.markdown.renderer.internal.core.compile
 
+import com.hrm.markdown.renderer.MarkdownSoftBreakPolicy
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 
 data class RenderCompileEnvironment(
@@ -15,4 +16,5 @@ data class RenderThemeSnapshot(
 data class RenderConfigSnapshot(
     val enableHeadingNumbering: Boolean = false,
     val streaming: Boolean = false,
+    val softBreakPolicy: MarkdownSoftBreakPolicy = MarkdownSoftBreakPolicy.Space,
 )

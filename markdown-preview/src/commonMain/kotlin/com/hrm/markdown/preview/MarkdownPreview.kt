@@ -3,6 +3,7 @@ package com.hrm.markdown.preview
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -179,6 +180,7 @@ val previewCategories: List<PreviewCategory> = listOf(
             inlineOverflowPreviewGroup,
             listAlignmentPreviewGroup,
             accessibilityPreviewGroup,
+            rendererExtensionsPreviewGroup,
             consolidatedPreviewGroup(
                 id = "streaming_rendering",
                 title = "流式渲染",
@@ -266,7 +268,7 @@ private fun CategoryListScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp)
+            contentPadding = PaddingValues(vertical = 12.dp)
         ) {
             items(categories, key = { it.id }) { category ->
                 CategoryCard(category = category, onClick = { onCategoryClick(category) })
@@ -350,7 +352,7 @@ private fun PreviewGroupListScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp)
+            contentPadding = PaddingValues(vertical = 12.dp)
         ) {
             items(groups, key = { it.id }) { group ->
                 GroupCard(group = group, onClick = { onGroupClick(group) })

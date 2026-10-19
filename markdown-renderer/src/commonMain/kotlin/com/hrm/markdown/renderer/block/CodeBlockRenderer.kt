@@ -1,16 +1,21 @@
 package com.hrm.markdown.renderer.block
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import com.hrm.codehigh.renderer.CodeBlock
 import com.hrm.codehigh.theme.LocalCodeTheme
 import com.hrm.markdown.renderer.LocalCodeHighlightTheme
 import com.hrm.markdown.renderer.LocalIsStreaming
+import com.hrm.markdown.renderer.LocalMarkdownComponents
 import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.MarkdownCodeBlockInfo
 
 /**
  * 围栏代码块渲染器 (``` 或 ~~~)
@@ -31,7 +36,7 @@ internal fun FencedCodeBlockRenderer(
     modifier: Modifier = Modifier,
 ) {
     CodeBlockText(
-        text = text.ifEmpty { " " },
+        text = text,
         language = language,
         title = title,
         showLineNumbers = showLineNumbers,
@@ -50,7 +55,7 @@ internal fun IndentedCodeBlockRenderer(
     modifier: Modifier = Modifier,
 ) {
     CodeBlockText(
-        text = text.ifEmpty { " " },
+        text = text,
         language = "",
         title = null,
         showLineNumbers = true,
@@ -74,21 +79,30 @@ private fun CodeBlockText(
     val codeTheme = LocalCodeHighlightTheme.current ?: LocalCodeTheme.current
     val isStreaming = LocalIsStreaming.current
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(theme.codeBlockCornerRadius))
-    ) {
-        CodeBlock(
-            code = text,
-            language = language,
-            title = title.orEmpty(),
-            modifier = Modifier.fillMaxWidth(),
-            isStreaming = isStreaming,
-            theme = codeTheme,
-            showLineNumbers = showLineNumbers,
-            startLine = startLine,
-            highlightedLines = highlightedLines,
-        )
+    val slot = LocalMarkdownComponents.current.codeBlockHeader
+    val body: @Composable (Modifier) -> Unit = { bodyModifier ->
+        Column(modifier = bodyModifier.fillMaxWidth().clip(RoundedCornerShape(theme.codeBlockCornerRadius))) {
+            CodeBlock(
+                code = text.ifEmpty { " " },
+                language = language,
+                title = title.orEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+                isStreaming = isStreaming,
+                theme = codeTheme,
+                showLineNumbers = showLineNumbers,
+                startLine = startLine,
+                highlightedLines = highlightedLines,
+            )
+        }
+    }
+    if (slot == null) {
+        body(modifier)
+    } else {
+        Column(modifier = modifier.fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth().height(slot.height).clipToBounds()) {
+                slot.content(MarkdownCodeBlockInfo(text, language, title))
+            }
+            body(Modifier)
+        }
     }
 }
