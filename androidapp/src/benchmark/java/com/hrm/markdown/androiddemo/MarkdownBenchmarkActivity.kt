@@ -12,13 +12,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.renderer.Markdown
-import com.hrm.latex.fonts.KatexFonts
 
 /** Release-like host used exclusively by the Macrobenchmark module. */
 class MarkdownBenchmarkActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        KatexFonts.install()
         val blockCount = intent.getIntExtra(ExtraBlockCount, DefaultBlockCount)
 
         setContent {

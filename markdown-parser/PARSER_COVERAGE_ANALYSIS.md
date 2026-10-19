@@ -251,7 +251,7 @@
 
 > **备注**: 公式编号、环境自动编号和引用功能均由 LaTeX 渲染库（`io.github.huarangmeng:latex-renderer`）原生处理。Parser 层保留完整 LaTeX 文本，不做编号提取，交由 LaTeX 库的 `EquationNumbering` + `TagMeasurer` + `RefMeasurer` 完整处理编号生命周期。
 
-> **渲染配置**：Compose 公式渲染使用 LaTeX 1.6.0，并通过独立的 `latex-fonts-katex` 模块提供字体；建议应用初始化时调用 `KatexFonts.install()` 注册 KaTeX 字体，未注册时使用系统字体。行内和块级公式统一使用 `MarkdownConfig.latexConfig`；`MarkdownTheme` 不再控制公式字号、主题或背景。此变更不影响 Parser 的语法与原文保留行为。
+> **渲染配置**：Compose 公式渲染使用 LaTeX 1.6.1，默认传递引入 `latex-fonts-katex` 资源模块，由 LaTeX 运行时自动加载，无需手动初始化；字体缺失或加载失败时安全回退系统字体，进程内不再重试。行内和块级公式统一使用 `MarkdownConfig.latexConfig`；`MarkdownTheme` 不再控制公式字号、主题或背景。此变更不影响 Parser 的语法与原文保留行为。
 
 #### 定义列表（扩展）
 - ✅ 术语行（紧接定义前的非空行）

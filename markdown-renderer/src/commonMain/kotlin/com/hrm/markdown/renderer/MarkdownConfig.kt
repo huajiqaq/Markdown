@@ -57,7 +57,8 @@ import com.hrm.markdown.parser.flavour.MarkdownFlavour
  *   推荐 LLM 流式场景设为 `16`，可减少 60-80% 的总流式耗时；代价是"正在写的最后一行"
  *   AST 最多滞后该字符数（碰到 `\n` 必定 flush，已写完的行不受影响）。
  * @param latexConfig 行内与块级公式共用的完整 LaTeX 配置。字号、主题、换行、高亮、
- *   交互和字体均直接交由 LaTeX 库处理；未指定字体时使用已注册的字体，否则使用系统字体。
+ *   交互和字体均直接交由 LaTeX 库处理；未指定字体时自动加载可选 KaTeX 资源，
+ *   缺失或加载失败时使用系统字体，进程内不再重试。
  */
 @Immutable
 data class MarkdownConfig(

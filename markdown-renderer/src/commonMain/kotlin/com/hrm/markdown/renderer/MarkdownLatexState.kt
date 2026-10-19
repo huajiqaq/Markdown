@@ -17,7 +17,7 @@ internal val LocalMarkdownLatexState = compositionLocalOf<MarkdownLatexState> {
     error("MarkdownLatexState must be provided by MarkdownDocumentRenderer")
 }
 
-/** 字体解析完全交给 LaTeX：显式配置 > 已注册 provider > 系统字体。 */
+/** 字体解析完全交给 LaTeX：显式配置优先，否则自动加载可选 KaTeX 资源，失败时回退系统字体。 */
 @Composable
 internal fun rememberMarkdownLatexState(config: LatexConfig): MarkdownLatexState {
     val measurer = rememberLatexMeasurer(config)

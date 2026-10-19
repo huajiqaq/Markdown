@@ -2,12 +2,10 @@ package com.hrm.markdown
 
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
-import com.hrm.latex.fonts.KatexFonts
 import com.hrm.markdown.parser.log.HLog
 import com.hrm.markdown.parser.log.ILogger
 
 fun main() {
-    KatexFonts.install()
     application {
         HLog.setLogger(object : ILogger {
             override fun v(tag: String, message: String) {

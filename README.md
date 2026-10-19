@@ -93,20 +93,6 @@ dependencies {
 
 > 💡 `markdown-renderer` bundles Coil3 + Ktor3 for image loading, and `diagram-render` for Mermaid / PlantUML / DOT blocks, as transitive dependencies.
 
-### Font Initialization (Recommended)
-
-**Call `KatexFonts.install()` once during app initialization, before rendering any Markdown.** This follows the upstream LaTeX library's integration guide:
-
-```kotlin
-import com.hrm.latex.fonts.KatexFonts
-
-fun initializeApp() {
-    KatexFonts.install()
-}
-```
-
-Call it from Android's `Application.onCreate()`, Desktop / Web's `main()`, or before creating the Compose view controller on iOS. `markdown-renderer` exposes the font module as a transitive API dependency, so this initialization entry point is directly available.
-
 ### Basic Usage
 
 ```kotlin
@@ -140,7 +126,7 @@ That's it — **3 lines** to render beautiful Markdown across all platforms.
 
 ### LaTeX Configuration
 
-Pass the complete LaTeX 1.6.0 configuration through `MarkdownConfig.latexConfig`. Inline and block formulas share it for measurement and rendering:
+Pass the complete LaTeX 1.6.1 configuration through `MarkdownConfig.latexConfig`. Inline and block formulas share it for measurement and rendering:
 
 ```kotlin
 import androidx.compose.ui.unit.sp
@@ -163,9 +149,8 @@ Markdown(
 
 `MarkdownTheme` no longer configures formulas. Migrate `mathFontSize`, `latexTheme`, and `mathBlockBackground` to `LatexConfig.fontSize`, `LatexConfig.theme`, and its background color, respectively. Markdown's light/dark and Material 3 themes do not override formula settings. The default is `LatexConfig()` (20.sp, system light/dark mode, transparent background); block formulas no longer apply an extra 1.2× size multiplier.
 
-Font resolution follows the LaTeX library: explicit `LatexConfig.fontFamilies` takes priority, followed by a registered provider such as `KatexFonts.install()`. Without either, it uses system fonts. **Adding the font dependency alone does not register it; complete the recommended app initialization first.** The matching KaTeX fonts fit the engine's math metrics; other fonts may have missing glyphs or layout differences.
-
-To omit the KaTeX fonts, exclude the font module and omit the `KatexFonts.install()` call. No explicit `fontFamilies` is required: the default configuration safely uses system fonts.
+**We recommend keeping the bundled KaTeX fonts**: system fonts may have missing glyphs or layout differences.
+If you need to omit the font resources, exclude `latex-fonts-katex`. The default configuration safely falls back to system fonts without crashing when fonts are missing:
 
 ```kotlin
 implementation(libs.markdown.renderer) {
