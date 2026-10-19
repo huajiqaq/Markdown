@@ -310,7 +310,7 @@ CompositionLocalProvider(
 | **Paragraphs** | Multi-line merging, blank line separation, lazy continuation |
 | **Code Blocks** | Fenced (`` ``` ``/`~~~`) with language highlight (20+ languages), indented, line numbers, line highlighting |
 | **Block Quotes** | Nested, lazy continuation, inner block elements |
-| **Lists** | Unordered/ordered/task lists, nested, tight/loose distinction |
+| **Lists** | Unordered/ordered/task lists, nested, tight/loose distinction; task checkboxes have an 8.dp gap before content |
 | **Tables (GFM)** | Column alignment, inline formatting in cells, escaped pipes |
 | **Thematic Breaks** | `---`, `***`, `___` |
 | **HTML Blocks** | All 7 CommonMark types; safe Compose fragments for common containers, headings, quotes, code blocks, lists, and text alignment |

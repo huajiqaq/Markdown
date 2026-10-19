@@ -177,6 +177,7 @@ val previewCategories: List<PreviewCategory> = listOf(
                 sourceGroups = themePreviewGroups + inlineLayoutPreviewGroups,
             ),
             inlineOverflowPreviewGroup,
+            listAlignmentPreviewGroup,
             consolidatedPreviewGroup(
                 id = "streaming_rendering",
                 title = "流式渲染",

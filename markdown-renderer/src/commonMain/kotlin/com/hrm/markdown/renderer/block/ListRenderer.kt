@@ -1,111 +1,77 @@
 package com.hrm.markdown.renderer.block
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import com.hrm.markdown.parser.ast.BlankLine
+import com.hrm.markdown.parser.ast.Heading
+import com.hrm.markdown.parser.ast.Image
 import com.hrm.markdown.parser.ast.ListBlock
 import com.hrm.markdown.parser.ast.ListItem
+import com.hrm.markdown.parser.ast.Paragraph
+import com.hrm.markdown.parser.ast.SetextHeading
 import com.hrm.markdown.renderer.LocalMarkdownTheme
 import com.hrm.markdown.renderer.MarkdownBlockChildren
+import com.hrm.markdown.renderer.internal.compose.FirstTextLineCenter
+import com.hrm.markdown.renderer.internal.core.model.HeadingBlockModel
 import com.hrm.markdown.renderer.internal.core.model.InternalRenderBlockModel
 import com.hrm.markdown.renderer.internal.core.model.ListBlockModel
-import com.hrm.markdown.renderer.internal.core.model.ListItemBlockModel
+import com.hrm.markdown.renderer.internal.core.model.ParagraphBlockModel
+import com.hrm.markdown.renderer.internal.core.model.TextAtom
 import com.hrm.markdown.renderer.internal.layout.LayoutTokens
+import com.hrm.markdown.renderer.internal.layout.list.OrderedListMarkerGap
 import com.hrm.markdown.renderer.internal.layout.list.OrderedListMarkerWidth
-import com.hrm.markdown.renderer.internal.layout.list.TaskListMarkerWidth
-import com.hrm.markdown.renderer.internal.layout.list.UnorderedListMarkerWidth
+import com.hrm.markdown.renderer.internal.layout.list.TaskListCheckboxSize
+import com.hrm.markdown.renderer.internal.layout.list.TaskListMarkerGap
+import com.hrm.markdown.renderer.internal.layout.list.listMarkerWidth
+import com.hrm.markdown.renderer.internal.layout.list.measureOrderedListMarkerMetrics
+import com.hrm.markdown.renderer.internal.layout.list.orderedListMarkerDigitCount
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutBlockModel
+import com.hrm.markdown.renderer.internal.layout.model.LayoutInlineBlockModel
 import com.hrm.markdown.renderer.internal.layout.model.LayoutListBlockModel
-import com.hrm.markdown.renderer.internal.layout.model.LayoutListItemGroup
+import com.hrm.markdown.renderer.internal.layout.model.LayoutTextRun
 
-/**
- * 列表渲染器（有序/无序列表）。
- */
+/** Lists share one marker width across all items, including numbering digit transitions. */
 @Composable
-internal fun ListBlockRenderer(
-    node: ListBlock,
-    modifier: Modifier = Modifier,
-) {
+internal fun ListBlockRenderer(node: ListBlock, modifier: Modifier = Modifier) {
     val items = node.children.filterIsInstance<ListItem>()
-    RenderListContainer(
-        ordered = node.ordered,
-        startNumber = node.startNumber,
-        tight = node.tight,
-        modifier = modifier,
-        items = items.mapIndexed { index, item ->
-            item.stableKey.toLong() to {
-                ListItemRenderer(
-                    node = item,
+    val orderedWidth = rememberOrderedMarkerWidth(node.ordered, node.startNumber, items.size)
+    RenderListContainer(node.tight, modifier) {
+        items.forEachIndexed { index, item ->
+            key(item.stableKey) {
+                val first = item.children.firstOrNull { it !is BlankLine }
+                val startsWithText = when (first) {
+                    is Paragraph -> first.children.firstOrNull() !is Image
+                    is Heading, is SetextHeading -> true
+                    else -> false
+                }
+                ListItemRow(
+                    markerText = if (node.ordered) "${node.startNumber.toLong() + index}." else "•",
                     ordered = node.ordered,
-                    index = node.startNumber + index,
-                )
+                    taskListItem = item.taskListItem,
+                    checked = item.checked,
+                    markerWidth = listMarkerWidth(item.taskListItem, node.ordered, orderedWidth),
+                    startsWithText = startsWithText,
+                ) {
+                    MarkdownBlockChildren(item)
+                }
             }
-        },
-    )
-}
-
-@Composable
-private fun ListItemRenderer(
-    node: ListItem,
-    ordered: Boolean,
-    index: Int,
-    modifier: Modifier = Modifier,
-) {
-    val theme = LocalMarkdownTheme.current
-
-    Row(
-        modifier = modifier.fillMaxWidth().padding(start = theme.listIndent),
-        horizontalArrangement = Arrangement.Start,
-    ) {
-        // Marker 列
-        when {
-            node.taskListItem -> {
-                Checkbox(
-                    checked = node.checked,
-                    onCheckedChange = null,
-                    modifier = Modifier.size(TaskListMarkerWidth).align(Alignment.Top),
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = theme.taskCheckedColor,
-                        uncheckedColor = theme.taskUncheckedColor,
-                    ),
-                )
-            }
-            ordered -> {
-                Text(
-                    text = "${index}.",
-                    modifier = Modifier.width(OrderedListMarkerWidth).align(Alignment.Top),
-                    style = theme.bodyStyle,
-                    color = theme.listBulletColor,
-                )
-            }
-            else -> {
-                Text(
-                    text = "•",
-                    modifier = Modifier.width(UnorderedListMarkerWidth).align(Alignment.Top),
-                    style = theme.bodyStyle,
-                    color = theme.listBulletColor,
-                )
-            }
-        }
-
-        // 内容列
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(theme.blockSpacing),
-        ) {
-            MarkdownBlockChildren(node)
         }
     }
 }
@@ -116,22 +82,28 @@ internal fun RenderListBlockModel(
     renderChildren: @Composable (List<InternalRenderBlockModel>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    RenderListContainer(
-        ordered = model.ordered,
-        startNumber = model.startNumber,
-        tight = model.tight,
-        modifier = modifier,
-        items = model.items.mapIndexed { index, item ->
-            item.identity.stableId to {
-                RenderListItemBlockModel(
-                    model = item,
+    val orderedWidth = rememberOrderedMarkerWidth(model.ordered, model.startNumber, model.items.size)
+    RenderListContainer(model.tight, modifier) {
+        model.items.forEachIndexed { index, item ->
+            key(item.identity.stableId) {
+                val firstAtom = when (val first = item.children.firstOrNull()) {
+                    is ParagraphBlockModel -> first.inline.atoms.firstOrNull()
+                    is HeadingBlockModel -> first.inline.atoms.firstOrNull()
+                    else -> null
+                }
+                ListItemRow(
+                    markerText = if (model.ordered) "${model.startNumber.toLong() + index}." else "•",
                     ordered = model.ordered,
-                    index = model.startNumber + index,
-                    renderChildren = renderChildren,
-                )
+                    taskListItem = item.taskListItem,
+                    checked = item.checked,
+                    markerWidth = listMarkerWidth(item.taskListItem, model.ordered, orderedWidth),
+                    startsWithText = firstAtom is TextAtom,
+                ) {
+                    renderChildren(item.children)
+                }
             }
-        },
-    )
+        }
+    }
 }
 
 @Composable
@@ -140,146 +112,109 @@ internal fun RenderListLayoutBlockModel(
     renderChildren: @Composable (List<InternalLayoutBlockModel>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    RenderListContainer(
-        ordered = model.block.ordered,
-        startNumber = model.block.startNumber,
-        tight = model.block.tight,
-        modifier = modifier,
-        items = model.items.map { item ->
-            item.identity.stableId to {
-                RenderListItemLayoutGroup(
-                    item = item,
-                    renderChildren = renderChildren,
-                )
+    val density = LocalDensity.current
+    RenderListContainer(model.block.tight, modifier) {
+        model.items.forEach { item ->
+            key(item.identity.stableId) {
+                val first = item.children.firstOrNull() as? LayoutInlineBlockModel
+                ListItemRow(
+                    markerText = item.markerText,
+                    ordered = model.block.ordered,
+                    taskListItem = item.taskListItem,
+                    checked = item.checked,
+                    markerWidth = with(density) { item.markerWidthPx.toDp() },
+                    startsWithText = first?.lines?.firstOrNull()?.runs?.firstOrNull() is LayoutTextRun,
+                ) {
+                    renderChildren(item.children)
+                }
             }
-        },
-    )
-}
-
-@Composable
-private fun RenderListItemBlockModel(
-    model: ListItemBlockModel,
-    ordered: Boolean,
-    index: Int,
-    renderChildren: @Composable (List<InternalRenderBlockModel>) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val theme = LocalMarkdownTheme.current
-    Row(
-        modifier = modifier.fillMaxWidth().padding(start = theme.listIndent),
-        horizontalArrangement = Arrangement.Start,
-    ) {
-        when {
-            model.taskListItem -> {
-                Checkbox(
-                    checked = model.checked,
-                    onCheckedChange = null,
-                    modifier = Modifier.size(TaskListMarkerWidth).align(Alignment.Top),
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = theme.taskCheckedColor,
-                        uncheckedColor = theme.taskUncheckedColor,
-                    ),
-                )
-            }
-
-            ordered -> {
-                Text(
-                    text = "${index}.",
-                    modifier = Modifier.width(OrderedListMarkerWidth).align(Alignment.Top),
-                    style = theme.bodyStyle,
-                    color = theme.listBulletColor,
-                )
-            }
-
-            else -> {
-                Text(
-                    text = "•",
-                    modifier = Modifier.width(UnorderedListMarkerWidth).align(Alignment.Top),
-                    style = theme.bodyStyle,
-                    color = theme.listBulletColor,
-                )
-            }
-        }
-
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(theme.blockSpacing),
-        ) {
-            renderChildren(model.children)
         }
     }
 }
 
 @Composable
-private fun RenderListItemLayoutGroup(
-    item: LayoutListItemGroup,
-    renderChildren: @Composable (List<InternalLayoutBlockModel>) -> Unit,
-    modifier: Modifier = Modifier,
+private fun rememberOrderedMarkerWidth(ordered: Boolean, startNumber: Int, itemCount: Int): Dp {
+    if (!ordered) return OrderedListMarkerWidth
+    val theme = LocalMarkdownTheme.current
+    val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
+    val digitCount = orderedListMarkerDigitCount(startNumber, itemCount)
+    val metrics = remember(theme.bodyStyle, density, textMeasurer) {
+        measureOrderedListMarkerMetrics(theme.bodyStyle, density, textMeasurer)
+    }
+    return with(density) {
+        metrics.widthPx(digitCount, density).toDp()
+    }
+}
+
+@Composable
+private fun ListItemRow(
+    markerText: String,
+    ordered: Boolean,
+    taskListItem: Boolean,
+    checked: Boolean,
+    markerWidth: Dp,
+    startsWithText: Boolean,
+    content: @Composable () -> Unit,
 ) {
     val theme = LocalMarkdownTheme.current
     Row(
-        modifier = modifier.fillMaxWidth().padding(start = theme.listIndent),
+        modifier = Modifier.fillMaxWidth().padding(start = theme.listIndent),
         horizontalArrangement = Arrangement.Start,
     ) {
-        when {
-            item.taskListItem -> {
-                Checkbox(
-                    checked = item.checked,
-                    onCheckedChange = null,
-                    modifier = Modifier.size(TaskListMarkerWidth).align(Alignment.Top),
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = theme.taskCheckedColor,
-                        uncheckedColor = theme.taskUncheckedColor,
-                    ),
-                )
-            }
-
-            item.markerText.endsWith(".") -> {
-                Text(
-                    text = item.markerText,
-                    modifier = Modifier.width(OrderedListMarkerWidth).align(Alignment.Top),
-                    style = theme.bodyStyle,
-                    color = theme.listBulletColor,
-                )
-            }
-
-            else -> {
-                Text(
-                    text = item.markerText,
-                    modifier = Modifier.width(UnorderedListMarkerWidth).align(Alignment.Top),
-                    style = theme.bodyStyle,
-                    color = theme.listBulletColor,
-                )
-            }
+        // Text owns its alignment geometry; markers choose the appropriate alignment line.
+        val alignment = when {
+            !startsWithText -> Modifier.align(Alignment.Top)
+            taskListItem -> Modifier.alignBy(FirstTextLineCenter)
+            else -> Modifier.alignByBaseline()
         }
-
+        if (taskListItem) {
+            Checkbox(
+                checked = checked,
+                onCheckedChange = null,
+                modifier = Modifier.width(markerWidth)
+                    .padding(end = TaskListMarkerGap)
+                    .size(TaskListCheckboxSize)
+                    .then(if (startsWithText) Modifier.alignBy { it.measuredHeight / 2 } else alignment),
+                colors = CheckboxDefaults.colors(
+                    checkedColor = theme.taskCheckedColor,
+                    uncheckedColor = theme.taskUncheckedColor,
+                ),
+            )
+        } else {
+            BasicText(
+                text = markerText,
+                modifier = Modifier.width(markerWidth)
+                    .then(if (ordered) Modifier.padding(end = OrderedListMarkerGap) else Modifier)
+                    .then(alignment),
+                style = theme.bodyStyle.copy(
+                    color = theme.listBulletColor,
+                    textAlign = if (ordered) TextAlign.End else TextAlign.Start,
+                ),
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).then(alignment),
             verticalArrangement = Arrangement.spacedBy(theme.blockSpacing),
         ) {
-            renderChildren(item.children)
+            content()
         }
     }
 }
 
 @Composable
 private fun RenderListContainer(
-    ordered: Boolean,
-    startNumber: Int,
     tight: Boolean,
-    modifier: Modifier = Modifier,
-    items: List<Pair<Long, @Composable () -> Unit>>,
+    modifier: Modifier,
+    content: @Composable () -> Unit,
 ) {
     val theme = LocalMarkdownTheme.current
-    val spacing = if (tight) LayoutTokens.ListTightItemSpacing else theme.blockSpacing
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(spacing),
+        verticalArrangement = Arrangement.spacedBy(if (tight) LayoutTokens.ListTightItemSpacing else theme.blockSpacing),
     ) {
-        items.forEach { (stableId, content) ->
-            key(stableId, ordered, startNumber) {
-                content()
-            }
-        }
+        content()
     }
 }

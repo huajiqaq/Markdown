@@ -11,6 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.AlignmentLine
+import androidx.compose.ui.layout.HorizontalAlignmentLine
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
@@ -26,6 +28,9 @@ import com.hrm.markdown.renderer.internal.layout.model.LayoutInlineBlockModel
 import com.hrm.markdown.renderer.internal.layout.model.LayoutTextRun
 import com.hrm.markdown.renderer.internal.layout.model.LayoutWidgetRun
 import kotlin.math.ceil
+
+/** Center of the first painted text line, propagated through Compose containers like FirstBaseline. */
+internal val FirstTextLineCenter = HorizontalAlignmentLine { old, new -> minOf(old, new) }
 
 @Composable
 internal fun PaintInlineLayoutContent(
@@ -47,6 +52,12 @@ internal fun PaintInlineLayoutContent(
             placements = placements,
             style = block.style,
             textMeasurer = textMeasurer,
+        )
+    }
+    val alignmentLines = remember(paintItems) {
+        val firstText = paintItems.firstOrNull() as? InlineTextPaintItem
+        if (firstText == null) emptyMap() else mapOf<AlignmentLine, Int>(
+            FirstTextLineCenter to firstText.y + firstText.height / 2,
         )
     }
     Layout(
@@ -135,7 +146,7 @@ internal fun PaintInlineLayoutContent(
                 if (constraints.hasBoundedHeight) height.coerceAtMost(constraints.maxHeight) else height
             }
 
-        layout(desiredWidth, desiredHeight) {
+        layout(desiredWidth, desiredHeight, alignmentLines = alignmentLines) {
             for (index in paintItems.indices) {
                 val item = paintItems[index]
                 // LayoutInlineBlockModel owns physical geometry; do not mirror it a second time.

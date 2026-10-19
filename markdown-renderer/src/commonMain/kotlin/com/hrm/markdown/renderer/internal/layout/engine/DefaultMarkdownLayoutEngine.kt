@@ -40,6 +40,8 @@ import com.hrm.markdown.renderer.internal.core.model.ThematicBreakBlockModel
 import com.hrm.markdown.renderer.internal.core.model.TocBlockModel
 import com.hrm.markdown.renderer.internal.layout.inline.buildInlineLayoutBlockFromModel
 import com.hrm.markdown.renderer.internal.layout.list.listItemContentIndentPx
+import com.hrm.markdown.renderer.internal.layout.list.OrderedListMarkerWidth
+import com.hrm.markdown.renderer.internal.layout.list.orderedListMarkerDigitCount
 import com.hrm.markdown.renderer.internal.layout.LayoutTokens
 import com.hrm.markdown.renderer.internal.layout.columns.resolveColumnWidths
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutBlockModel
@@ -313,12 +315,23 @@ private fun layoutBlockInternal(
         }
 
         is ListBlockModel -> {
+            val orderedMarkerWidth = if (block.ordered) {
+                with(environment.density) {
+                    environment.orderedListMarkerMetrics.widthPx(
+                        digitCount = orderedListMarkerDigitCount(block.startNumber, block.items.size),
+                        density = environment.density,
+                    ).toDp()
+                }
+            } else {
+                OrderedListMarkerWidth
+            }
             var itemCursorY = contentTop
             val itemGroups = block.items.mapIndexed { index, item ->
                 val itemIndent = environment.density.listItemContentIndentPx(
                     theme = environment.markdownTheme,
                     taskListItem = item.taskListItem,
                     ordered = block.ordered,
+                    orderedMarkerWidth = orderedMarkerWidth,
                 )
                 val itemTop = itemCursorY
                 val (itemChildren, itemBottom) = layoutBlocks(
@@ -352,12 +365,13 @@ private fun layoutBlockInternal(
                     ),
                     markerText = when {
                         item.taskListItem -> ""
-                        block.ordered -> "${block.startNumber + index}."
+                        block.ordered -> "${block.startNumber.toLong() + index}."
                         else -> "•"
                     },
                     taskListItem = item.taskListItem,
                     checked = item.checked,
                     children = itemChildren,
+                    markerWidthPx = itemIndent - with(environment.density) { environment.markdownTheme.listIndent.toPx() },
                 )
             }
             LayoutListBlockModel(

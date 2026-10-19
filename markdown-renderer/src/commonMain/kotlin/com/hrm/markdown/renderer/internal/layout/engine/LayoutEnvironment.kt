@@ -10,6 +10,7 @@ import com.hrm.markdown.renderer.MarkdownTheme
 import com.hrm.markdown.renderer.internal.core.compile.RenderCompileEnvironment
 import com.hrm.markdown.renderer.internal.layout.inline.InlineLayoutEpoch
 import com.hrm.markdown.renderer.internal.layout.inline.InlineLayoutRuntime
+import com.hrm.markdown.renderer.internal.layout.list.measureOrderedListMarkerMetrics
 
 internal data class LayoutEnvironment(
     val viewportWidth: Float,
@@ -26,4 +27,8 @@ internal data class LayoutEnvironment(
     val diagramHostRegistry: DiagramHostRegistry,
     val inlineLayoutRuntime: InlineLayoutRuntime,
     val inlineLayoutEpoch: InlineLayoutEpoch,
-)
+) {
+    val orderedListMarkerMetrics by lazy(LazyThreadSafetyMode.NONE) {
+        measureOrderedListMarkerMetrics(markdownTheme.bodyStyle, density, textMeasurer)
+    }
+}

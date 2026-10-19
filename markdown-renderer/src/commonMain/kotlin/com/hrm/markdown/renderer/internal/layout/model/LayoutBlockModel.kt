@@ -62,6 +62,8 @@ data class LayoutListItemGroup(
     val taskListItem: Boolean,
     val checked: Boolean,
     val children: List<InternalLayoutBlockModel>,
+    /** Marker column including its trailing gap, shared by layout and painting. */
+    val markerWidthPx: Float,
 )
 
 data class LayoutColumnsBlockModel(
