@@ -38,8 +38,10 @@ internal fun Modifier.markdownSelectionGestures(
             )
         }
         .pointerInput(controller) {
+            // Consumed drag events cancel tap detection for the same gesture;
+            // the next independent tap should always clear the selection.
             detectTapGestures(
-                onTap = { controller.clearSelectionFromTap() },
+                onTap = { controller.clearSelection() },
             )
         }
 

@@ -47,7 +47,6 @@ internal class MarkdownSelectionController(
     private var startAnchor: SelectionAnchor? = null
     private var draggedHandleAnchor: SelectionAnchor? by mutableStateOf(null)
     private var fixedHandleAnchor: SelectionAnchor? = null
-    private var skipNextTapClear: Boolean = false
 
     internal var fallbackTextMeasurementCount: Long = 0
         private set
@@ -230,7 +229,6 @@ internal class MarkdownSelectionController(
 
     fun beginSelectionAt(windowOffset: Offset) {
         val anchor = anchorFromWindow(windowOffset) ?: return
-        skipNextTapClear = false
         startAnchor = anchor
         draggedHandleAnchor = null
         fixedHandleAnchor = null
@@ -254,7 +252,6 @@ internal class MarkdownSelectionController(
         if (selectedText.isEmpty()) {
             clearSelection()
         } else {
-            skipNextTapClear = true
             state.toolbarRequestKey += 1
         }
     }
@@ -272,19 +269,10 @@ internal class MarkdownSelectionController(
     }
 
     fun clearSelection() {
-        skipNextTapClear = false
         startAnchor = null
         draggedHandleAnchor = null
         fixedHandleAnchor = null
         state.clear()
-    }
-
-    fun clearSelectionFromTap() {
-        if (skipNextTapClear) {
-            skipNextTapClear = false
-            return
-        }
-        clearSelection()
     }
 
     fun selectAll() {
@@ -307,7 +295,6 @@ internal class MarkdownSelectionController(
             SelectionActiveHandle.End -> range.start
             SelectionActiveHandle.None -> return
         }
-        skipNextTapClear = false
         state.activeHandle = handle
         state.isHandleDrag = true
     }
@@ -335,7 +322,6 @@ internal class MarkdownSelectionController(
         if (selectedText.isEmpty()) {
             clearSelection()
         } else {
-            skipNextTapClear = false
             state.toolbarRequestKey += 1
         }
     }

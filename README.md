@@ -33,6 +33,8 @@
 | 🖼️ | **Image Loading** | Coil3 + Ktor3 out-of-the-box, with size specification and custom renderer support |
 | 🖱️ | **Cross-Block Selection** | DIY selection layer over LazyColumn — continuous selection across blocks, reuses the system copy/translate menu, no first-frame stall on huge docs |
 
+Long-press and drag to select text. After releasing the gesture or adjusting a selection handle, tap a blank area inside the Markdown content once to clear the selection.
+
 ---
 
 ## 🎬 See It in Action
