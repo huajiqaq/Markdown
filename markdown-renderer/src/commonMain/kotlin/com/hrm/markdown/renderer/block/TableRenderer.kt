@@ -12,10 +12,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.hrm.markdown.parser.ast.Table
 import com.hrm.markdown.parser.ast.TableBody
@@ -94,6 +98,24 @@ private fun AutoTableViewport(
     }
 }
 
+// 网格线只画一次：每个 cell 只描自己的末端边与下边线，最外圈仍由整块的 Modifier.border 负责。
+// 末端边方向跟随 layoutDirection，RTL 下不会把竖线画到重复的一侧。
+private fun Modifier.tableGridEdge(
+    color: Color,
+    drawEnd: Boolean,
+    drawBottom: Boolean,
+): Modifier = drawBehind {
+    val strokeWidth = 1.dp.toPx().coerceAtLeast(1f)
+    if (drawBottom) {
+        val y = size.height - strokeWidth / 2f
+        drawLine(color, Offset(0f, y), Offset(size.width, y), strokeWidth)
+    }
+    if (drawEnd) {
+        val x = if (layoutDirection == LayoutDirection.Rtl) strokeWidth / 2f else size.width - strokeWidth / 2f
+        drawLine(color, Offset(x, 0f), Offset(x, size.height), strokeWidth)
+    }
+}
+
 @Composable
 private fun TableLayout(
     allRows: List<Pair<TableRow, Boolean>>,
@@ -110,7 +132,8 @@ private fun TableLayout(
         availableWidthPx = availableWidthPx,
         modifier = modifier,
     ) {
-        for ((row, isHeader) in allRows) {
+        for ((rowIndex, entry) in allRows.withIndex()) {
+            val (row, isHeader) = entry
             val cells = row.children.filterIsInstance<TableCell>()
             for (colIndex in 0 until columnCount) {
                 val cell = cells.getOrNull(colIndex)
@@ -120,10 +143,14 @@ private fun TableLayout(
                     alignment = alignment,
                     isHeader = isHeader,
                     modifier = Modifier
-                        .border(0.5.dp, theme.tableBorderColor)
                         .let {
                             if (isHeader) it.background(theme.tableHeaderBackground) else it
                         }
+                        .tableGridEdge(
+                            color = theme.tableBorderColor,
+                            drawEnd = colIndex < columnCount - 1,
+                            drawBottom = rowIndex < allRows.size - 1,
+                        )
                         .padding(theme.tableCellPadding),
                 )
             }
@@ -199,8 +226,8 @@ internal fun RenderTableLayoutBlockModel(
             fixedRowHeightsPx = rowHeightsPx,
             modifier = Modifier.border(width = 1.dp, color = theme.tableBorderColor),
         ) {
-            for (row in model.rows) {
-                for (cell in row.cells) {
+            for ((rowIndex, row) in model.rows.withIndex()) {
+                for ((cellIndex, cell) in row.cells.withIndex()) {
                     val alignment = Table.Alignment.entries.getOrElse(cell.alignmentOrdinal) {
                         Table.Alignment.NONE
                     }
@@ -209,10 +236,14 @@ internal fun RenderTableLayoutBlockModel(
                         alignment = alignment,
                         isHeader = cell.isHeader,
                         modifier = Modifier
-                            .border(0.5.dp, theme.tableBorderColor)
                             .let {
                                 if (cell.isHeader) it.background(theme.tableHeaderBackground) else it
                             }
+                            .tableGridEdge(
+                                color = theme.tableBorderColor,
+                                drawEnd = cellIndex < row.cells.size - 1,
+                                drawBottom = rowIndex < model.rows.size - 1,
+                            )
                             .padding(theme.tableCellPadding),
                     )
                 }
@@ -236,7 +267,7 @@ private fun TableBlockModelLayout(
         availableWidthPx = availableWidthPx,
         modifier = modifier,
     ) {
-        for (row in rows) {
+        for ((rowIndex, row) in rows.withIndex()) {
             for (colIndex in 0 until columnCount) {
                 val cell = row.cells.getOrNull(colIndex)
                 val alignment = alignments.getOrElse(colIndex) { Table.Alignment.NONE }
@@ -245,10 +276,14 @@ private fun TableBlockModelLayout(
                     alignment = alignment,
                     isHeader = row.isHeader,
                     modifier = Modifier
-                        .border(0.5.dp, theme.tableBorderColor)
                         .let {
                             if (row.isHeader) it.background(theme.tableHeaderBackground) else it
                         }
+                        .tableGridEdge(
+                            color = theme.tableBorderColor,
+                            drawEnd = colIndex < columnCount - 1,
+                            drawBottom = rowIndex < rows.size - 1,
+                        )
                         .padding(theme.tableCellPadding),
                 )
             }
