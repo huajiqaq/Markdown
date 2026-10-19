@@ -13,8 +13,10 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.sp
+import com.hrm.latex.fonts.KatexFonts
 import com.hrm.latex.renderer.model.LatexConfig
 import com.hrm.latex.renderer.model.LatexTheme
+import com.hrm.latex.renderer.model.LatexFontRegistry
 import com.hrm.latex.renderer.model.systemLatexFontFamilies
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.renderer.internal.MarkdownEngineHost
@@ -26,11 +28,42 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNotSame
+import kotlin.test.assertNotEquals
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class MarkdownLatexConfigTest {
+    @Test
+    fun should_prefer_registered_fonts_and_preserve_explicit_font_overrides() {
+        val previous = LatexFontRegistry.provider
+        val registered = systemLatexFontFamilies().copy(main = FontFamily.Serif)
+        val explicit = registered.copy(main = FontFamily.Monospace)
+        LatexFontRegistry.provider = { registered }
+        try {
+            runComposeUiTest {
+                setContent {
+                    val config = LatexConfig()
+                    val state = rememberMarkdownLatexState(config)
+                    val explicitState = rememberMarkdownLatexState(config.copy(fontFamilies = explicit))
+                    val formula = "\\text{WWWWiiii}"
+                    val registeredSize = assertNotNull(state.measurer.measure(formula))
+                    val explicitSize = assertNotNull(explicitState.measurer.measure(formula))
+                    assertSame(config, state.config)
+                    assertSame(explicit, explicitState.config.fontFamilies)
+                    assertEquals(
+                        state.measurer.measure(formula, config.copy(fontFamilies = registered)),
+                        registeredSize,
+                    )
+                    assertNotEquals(registeredSize.widthPx, explicitSize.widthPx)
+                }
+                waitForIdle()
+            }
+        } finally {
+            LatexFontRegistry.provider = previous
+        }
+    }
+
     @Test
     fun should_share_state_within_document_and_isolate_other_markdown_instances() = runComposeUiTest {
         val firstConfig = MarkdownConfig()
@@ -77,7 +110,6 @@ class MarkdownLatexConfigTest {
             recompose = { tick++ }
         }
 
-        waitUntil { headerState?.config?.fontFamilies?.mainBytes != null }
         waitForIdle()
         val initial = assertNotNull(headerState)
         assertSame(initial, footerState)
@@ -90,19 +122,51 @@ class MarkdownLatexConfigTest {
     }
 
     @Test
-    fun should_load_katex_fonts_when_no_fonts_are_configured() = runComposeUiTest {
-        var resolved: LatexConfig? = null
-        setContent {
-            val latexState = rememberMarkdownLatexState(LatexConfig())
-            SideEffect { resolved = latexState.config }
+    fun should_load_installed_katex_fonts_when_no_fonts_are_configured() {
+        val previous = LatexFontRegistry.provider
+        KatexFonts.install()
+        try {
+            runComposeUiTest {
+                var fontBytes: ByteArray? = null
+                setContent {
+                    val fonts = assertNotNull(LatexFontRegistry.provider).invoke()
+                    val config = LatexConfig()
+                    val state = rememberMarkdownLatexState(config)
+                    assertSame(config, state.config)
+                    assertEquals(
+                        state.measurer.measure("x^2", config.copy(fontFamilies = fonts)),
+                        assertNotNull(state.measurer.measure("x^2")),
+                    )
+                    SideEffect { fontBytes = fonts.mainBytes }
+                }
+                waitUntil { fontBytes != null }
+                assertTrue(assertNotNull(fontBytes).isNotEmpty())
+            }
+        } finally {
+            LatexFontRegistry.provider = previous
         }
+    }
 
-        waitUntil { resolved?.fontFamilies?.mainBytes != null }
-        val fonts = assertNotNull(assertNotNull(resolved).fontFamilies)
-        assertTrue(assertNotNull(fonts.mainBytes).isNotEmpty())
-        assertTrue(assertNotNull(fonts.mathBytes).isNotEmpty())
-        assertTrue(assertNotNull(fonts.amsBytes).isNotEmpty())
-        assertTrue(assertNotNull(fonts.size4Bytes).isNotEmpty())
+    @Test
+    fun should_use_system_fonts_when_no_provider_is_installed() {
+        val previous = LatexFontRegistry.provider
+        LatexFontRegistry.provider = null
+        try {
+            runComposeUiTest {
+                setContent {
+                    val config = LatexConfig()
+                    val state = rememberMarkdownLatexState(config)
+                    assertSame(config, state.config)
+                    assertEquals(
+                        state.measurer.measure("x^2", config.copy(fontFamilies = systemLatexFontFamilies())),
+                        assertNotNull(state.measurer.measure("x^2")),
+                    )
+                }
+                waitForIdle()
+            }
+        } finally {
+            LatexFontRegistry.provider = previous
+        }
     }
 
     @Test

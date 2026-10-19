@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import com.hrm.markdown.App
+import com.hrm.latex.fonts.KatexFonts
 import com.hrm.markdown.parser.log.HLog
 import com.hrm.markdown.parser.log.ILogger
 
@@ -15,6 +16,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        KatexFonts.install()
 
         HLog.setLogger(object : ILogger {
             override fun v(tag: String, message: String) {

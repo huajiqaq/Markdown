@@ -42,6 +42,7 @@ android {
 
 dependencies {
     implementation(projects.composeApp)
+    implementation(libs.latex.fonts.katex)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)

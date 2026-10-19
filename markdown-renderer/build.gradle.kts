@@ -53,7 +53,7 @@ kotlin {
             implementation(libs.compose.components.resources)
 
             api(libs.latex.renderer)
-            implementation(libs.latex.fonts.katex)
+            api(libs.latex.fonts.katex)
             implementation(libs.bundles.codehigh)
             implementation(libs.diagram.render)
 

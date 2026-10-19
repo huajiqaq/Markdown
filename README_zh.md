@@ -93,6 +93,20 @@ dependencies {
 
 > 💡 `markdown-renderer` 会自动传递引入 Coil3 + Ktor3 图片加载能力，以及 Mermaid / PlantUML / DOT 图表所需的 `diagram-render`。
 
+### 字体初始化（推荐）
+
+**建议默认在应用初始化时先调用一次 `KatexFonts.install()`，早于任何 Markdown 渲染。** 这与上游 LaTeX 库的接入方式一致：
+
+```kotlin
+import com.hrm.latex.fonts.KatexFonts
+
+fun initializeApp() {
+    KatexFonts.install()
+}
+```
+
+Android 可在 `Application.onCreate()` 中调用，Desktop / Web 在 `main()` 中调用，iOS 在创建 Compose 视图控制器之前调用。`markdown-renderer` 已通过 API 依赖传递引入字体模块，可直接导入上述初始化入口。
+
 ### 基本用法
 
 ```kotlin
@@ -149,7 +163,15 @@ Markdown(
 
 `MarkdownTheme` 不再配置公式样式。原来的 `mathFontSize`、`latexTheme`、`mathBlockBackground` 分别迁移至 `LatexConfig.fontSize`、`LatexConfig.theme` 及其背景色；Markdown 的亮暗主题和 Material 3 主题不会覆盖公式配置。默认使用 `LatexConfig()`（20.sp、跟随系统亮暗模式、透明背景），块级公式不再额外放大 1.2 倍。
 
-`markdown-renderer` 自动传递引入 `latex-fonts-katex:1.6.0`，在未指定 `fontFamilies` 时显式启用配套 KaTeX 字体，无需调用全局 `KatexFonts.install()`。可通过 `LatexConfig.fontFamilies` 替换字体；自定义字体应与 LaTeX 的数学度量兼容，以免出现缺字或排版偏差。
+字体解析完全沿用 LaTeX 的机制：显式 `LatexConfig.fontFamilies` 优先，其次使用 `KatexFonts.install()` 等方式注册的 provider；未配置且未注册时使用系统字体。**仅引入字体依赖不会自动注册，推荐先完成上述应用初始化。** 配套 KaTeX 字体与数学度量匹配；使用其他字体时可能出现缺字或排版偏差。
+
+不需要携带 KaTeX 字体时，可以排除字体模块，并省略 `KatexFonts.install()` 调用。用户无需额外传入 `fontFamilies`，默认配置会安全使用系统字体：
+
+```kotlin
+implementation(libs.markdown.renderer) {
+    exclude(group = "io.github.huarangmeng", module = "latex-fonts-katex")
+}
+```
 
 ---
 
