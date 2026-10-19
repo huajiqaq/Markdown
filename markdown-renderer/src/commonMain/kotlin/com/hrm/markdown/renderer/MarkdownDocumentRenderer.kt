@@ -18,7 +18,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.rememberTextMeasurer
 import com.hrm.codehigh.theme.CodeTheme
-import com.hrm.latex.renderer.measure.rememberLatexMeasurer
 import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.renderer.internal.MarkdownEngineHost
 import com.hrm.markdown.renderer.internal.RendererFacadeState
@@ -52,6 +51,7 @@ internal fun MarkdownDocumentRenderer(
     sourceMap: MarkdownSourceMap = MarkdownSourceMap.Identity,
     documentRevision: Long = document.contentHash,
 ) {
+    val latexState = rememberMarkdownLatexState(config.latexConfig)
     val renderMode = remember(enableScroll) {
         resolveMarkdownRenderMode(enableScroll = enableScroll)
     }
@@ -99,7 +99,7 @@ internal fun MarkdownDocumentRenderer(
         }
         val density = LocalDensity.current
         val layoutDirection = LocalLayoutDirection.current
-        val latexMeasurer = rememberLatexMeasurer()
+        val latexMeasurer = latexState.measurer
         val diagramHostRegistry = remember { DiagramHostRegistry() }
         BoxWithConstraints(modifier = modifier) {
             val viewportWidthPx = with(density) { maxWidth.toPx() }
@@ -184,6 +184,7 @@ internal fun MarkdownDocumentRenderer(
                 CompositionLocalProvider(
                     LocalMarkdownSelectionController provides selectionController,
                     LocalMarkdownSourceMap provides sourceMap,
+                    LocalMarkdownLatexState provides latexState,
                 ) {
                     ProvideRendererContext(
                         document = document,

@@ -52,7 +52,8 @@ kotlin {
             implementation(libs.compose.ui)
             implementation(libs.compose.components.resources)
 
-            implementation(libs.bundles.latex)
+            api(libs.latex.renderer)
+            implementation(libs.latex.fonts.katex)
             implementation(libs.bundles.codehigh)
             implementation(libs.diagram.render)
 

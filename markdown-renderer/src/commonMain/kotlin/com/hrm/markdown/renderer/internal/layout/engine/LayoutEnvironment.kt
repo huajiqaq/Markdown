@@ -5,6 +5,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import com.hrm.codehigh.theme.CodeTheme
 import com.hrm.latex.renderer.measure.LatexMeasurerState
+import com.hrm.latex.renderer.model.LatexConfig
 import com.hrm.markdown.renderer.DiagramHostRegistry
 import com.hrm.markdown.renderer.MarkdownTheme
 import com.hrm.markdown.renderer.internal.core.compile.RenderCompileEnvironment
@@ -23,6 +24,7 @@ internal data class LayoutEnvironment(
     val layoutDirection: LayoutDirection,
     val textMeasurer: TextMeasurer,
     val latexMeasurer: LatexMeasurerState,
+    val latexConfig: LatexConfig,
     val compileEnvironment: RenderCompileEnvironment,
     val diagramHostRegistry: DiagramHostRegistry,
     val inlineLayoutRuntime: InlineLayoutRuntime,

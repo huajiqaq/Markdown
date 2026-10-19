@@ -48,7 +48,7 @@ import com.hrm.markdown.renderer.internal.core.compile.computeSemanticRevision
  * @param markdown 原始 Markdown 文本
  * @param isStreaming 是否处于流式生成中。为 true 时启用增量解析，避免全量重解析导致的闪烁
  * @param theme 可选的自定义主题，默认跟随系统日夜间模式
- * @param config 解析配置，控制 Markdown 方言（Flavour）和解析行为，默认使用 [MarkdownConfig.Default]（ExtendedFlavour 全功能）
+ * @param config Markdown 方言、解析行为及 LaTeX 渲染配置，默认使用 [MarkdownConfig.Default]
  * @param scrollState 滚动状态，外部可控制滚动位置
  * @param enableScroll 是否启用 Markdown 内部滚动容器
  * @param enableSelection 是否启用文本选择（自研选区层 overlay，支持跨 block 连续选中并复用系统复制菜单；与渲染模式正交，长文档仍走虚拟化渲染）
@@ -123,7 +123,7 @@ fun Markdown(
  * @param document Markdown AST
  * @param isStreaming 是否处于流式生成中。为 true 时启用增量解析，避免全量重解析导致的闪烁
  * @param theme 可选的自定义主题，默认跟随系统日夜间模式
- * @param config 解析配置，控制 Markdown 方言（Flavour）和解析行为，默认使用 [MarkdownConfig.Default]（ExtendedFlavour 全功能）
+ * @param config Markdown 方言、解析行为及 LaTeX 渲染配置，默认使用 [MarkdownConfig.Default]
  * @param scrollState 滚动状态，外部可控制滚动位置
  * @param enableScroll 是否启用 Markdown 内部滚动容器
  * @param enableSelection 是否启用文本选择（自研选区层 overlay，支持跨 block 连续选中并复用系统复制菜单；与渲染模式正交，长文档仍走虚拟化渲染）

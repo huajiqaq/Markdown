@@ -133,6 +133,7 @@ internal class MarkdownEngineHost(
         textMeasurer = textMeasurer,
         latexMeasurer = latexMeasurer,
         compileEnvironment = facadeState.toCompileEnvironment(),
+        latexConfig = facadeState.config.latexConfig,
         diagramHostRegistry = diagramHostRegistry,
         inlineLayoutRuntime = inlineLayoutRuntime,
         inlineLayoutEpoch = inlineLayoutEpoch(

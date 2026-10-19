@@ -5,7 +5,6 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.hrm.diagram.core.theme.DiagramTheme
-import com.hrm.latex.renderer.model.LatexTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -34,7 +33,6 @@ class MarkdownThemeTest {
         assertEquals(colorScheme.tertiaryContainer, theme.highlightColor)
         assertEquals(colorScheme.surface.toArgb(), theme.diagramTheme.colors.canvas.argb)
         assertEquals(colorScheme.primary.toArgb(), theme.diagramTheme.colors.accent.argb)
-        assertEquals(LatexTheme.material3(colorScheme), theme.latexTheme)
     }
 
     @Test
@@ -49,6 +47,5 @@ class MarkdownThemeTest {
         assertEquals(MarkdownTheme.dark().codeBlockCornerRadius, theme.codeBlockCornerRadius)
         assertEquals(DiagramTheme.Dark.typography, theme.diagramTheme.typography)
         assertEquals(colorScheme.surface.toArgb(), theme.diagramTheme.colors.canvas.argb)
-        assertEquals(LatexTheme.material3(colorScheme), theme.latexTheme)
     }
 }

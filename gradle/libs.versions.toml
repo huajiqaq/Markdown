@@ -19,7 +19,7 @@ coil = "3.5.0"
 ktor = "3.5.0"
 material3 = "1.10.0-alpha05"
 composeBom = "2026.06.00"
-latex = '1.5.4'
+latex = '1.6.0'
 codehigh = '1.1.2'
 diagram = '1.0.5'
 kotlinx-benchmark = "0.4.17"
@@ -73,6 +73,7 @@ ktor-client-js = { module = "io.ktor:ktor-client-js", version.ref = "ktor" }
 latex-base = { module = "io.github.huarangmeng:latex-base", version.ref = "latex" }
 latex-parser = { module = "io.github.huarangmeng:latex-parser", version.ref = "latex" }
 latex-renderer = { module = "io.github.huarangmeng:latex-renderer", version.ref = "latex" }
+latex-fonts-katex = { module = "io.github.huarangmeng:latex-fonts-katex", version.ref = "latex" }
 
 codehigh-parser = { module = "io.github.huarangmeng:codehighlight-parser", version.ref = "codehigh" }
 codehigh-render = { module = "io.github.huarangmeng:codehighlight-render", version.ref = "codehigh" }
@@ -83,7 +84,7 @@ diagram-parser = { module = "io.github.huarangmeng:diagram-parser", version.ref 
 diagram-render = { module = "io.github.huarangmeng:diagram-render", version.ref = "diagram" }
 
 [bundles]
-latex = ["latex-base", "latex-parser", "latex-renderer"]
+latex = ["latex-base", "latex-parser", "latex-renderer", "latex-fonts-katex"]
 codehigh = ["codehigh-parser", "codehigh-render"]
 
 [plugins]

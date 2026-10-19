@@ -1,13 +1,14 @@
 package com.hrm.markdown.renderer
 
 import androidx.compose.runtime.Immutable
+import com.hrm.latex.renderer.model.LatexConfig
 import com.hrm.markdown.parser.flavour.ExtendedFlavour
 import com.hrm.markdown.parser.flavour.MarkdownFlavour
 
 /**
  * Markdown 渲染器配置。
  *
- * 汇总 Markdown 方言与解析行为。
+ * 汇总 Markdown 方言、解析行为与 LaTeX 渲染配置。
  *
  * ## 使用示例
  *
@@ -55,6 +56,8 @@ import com.hrm.markdown.parser.flavour.MarkdownFlavour
  *   `> 0`：未跨换行符且累积 < 阈值的小 chunk 会被缓冲，多个 token 合并为一次解析；
  *   推荐 LLM 流式场景设为 `16`，可减少 60-80% 的总流式耗时；代价是"正在写的最后一行"
  *   AST 最多滞后该字符数（碰到 `\n` 必定 flush，已写完的行不受影响）。
+ * @param latexConfig 行内与块级公式共用的完整 LaTeX 配置。字号、主题、换行、高亮、
+ *   交互和字体均直接交由 LaTeX 库处理；未指定字体时使用配套 KaTeX 字体。
  */
 @Immutable
 data class MarkdownConfig(
@@ -64,6 +67,7 @@ data class MarkdownConfig(
     val enableLinting: Boolean = false,
     val enableHeadingNumbering: Boolean = false,
     val appendCoalesceThreshold: Int = 0,
+    val latexConfig: LatexConfig = LatexConfig(),
 ) {
     companion object {
         /** 默认配置：ExtendedFlavour，全功能。 */

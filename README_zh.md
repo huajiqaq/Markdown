@@ -124,6 +124,33 @@ fun MyScreen() {
 
 就这么简单 — **3 行代码**即可在所有平台上渲染精美的 Markdown。
 
+### LaTeX 配置
+
+通过 `MarkdownConfig.latexConfig` 传入完整的 LaTeX 1.6.0 配置，行内和块级公式的测量与绘制共用此配置：
+
+```kotlin
+import androidx.compose.ui.unit.sp
+import com.hrm.latex.renderer.model.LatexConfig
+import com.hrm.latex.renderer.model.LatexTheme
+import com.hrm.markdown.renderer.MarkdownConfig
+
+Markdown(
+    markdown = "行内公式 \$E = mc^2\$。\n\n\$\$\nE = mc^2\n\$\$",
+    config = MarkdownConfig(
+        latexConfig = LatexConfig(
+            fontSize = 24.sp,
+            theme = LatexTheme.material3(),
+            accessibilityEnabled = true,
+            onHyperlinkClick = { url -> /* 处理公式内的链接 */ },
+        ),
+    ),
+)
+```
+
+`MarkdownTheme` 不再配置公式样式。原来的 `mathFontSize`、`latexTheme`、`mathBlockBackground` 分别迁移至 `LatexConfig.fontSize`、`LatexConfig.theme` 及其背景色；Markdown 的亮暗主题和 Material 3 主题不会覆盖公式配置。默认使用 `LatexConfig()`（20.sp、跟随系统亮暗模式、透明背景），块级公式不再额外放大 1.2 倍。
+
+`markdown-renderer` 自动传递引入 `latex-fonts-katex:1.6.0`，在未指定 `fontFamilies` 时显式启用配套 KaTeX 字体，无需调用全局 `KatexFonts.install()`。可通过 `LatexConfig.fontFamilies` 替换字体；自定义字体应与 LaTeX 的数学度量兼容，以免出现缺字或排版偏差。
+
 ---
 
 ## 🔌 插件扩展
@@ -595,7 +622,7 @@ Markdown(
 
 | 能力 | 本项目使用的 Maven 模块 | 仓库地址 |
 |------|-------------------------|----------|
-| LaTeX 数学公式 | `io.github.huarangmeng:latex-base`、`io.github.huarangmeng:latex-parser`、`io.github.huarangmeng:latex-renderer` | [huarangmeng/latex](https://github.com/huarangmeng/latex) |
+| LaTeX 数学公式 | `io.github.huarangmeng:latex-base`、`io.github.huarangmeng:latex-parser`、`io.github.huarangmeng:latex-renderer`、`io.github.huarangmeng:latex-fonts-katex` | [huarangmeng/latex](https://github.com/huarangmeng/latex) |
 | 代码高亮 | `io.github.huarangmeng:codehighlight-parser`、`io.github.huarangmeng:codehighlight-render` | [huarangmeng/codehigh](https://github.com/huarangmeng/codehigh) |
 | 图表块 | `io.github.huarangmeng:diagram-core`、`io.github.huarangmeng:diagram-layout`、`io.github.huarangmeng:diagram-parser`、`io.github.huarangmeng:diagram-render` | [huarangmeng/diagram](https://github.com/huarangmeng/diagram) |
 

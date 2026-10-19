@@ -22,9 +22,10 @@ import androidx.compose.ui.unit.LayoutDirection
 import com.hrm.codehigh.theme.CodeTheme
 import com.hrm.codehigh.theme.LocalCodeTheme
 import com.hrm.latex.renderer.measure.LatexMeasurerState
-import com.hrm.latex.renderer.measure.rememberLatexMeasurer
 import com.hrm.markdown.renderer.LocalCodeHighlightTheme
 import com.hrm.markdown.renderer.LocalMarkdownDirectiveRegistry
+import com.hrm.markdown.renderer.LocalMarkdownConfig
+import com.hrm.markdown.renderer.LocalMarkdownLatexState
 import com.hrm.markdown.renderer.LocalMarkdownTheme
 import com.hrm.markdown.renderer.LocalOnFootnoteClick
 import com.hrm.markdown.renderer.LocalOnLinkClick
@@ -49,7 +50,8 @@ internal fun InlineLayoutBlockText(
     val directiveRegistry = LocalMarkdownDirectiveRegistry.current
     val onLinkClick = LocalOnLinkClick.current
     val onFootnoteClick = LocalOnFootnoteClick.current
-    val latexMeasurer = rememberLatexMeasurer()
+    val config = LocalMarkdownConfig.current
+    val latexMeasurer = LocalMarkdownLatexState.current.measurer
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
     val textMeasurer = rememberTextMeasurer()
@@ -59,7 +61,7 @@ internal fun InlineLayoutBlockText(
         theme = theme,
         codeTheme = inlineCodeTheme,
         directiveRegistry = directiveRegistry,
-        config = null,
+        config = config,
         onLinkClick = onLinkClick,
         onFootnoteClick = onFootnoteClick,
         latexMeasurer = latexMeasurer,

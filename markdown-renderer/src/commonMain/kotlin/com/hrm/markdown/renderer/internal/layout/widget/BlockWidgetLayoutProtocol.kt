@@ -3,8 +3,6 @@ package com.hrm.markdown.renderer.internal.layout.widget
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.hrm.latex.renderer.model.LatexConfig
 import com.hrm.markdown.renderer.internal.core.model.BlockWidgetModel
 import com.hrm.markdown.renderer.internal.core.model.CodeBlockWidgetModel
 import com.hrm.markdown.renderer.internal.core.model.DiagramBlockWidgetModel
@@ -61,11 +59,8 @@ private fun measureMathWidget(
     viewportWidthPx: Float,
     environment: LayoutEnvironment,
 ): BlockWidgetMeasurement {
-    val config = LatexConfig(
-        fontSize = (environment.markdownTheme.mathFontSize * 1.2f).sp,
-        theme = environment.markdownTheme.latexTheme,
-    )
-    val dimensions = environment.latexMeasurer.measure(widget.latex.trim(), config)
+    val config = environment.latexConfig
+    val dimensions = environment.latexMeasurer.measure(widget.latex.trim())
     val padding = with(environment.density) { environment.markdownTheme.codeBlockPadding.toPx() }
     val contentHeight = dimensions?.heightPx ?: environment.lineHeightPx(
         TextStyle(fontSize = config.fontSize)

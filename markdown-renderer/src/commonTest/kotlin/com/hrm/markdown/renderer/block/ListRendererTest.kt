@@ -37,9 +37,12 @@ import androidx.compose.ui.unit.sp
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.ast.ListBlock
 import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownLatexState
 import com.hrm.markdown.renderer.Markdown
+import com.hrm.markdown.renderer.MarkdownConfig
 import com.hrm.markdown.renderer.MarkdownImageRenderer
 import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.rememberMarkdownLatexState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -119,7 +122,10 @@ class ListRendererTest {
             val theme = MarkdownTheme.light().copy(bodyStyle = TextStyle(fontSize = 32.sp, lineHeight = 48.sp))
             CompositionLocalProvider(LocalDensity provides Density(1f), LocalMarkdownTheme provides theme) {
                 val list = remember { MarkdownParser().parse("- [x] 中文任务正文").children.filterIsInstance<ListBlock>().single() }
-                Box(Modifier.size(300.dp, 200.dp)) { ListBlockRenderer(list) }
+                val latexState = rememberMarkdownLatexState(MarkdownConfig.Default.latexConfig)
+                CompositionLocalProvider(LocalMarkdownLatexState provides latexState) {
+                    Box(Modifier.size(300.dp, 200.dp)) { ListBlockRenderer(list) }
+                }
             }
         }
         waitForIdle()

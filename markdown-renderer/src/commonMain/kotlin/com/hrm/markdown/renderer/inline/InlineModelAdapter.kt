@@ -23,7 +23,6 @@ import com.hrm.codehigh.renderer.InlineCodeDefaults
 import com.hrm.codehigh.renderer.measureInlineCodeSize
 import com.hrm.codehigh.theme.CodeTheme
 import com.hrm.latex.renderer.measure.LatexMeasurerState
-import com.hrm.latex.renderer.model.LatexConfig
 import com.hrm.markdown.parser.core.CharacterUtils
 import com.hrm.markdown.renderer.DefaultMarkdownImage
 import com.hrm.markdown.renderer.LocalImageRenderer
@@ -320,7 +319,6 @@ private fun AnnotatedString.Builder.renderWidgetAtom(
         is ImageWidgetModel -> renderImageWidget(widget, context, density)
         is InlineMathWidgetModel -> renderInlineMathWidget(
             widget,
-            theme,
             hostTextStyle,
             context,
             latexMeasurer,
@@ -418,7 +416,6 @@ private fun AnnotatedString.Builder.renderImageWidget(
 
 private fun AnnotatedString.Builder.renderInlineMathWidget(
     widget: InlineMathWidgetModel,
-    theme: MarkdownTheme,
     hostTextStyle: TextStyle,
     context: InlineRenderBuildContext,
     latexMeasurer: LatexMeasurerState,
@@ -426,11 +423,7 @@ private fun AnnotatedString.Builder.renderInlineMathWidget(
 ) {
     context.recordInlineMathBuildRequest()
     val trimmedLatex = widget.latex.trim()
-    val latexConfig = LatexConfig(
-        fontSize = theme.mathFontSize.sp,
-        theme = theme.latexTheme,
-    )
-    val inlineContent = latexMeasurer.inlineContent(trimmedLatex, latexConfig)
+    val inlineContent = latexMeasurer.inlineContent(trimmedLatex)
     if (inlineContent == null) {
         context.emitStyledTextAtom(
             builder = this,

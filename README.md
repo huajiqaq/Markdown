@@ -124,6 +124,33 @@ fun MyScreen() {
 
 That's it — **3 lines** to render beautiful Markdown across all platforms.
 
+### LaTeX Configuration
+
+Pass the complete LaTeX 1.6.0 configuration through `MarkdownConfig.latexConfig`. Inline and block formulas share it for measurement and rendering:
+
+```kotlin
+import androidx.compose.ui.unit.sp
+import com.hrm.latex.renderer.model.LatexConfig
+import com.hrm.latex.renderer.model.LatexTheme
+import com.hrm.markdown.renderer.MarkdownConfig
+
+Markdown(
+    markdown = "Inline math \$E = mc^2\$.\n\n\$\$\nE = mc^2\n\$\$",
+    config = MarkdownConfig(
+        latexConfig = LatexConfig(
+            fontSize = 24.sp,
+            theme = LatexTheme.material3(),
+            accessibilityEnabled = true,
+            onHyperlinkClick = { url -> /* Handle links inside formulas */ },
+        ),
+    ),
+)
+```
+
+`MarkdownTheme` no longer configures formulas. Migrate `mathFontSize`, `latexTheme`, and `mathBlockBackground` to `LatexConfig.fontSize`, `LatexConfig.theme`, and its background color, respectively. Markdown's light/dark and Material 3 themes do not override formula settings. The default is `LatexConfig()` (20.sp, system light/dark mode, transparent background); block formulas no longer apply an extra 1.2× size multiplier.
+
+`markdown-renderer` transitively includes `latex-fonts-katex:1.6.0` and explicitly enables the matching KaTeX fonts when `fontFamilies` is unspecified. No global `KatexFonts.install()` call is needed. Override `LatexConfig.fontFamilies` to use other fonts; custom fonts should match the engine's math metrics to avoid missing glyphs or layout differences.
+
 ---
 
 ## 🔌 Plugin Extensions
@@ -603,7 +630,7 @@ update rules.
 
 | Capability | Maven modules used by this project | Repository |
 |------------|-----------------------------------|------------|
-| LaTeX math | `io.github.huarangmeng:latex-base`, `io.github.huarangmeng:latex-parser`, `io.github.huarangmeng:latex-renderer` | [huarangmeng/latex](https://github.com/huarangmeng/latex) |
+| LaTeX math | `io.github.huarangmeng:latex-base`, `io.github.huarangmeng:latex-parser`, `io.github.huarangmeng:latex-renderer`, `io.github.huarangmeng:latex-fonts-katex` | [huarangmeng/latex](https://github.com/huarangmeng/latex) |
 | Code highlighting | `io.github.huarangmeng:codehighlight-parser`, `io.github.huarangmeng:codehighlight-render` | [huarangmeng/codehigh](https://github.com/huarangmeng/codehigh) |
 | Diagram blocks | `io.github.huarangmeng:diagram-core`, `io.github.huarangmeng:diagram-layout`, `io.github.huarangmeng:diagram-parser`, `io.github.huarangmeng:diagram-render` | [huarangmeng/diagram](https://github.com/huarangmeng/diagram) |
 

@@ -1,6 +1,12 @@
 package com.hrm.markdown.preview
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
+import com.hrm.latex.renderer.model.LatexConfig
+import com.hrm.latex.renderer.model.LatexTheme
 import com.hrm.markdown.renderer.Markdown
+import com.hrm.markdown.renderer.MarkdownConfig
+import com.hrm.markdown.renderer.MarkdownTheme
 
 private val issue31LongMathMarkdown = """
 # 方程 cosx＝x 是否有解析解？
@@ -278,6 +284,26 @@ internal val mathPreviewGroups = listOf(
         title = "行内公式",
         description = "行内 LaTeX 数学公式",
         items = listOf(
+            PreviewItem(
+                id = "latex_config",
+                title = "独立 LaTeX 配置（KaTeX 字体）",
+                content = {
+                    Markdown(
+                        markdown = "行内字体：\$\\mathbb{R} + \\mathcal{F} + \\mathfrak{g}\$。\n\n\$\$\n\\left(\\frac{1}{\\sqrt{x}}\\right) + \\sum_{i=1}^{n} x_i\n\$\$",
+                        theme = MarkdownTheme.light(),
+                        config = MarkdownConfig(
+                            latexConfig = LatexConfig(
+                                fontSize = 24.sp,
+                                theme = LatexTheme.light(
+                                    color = Color(0xFF6A1B9A),
+                                    backgroundColor = Color(0xFFF3E5F5),
+                                ),
+                                accessibilityEnabled = true,
+                            ),
+                        ),
+                    )
+                },
+            ),
             PreviewItem(
                 id = "inline_basic",
                 title = "基础行内公式",
