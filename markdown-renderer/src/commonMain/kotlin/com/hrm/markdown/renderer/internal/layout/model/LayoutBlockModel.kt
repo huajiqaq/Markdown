@@ -244,4 +244,6 @@ internal data class LayoutWidgetRun(
     val alternateText: String = "",
     val sourceStart: Int? = null,
     val sourceEnd: Int? = null,
+    /** 夹断前的真实宽度；大于 frame.width 时渲染侧要提供横向滚动。 */
+    val naturalWidthPx: Float = frame.width,
 ) : LayoutInlineRun

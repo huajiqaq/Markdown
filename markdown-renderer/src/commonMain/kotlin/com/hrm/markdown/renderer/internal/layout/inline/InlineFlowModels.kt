@@ -44,5 +44,7 @@ internal sealed class LineItem {
         val alternateText: String,
         override val sourceStart: Int? = null,
         override val sourceEnd: Int? = null,
+        /** 行内项自身的真实宽度；超宽被夹到行宽时据此提供横向滚动。 */
+        val naturalWidthPx: Float = widthPx,
     ) : LineItem()
 }
