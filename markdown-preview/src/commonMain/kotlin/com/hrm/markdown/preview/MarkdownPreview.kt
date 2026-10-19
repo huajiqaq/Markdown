@@ -176,6 +176,7 @@ val previewCategories: List<PreviewCategory> = listOf(
                 description = "主题模式、窄容器换行与复杂行内布局回归",
                 sourceGroups = themePreviewGroups + inlineLayoutPreviewGroups,
             ),
+            inlineOverflowPreviewGroup,
             consolidatedPreviewGroup(
                 id = "streaming_rendering",
                 title = "流式渲染",

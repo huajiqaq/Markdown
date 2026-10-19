@@ -2,6 +2,7 @@ package com.hrm.markdown.renderer.internal.compose
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -11,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -92,7 +94,18 @@ internal fun PaintInlineLayoutContent(
                                 Modifier
                             },
                         ) {
-                            payload?.content?.invoke()
+                            if (scrollState != null) {
+                                // Keep the payload's slot finite inside the unbounded scroll content.
+                                // Round up like runPlacements so fractional widths do not clip the end.
+                                val contentWidth = with(LocalDensity.current) {
+                                    ceil(run.naturalWidthPx).toDp()
+                                }
+                                Box(Modifier.width(contentWidth)) {
+                                    payload?.content?.invoke()
+                                }
+                            } else {
+                                payload?.content?.invoke()
+                            }
                         }
                     }
                 }
