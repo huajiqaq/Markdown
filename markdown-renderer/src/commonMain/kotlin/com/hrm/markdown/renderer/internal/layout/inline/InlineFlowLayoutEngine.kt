@@ -121,17 +121,21 @@ internal fun computeInlineFlowLayout(
                     flushLine(force = true)
                     if (lineCount >= maxLines) break
                 }
+                // 行内项不可切分：行首单项就比可用行宽还宽时，把占位宽夹到行宽，
+                // 真实宽度留给渲染侧做横向滚动，否则超出部分会被右边界直接裁掉。
+                val layoutWidthPx = w.coerceAtMost(maxWidthPx.coerceAtLeast(0f))
                 currentItems.add(
                     LineItem.InlineItem(
                         id = token.id,
-                        widthPx = w,
+                        widthPx = layoutWidthPx,
                         heightPx = h,
                         alternateText = token.placeholder.alternateText,
                         sourceStart = token.sourceStart,
                         sourceEnd = token.sourceEnd,
+                        naturalWidthPx = w,
                     )
                 )
-                currentWidth += w
+                currentWidth += layoutWidthPx
                 maxItemHeight = maxOf(maxItemHeight, h)
             }
 

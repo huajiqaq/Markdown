@@ -1,6 +1,8 @@
 package com.hrm.markdown.renderer.internal.compose
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
@@ -76,7 +78,20 @@ internal fun PaintInlineLayoutContent(
                     is InlineWidgetPaintItem -> key(item.run.identity.stableId) {
                         val run = item.run
                         val payload = block.inlinePayloads[run.id]
-                        Box {
+                        // 占位宽度被夹到行宽时，widget 仍按自然宽度绘制并要求横向滚动，
+                        // 否则超宽内容会在右边界被静默裁掉。
+                        val scrollState = if (run.naturalWidthPx > run.frame.width) {
+                            rememberScrollState()
+                        } else {
+                            null
+                        }
+                        Box(
+                            modifier = if (scrollState != null) {
+                                Modifier.horizontalScroll(scrollState)
+                            } else {
+                                Modifier
+                            },
+                        ) {
                             payload?.content?.invoke()
                         }
                     }

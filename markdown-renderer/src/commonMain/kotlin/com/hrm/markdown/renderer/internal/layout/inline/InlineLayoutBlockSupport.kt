@@ -83,6 +83,7 @@ internal fun buildInlineLayoutLines(
                         alternateText = item.alternateText,
                         sourceStart = item.sourceStart,
                         sourceEnd = item.sourceEnd,
+                        naturalWidthPx = item.naturalWidthPx,
                     )
                     cursorX += item.widthPx
                     run
