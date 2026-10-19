@@ -45,6 +45,7 @@ internal fun InlineLayoutBlockText(
     style: TextStyle,
     modifier: Modifier = Modifier,
     maxLines: Int = Int.MAX_VALUE,
+    isHeading: Boolean = false,
 ) {
     val theme = LocalMarkdownTheme.current
     val directiveRegistry = LocalMarkdownDirectiveRegistry.current
@@ -122,6 +123,7 @@ internal fun InlineLayoutBlockText(
                 inlineLayoutRuntime = inlineLayoutRuntime,
                 inlineLayoutEpoch = inlineLayoutEpoch,
                 layoutDirection = layoutDirection,
+                isHeading = isHeading,
             )
         },
         measurePolicy = measurePolicy,
@@ -145,6 +147,7 @@ private fun InlineLayoutBlockMeasuredContent(
     inlineLayoutRuntime: InlineLayoutRuntime,
     inlineLayoutEpoch: InlineLayoutEpoch,
     layoutDirection: LayoutDirection,
+    isHeading: Boolean,
 ) {
     BoxWithConstraints {
         val maxWidthPx = with(density) { maxWidth.toPx() }
@@ -185,7 +188,7 @@ private fun InlineLayoutBlockMeasuredContent(
         }
 
         PaintInlineLayoutContent(
-            block = layoutBlock,
+            block = layoutBlock.copy(isHeading = isHeading),
             modifier = Modifier,
         )
     }

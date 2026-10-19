@@ -2,6 +2,9 @@ package com.hrm.markdown.parser
 
 import com.hrm.markdown.parser.flavour.GFMFlavour
 import com.hrm.markdown.parser.html.HtmlRenderer
+import com.hrm.markdown.parser.streaming.semanticSnapshot
+import kotlin.random.Random
+import kotlin.test.assertEquals
 import org.junit.Test
 
 class GFMSpecTest {
@@ -83,6 +86,40 @@ class GFMSpecTest {
             }
         }
         return sb.toString()
+    }
+
+    @Test
+    fun should_matchCompleteSemantics_when_specExamplesAreStreamed() {
+        for (example in loadSpec()) {
+            val expected = MarkdownParser(flavour = GFMFlavour).parse(example.markdown).semanticSnapshot()
+            for (singleCharacter in listOf(true, false)) {
+                val parser = MarkdownParser(
+                    flavour = GFMFlavour,
+                    appendCoalesceThreshold = if (singleCharacter) 0 else 16,
+                )
+                parser.beginStream()
+                val random = Random(example.example)
+                var offset = 0
+                while (offset < example.markdown.length) {
+                    val length = if (singleCharacter) 1 else random.nextInt(1, 33)
+                    val end = (offset + length).coerceAtMost(example.markdown.length)
+                    parser.append(example.markdown.substring(offset, end))
+                    if (singleCharacter) {
+                        // endStream reparses everything. Check live prefixes too, against a fresh
+                        // session with no previously reused blocks or eagerly materialized inlines.
+                        val reference = MarkdownParser(flavour = GFMFlavour).apply {
+                            beginStream()
+                            append(example.markdown.substring(0, end))
+                        }
+                        assertEquals(reference.document.semanticSnapshot(), parser.document.semanticSnapshot(),
+                            "Spec #${example.example} [${example.section}], prefix=$end")
+                    }
+                    offset = end
+                }
+                assertEquals(expected, parser.endStream().semanticSnapshot(),
+                    "Spec #${example.example} [${example.section}], singleCharacter=$singleCharacter")
+            }
+        }
     }
 
     @Test

@@ -178,6 +178,7 @@ val previewCategories: List<PreviewCategory> = listOf(
             ),
             inlineOverflowPreviewGroup,
             listAlignmentPreviewGroup,
+            accessibilityPreviewGroup,
             consolidatedPreviewGroup(
                 id = "streaming_rendering",
                 title = "流式渲染",

@@ -66,7 +66,7 @@ class ListRendererTest {
                         }
                     }
                     waitForIdle()
-                    val lines = onAllNodes(hasText("", substring = true)).fetchSemanticsNodes()
+                    val lines = onAllNodes(hasText("", substring = true), useUnmergedTree = true).fetchSemanticsNodes()
                     assertTrue(lines.size > 1, "Expected wrapped task text")
                     val checkbox = checkboxBoundsInRoot(checked)
                     val contentIndent = with(density) { (MarkdownTheme.light().listIndent + 20.dp + 8.dp).toPx() }
@@ -91,7 +91,7 @@ class ListRendererTest {
                 density = Density(density = 2f, fontScale = 1.5f))
         }
         waitForIdle()
-        val firstLine = onNodeWithText("系统大字体", substring = true).fetchSemanticsNode().boundsInRoot
+        val firstLine = onNodeWithText("系统大字体", substring = true, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertTrue(abs(checkboxCenterInRoot(true) - firstLine.center.y) <= 1f)
     }
 
@@ -108,7 +108,7 @@ class ListRendererTest {
                             style = TextStyle(fontSize = fontSize.sp, lineHeight = (fontSize * 1.5f).sp))
                     }
                     waitForIdle()
-                    val firstLine = onNodeWithText(prefix, substring = true).fetchSemanticsNode().boundsInRoot
+                    val firstLine = onNodeWithText(prefix, substring = true, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
                     assertTrue(abs(checkboxCenterInRoot(checked) - firstLine.center.y) <= 1f,
                         "Checkbox must align with the first line: font=$fontSize, checked=$checked, text=$text")
                 }
@@ -129,15 +129,15 @@ class ListRendererTest {
             }
         }
         waitForIdle()
-        assertTrue(abs(checkboxCenterInRoot(true) - onNodeWithText("中文任务正文").fetchSemanticsNode().boundsInRoot.center.y) <= 1f)
-        assertEquals(52f, onNodeWithText("中文任务正文").fetchSemanticsNode().boundsInRoot.left)
+        assertTrue(abs(checkboxCenterInRoot(true) - onNodeWithText("中文任务正文", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.center.y) <= 1f)
+        assertEquals(52f, onNodeWithText("中文任务正文", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left)
     }
 
     @Test
     fun should_centerCheckboxOnHeading_when_taskStartsWithHeading() = runComposeUiTest {
         setContent { ListSample("- [x] ## 任务标题\n\n  标题后的正文") }
         waitForIdle()
-        assertTrue(abs(checkboxCenterInRoot(true) - onNodeWithText("任务标题").fetchSemanticsNode().boundsInRoot.center.y) <= 1f)
+        assertTrue(abs(checkboxCenterInRoot(true) - onNodeWithText("任务标题", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.center.y) <= 1f)
     }
 
     @Test
@@ -148,7 +148,7 @@ class ListRendererTest {
             })
         }
         waitForIdle()
-        val imageTop = onNodeWithTag("task-image").fetchSemanticsNode().boundsInRoot.top
+        val imageTop = onNodeWithTag("task-image", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
         assertEquals(imageTop + 10f, checkboxCenterInRoot(true))
     }
 
@@ -159,8 +159,8 @@ class ListRendererTest {
                 ListSample("1. 中文列表正文\n2. English list text", enableScroll = enableScroll)
             }
             waitForIdle()
-            assertEquals(onNodeWithText("中文列表正文").firstBaselineInRoot(), onNodeWithText("1.").firstBaselineInRoot())
-            assertEquals(onNodeWithText("English list text").firstBaselineInRoot(), onNodeWithText("2.").firstBaselineInRoot())
+            assertEquals(onNodeWithText("中文列表正文", useUnmergedTree = true).firstBaselineInRoot(), onNodeWithText("1.", useUnmergedTree = true).firstBaselineInRoot())
+            assertEquals(onNodeWithText("English list text", useUnmergedTree = true).firstBaselineInRoot(), onNodeWithText("2.", useUnmergedTree = true).firstBaselineInRoot())
         }
     }
 
@@ -169,8 +169,8 @@ class ListRendererTest {
         val text = "中文列表正文比较长，需要换行以后仍然对齐第一行。"
         setContent { ListSample("- $text", width = 180, style = TextStyle(fontSize = 20.sp, lineHeight = 32.sp)) }
         waitForIdle()
-        val firstLine = onNodeWithText("中文列表正文", substring = true)
-        assertEquals(firstLine.firstBaselineInRoot(), onNodeWithText("•").firstBaselineInRoot())
+        val firstLine = onNodeWithText("中文列表正文", substring = true, useUnmergedTree = true)
+        assertEquals(firstLine.firstBaselineInRoot(), onNodeWithText("•", useUnmergedTree = true).firstBaselineInRoot())
         assertTrue(firstLine.textLayout().layoutInput.text.length < text.length)
     }
 
@@ -184,11 +184,11 @@ class ListRendererTest {
             )
         }
         waitForIdle()
-        val first = onNodeWithText("第一个编号", substring = true)
-        val second = onNodeWithText("第二个编号", substring = true)
+        val first = onNodeWithText("第一个编号", substring = true, useUnmergedTree = true)
+        val second = onNodeWithText("第二个编号", substring = true, useUnmergedTree = true)
         assertEquals(first.fetchSemanticsNode().positionInRoot.x, second.fetchSemanticsNode().positionInRoot.x)
         for ((marker, line) in listOf("99." to first, "100." to second)) {
-            val node = onNodeWithText(marker)
+            val node = onNodeWithText(marker, useUnmergedTree = true)
             assertEquals(1, node.textLayout().lineCount, "Marker $marker must stay on one line")
             assertFalse(node.textLayout().hasVisualOverflow, "Marker $marker must not be clipped")
             assertEquals(line.firstBaselineInRoot(), node.firstBaselineInRoot())
@@ -209,8 +209,8 @@ class ListRendererTest {
             }
             waitForIdle()
             assertEquals(
-                onNodeWithTag("list-image").fetchSemanticsNode().positionInRoot.y,
-                onNodeWithText("•").fetchSemanticsNode().positionInRoot.y,
+                onNodeWithTag("list-image", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y,
+                onNodeWithText("•", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y,
             )
         }
     }
@@ -219,7 +219,7 @@ class ListRendererTest {
     fun should_alignMarkerWithHeadingBaseline_when_itemStartsWithHeading() = runComposeUiTest {
         setContent { ListSample("1. ## 列表标题\n\n   标题后的正文") }
         waitForIdle()
-        assertEquals(onNodeWithText("列表标题").firstBaselineInRoot(), onNodeWithText("1.").firstBaselineInRoot())
+        assertEquals(onNodeWithText("列表标题", useUnmergedTree = true).firstBaselineInRoot(), onNodeWithText("1.", useUnmergedTree = true).firstBaselineInRoot())
     }
 
     @Test
@@ -231,8 +231,8 @@ class ListRendererTest {
         }
         waitForIdle()
         for ((marker, text) in listOf("99." to "第一项正文", "100." to "第二项正文")) {
-            val markerNode = onNodeWithText(marker)
-            val textNode = onNodeWithText(text)
+            val markerNode = onNodeWithText(marker, useUnmergedTree = true)
+            val textNode = onNodeWithText(text, useUnmergedTree = true)
             assertEquals(1, markerNode.textLayout().lineCount)
             assertFalse(markerNode.textLayout().hasVisualOverflow)
             assertEquals(textNode.firstBaselineInRoot(), markerNode.firstBaselineInRoot())

@@ -15,6 +15,21 @@ import kotlin.test.assertTrue
  */
 class IncrementalEngineTest {
 
+    @Test
+    fun should_keepHtmlBlockOpen_when_trailingEmptyLineReceivesMoreContent() {
+        for (trailingWhitespace in listOf("", "  ")) {
+            val parser = MarkdownParser()
+            parser.beginStream()
+            parser.append("<table>\n$trailingWhitespace")
+            parser.append("<tr><td>cell</td></tr>\n")
+            val html = parser.document.children.single() as HtmlBlock
+            assertEquals("<table>\n$trailingWhitespace<tr><td>cell</td></tr>\n", html.literal)
+            parser.append("\nAfter the table.")
+            assertEquals(2, parser.document.children.size)
+            assertTrue(parser.document.children.last() is Paragraph)
+        }
+    }
+
     // ────── 全量解析（通过引擎） ──────
 
     @Test

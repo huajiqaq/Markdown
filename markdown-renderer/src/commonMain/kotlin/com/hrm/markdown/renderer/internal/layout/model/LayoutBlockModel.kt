@@ -216,6 +216,7 @@ internal data class LayoutInlineBlockModel(
     val style: TextStyle,
     val inlinePayloads: Map<InlinePlaceholderId, InlineWidgetPaintPayload>,
     val showDivider: Boolean = false,
+    val isHeading: Boolean = false,
     val lines: List<LayoutInlineLine>,
 ) : InternalLayoutBlockModel
 

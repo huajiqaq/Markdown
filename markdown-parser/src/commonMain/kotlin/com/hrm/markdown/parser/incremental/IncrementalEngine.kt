@@ -586,7 +586,9 @@ class IncrementalEngine(
     }
 
     private fun hasBlankLineInRange(source: SourceText, startLine: Int, endLine: Int): Boolean {
-        for (line in startLine until endLine.coerceAtMost(source.lineCount)) {
+        // The last physical line is still appendable. A trailing newline creates an empty
+        // line that may become non-blank in the next chunk, so it cannot seal the prefix.
+        for (line in startLine until endLine.coerceAtMost(source.lineCount - 1)) {
             if (source.lineContent(line).isBlank()) return true
         }
         return false

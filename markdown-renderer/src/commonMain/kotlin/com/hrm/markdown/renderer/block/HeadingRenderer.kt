@@ -90,6 +90,7 @@ internal fun RenderHeadingBlockModel(
         InlineLayoutBlockText(
             model = finalModel,
             style = style,
+            isHeading = true,
         )
 
         if (showDivider) {

@@ -1,9 +1,8 @@
 package com.hrm.markdown.parser.streaming
 
 import com.hrm.markdown.parser.MarkdownParser
-import com.hrm.markdown.parser.ast.BlankLine
-import com.hrm.markdown.parser.ast.ContainerNode
 import com.hrm.markdown.parser.ast.Document
+import com.hrm.markdown.parser.ast.ContainerNode
 import com.hrm.markdown.parser.ast.Node
 import kotlin.random.Random
 import kotlin.test.Test
@@ -12,7 +11,7 @@ import kotlin.test.fail
 
 /**
  * Fuzz tests that simulate LLM token streams: the same source markdown is split into
- * many random chunk sequences (sometimes single-byte) and replayed via
+ * many random chunk sequences (sometimes single-character) and replayed via
  * [MarkdownParser.beginStream]/[MarkdownParser.append]/[MarkdownParser.endStream].
  *
  * Goals:
@@ -20,7 +19,7 @@ import kotlin.test.fail
  *     truncated URLs, partial table rows, etc.).
  *  2. Once the full input has been streamed and the stream is closed, the resulting
  *     [Document] must structurally match a one-shot [MarkdownParser.parse] of the same
- *     source (identical block-type sequence ignoring [BlankLine]).
+ *     source (complete semantic tree, including text, attributes and reference definitions).
  *  3. Intermediate snapshots (after each append) must also be safe to read from
  *     (no exceptions when traversing children/text content).
  *
@@ -29,6 +28,13 @@ import kotlin.test.fail
 class StreamingChunkBoundaryFuzzTest {
 
     private val seeds: List<Pair<String, String>> = listOf(
+        "empty" to "",
+        "unicode-and-crlf" to "# 中文 😀\r\n\r\n正文 **强调** 与 👨‍👩‍👧‍👦，é。\r\n",
+        "references" to "[first][ref] and ![alt][ref]\n\n[ref]: /target \"Title\"\n",
+        "tasks" to "- [x] **done**\n- [ ] [pending](/task)\n",
+        "directives" to "{% card title=\"标题\" %}\n**Body** with [link](/card)\n{% endcard %}\n\nInline {% badge status=ok %}.\n",
+        "footnotes" to "Text[^note].\n\n[^note]: **Footnote** with [link](/note).\n",
+        "extensions" to "# Heading {#custom}\n\n==highlight== ++inserted++ [[page|标题]] {漢字|かんじ} :smile: &amp;\n",
         "atx-heading" to "# Title\n\nA paragraph.\n",
         "fenced-code" to """
             Some intro.
@@ -93,13 +99,15 @@ class StreamingChunkBoundaryFuzzTest {
     fun should_match_one_shot_parse_for_random_chunkings() {
         val rng = Random(0x5EED_CAFE)
         for ((label, src) in seeds) {
-            val expected = MarkdownParser().parse(src).blockTypeSequence()
+            val expected = MarkdownParser().parse(src).semanticSnapshot()
             // Try several random chunkings per seed.
             repeat(8) { trial ->
                 val chunks = randomChunking(src, rng)
-                val parser = MarkdownParser()
+                val parser = MarkdownParser(appendCoalesceThreshold = if (trial % 2 == 0) 0 else 16)
                 parser.beginStream()
+                val prefix = StringBuilder()
                 for ((idx, chunk) in chunks.withIndex()) {
+                    prefix.append(chunk)
                     try {
                         parser.append(chunk)
                     } catch (t: Throwable) {
@@ -110,17 +118,21 @@ class StreamingChunkBoundaryFuzzTest {
                     }
                     // Intermediate snapshot must be readable.
                     try {
-                        traverseSnapshot(parser.document)
+                        if (trial % 2 == 0) {
+                            val reference = MarkdownParser().apply { beginStream(); append(prefix.toString()) }
+                            assertEquals(reference.document.semanticSnapshot(), parser.document.semanticSnapshot(),
+                                "[$label trial=$trial chunk=$idx] incremental prefix semantics differ")
+                        }
                     } catch (t: Throwable) {
                         fail("[$label trial=$trial] snapshot traversal crashed at chunk #$idx: $t")
                     }
                 }
                 val finalDoc = parser.endStream()
-                val actual = finalDoc.blockTypeSequence()
+                val actual = finalDoc.semanticSnapshot()
                 assertEquals(
                     expected,
                     actual,
-                    "[$label trial=$trial] streamed AST block sequence != one-shot " +
+                    "[$label trial=$trial] streamed AST semantics != one-shot " +
                             "(chunkSizes=${chunks.map { it.length }})"
                 )
             }
@@ -128,23 +140,23 @@ class StreamingChunkBoundaryFuzzTest {
     }
 
     @Test
-    fun should_survive_one_byte_at_a_time_streaming() {
+    fun should_survive_one_character_at_a_time_streaming() {
         for ((label, src) in seeds) {
-            val expected = MarkdownParser().parse(src).blockTypeSequence()
+            val expected = MarkdownParser().parse(src).semanticSnapshot()
             val parser = MarkdownParser()
             parser.beginStream()
             for (i in src.indices) {
                 try {
                     parser.append(src[i].toString())
                 } catch (t: Throwable) {
-                    fail("[$label] parser.append crashed at single-byte offset $i: $t")
+                    fail("[$label] parser.append crashed at single-character offset $i: $t")
                 }
             }
             val finalDoc = parser.endStream()
             assertEquals(
                 expected,
-                finalDoc.blockTypeSequence(),
-                "[$label] single-byte streamed AST block sequence != one-shot"
+                finalDoc.semanticSnapshot(),
+                "[$label] single-character streamed AST semantics != one-shot"
             )
         }
     }
@@ -194,6 +206,21 @@ class StreamingChunkBoundaryFuzzTest {
         }
     }
 
+    @Test
+    fun should_preserveLiveSemantics_when_abortingWithBufferedTail() {
+        for ((label, source) in seeds) {
+            val reference = MarkdownParser().apply { beginStream(); append(source) }
+            val expected = reference.document.semanticSnapshot()
+            val buffered = MarkdownParser(appendCoalesceThreshold = 16)
+            buffered.beginStream()
+            for (character in source) {
+                buffered.append(character.toString())
+                traverseSnapshot(buffered.document)
+            }
+            assertEquals(expected, buffered.abort().semanticSnapshot(), "[$label] aborted buffered semantics")
+        }
+    }
+
     // ────── helpers ──────
 
     private fun randomChunking(src: String, rng: Random): List<String> {
@@ -212,12 +239,6 @@ class StreamingChunkBoundaryFuzzTest {
         }
         return result
     }
-
-    private fun Document.blockTypeSequence(): List<String> =
-        children.asSequence()
-            .filter { it !is BlankLine }
-            .map { it::class.simpleName ?: "?" }
-            .toList()
 
     private fun traverseSnapshot(node: Node) {
         // Touch children recursively to catch ConcurrentModification / NPE / lazy-init bugs.

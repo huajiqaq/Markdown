@@ -10,11 +10,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.CollectionItemInfo
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.collectionItemInfo
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
@@ -28,6 +40,7 @@ import com.hrm.markdown.parser.ast.Paragraph
 import com.hrm.markdown.parser.ast.SetextHeading
 import com.hrm.markdown.renderer.LocalMarkdownTheme
 import com.hrm.markdown.renderer.MarkdownBlockChildren
+import com.hrm.markdown.renderer.internal.compose.LocalMergeInlineSemantics
 import com.hrm.markdown.renderer.internal.compose.FirstTextLineCenter
 import com.hrm.markdown.renderer.internal.core.model.HeadingBlockModel
 import com.hrm.markdown.renderer.internal.core.model.InternalRenderBlockModel
@@ -52,7 +65,7 @@ import com.hrm.markdown.renderer.internal.layout.model.LayoutTextRun
 internal fun ListBlockRenderer(node: ListBlock, modifier: Modifier = Modifier) {
     val items = node.children.filterIsInstance<ListItem>()
     val orderedWidth = rememberOrderedMarkerWidth(node.ordered, node.startNumber, items.size)
-    RenderListContainer(node.tight, modifier) {
+    RenderListContainer(node.tight, items.size, modifier) {
         items.forEachIndexed { index, item ->
             key(item.stableKey) {
                 val first = item.children.firstOrNull { it !is BlankLine }
@@ -62,6 +75,7 @@ internal fun ListBlockRenderer(node: ListBlock, modifier: Modifier = Modifier) {
                     else -> false
                 }
                 ListItemRow(
+                    itemIndex = index,
                     markerText = if (node.ordered) "${node.startNumber.toLong() + index}." else "•",
                     ordered = node.ordered,
                     taskListItem = item.taskListItem,
@@ -83,7 +97,7 @@ internal fun RenderListBlockModel(
     modifier: Modifier = Modifier,
 ) {
     val orderedWidth = rememberOrderedMarkerWidth(model.ordered, model.startNumber, model.items.size)
-    RenderListContainer(model.tight, modifier) {
+    RenderListContainer(model.tight, model.items.size, modifier) {
         model.items.forEachIndexed { index, item ->
             key(item.identity.stableId) {
                 val firstAtom = when (val first = item.children.firstOrNull()) {
@@ -92,6 +106,7 @@ internal fun RenderListBlockModel(
                     else -> null
                 }
                 ListItemRow(
+                    itemIndex = index,
                     markerText = if (model.ordered) "${model.startNumber.toLong() + index}." else "•",
                     ordered = model.ordered,
                     taskListItem = item.taskListItem,
@@ -113,11 +128,12 @@ internal fun RenderListLayoutBlockModel(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
-    RenderListContainer(model.block.tight, modifier) {
-        model.items.forEach { item ->
+    RenderListContainer(model.block.tight, model.items.size, modifier) {
+        model.items.forEachIndexed { index, item ->
             key(item.identity.stableId) {
                 val first = item.children.firstOrNull() as? LayoutInlineBlockModel
                 ListItemRow(
+                    itemIndex = index,
                     markerText = item.markerText,
                     ordered = model.block.ordered,
                     taskListItem = item.taskListItem,
@@ -149,6 +165,7 @@ private fun rememberOrderedMarkerWidth(ordered: Boolean, startNumber: Int, itemC
 
 @Composable
 private fun ListItemRow(
+    itemIndex: Int,
     markerText: String,
     ordered: Boolean,
     taskListItem: Boolean,
@@ -159,7 +176,16 @@ private fun ListItemRow(
 ) {
     val theme = LocalMarkdownTheme.current
     Row(
-        modifier = Modifier.fillMaxWidth().padding(start = theme.listIndent),
+        modifier = Modifier.fillMaxWidth().padding(start = theme.listIndent)
+            .semantics(mergeDescendants = true) {
+                isTraversalGroup = true
+                collectionItemInfo = CollectionItemInfo(itemIndex, 1, 0, 1)
+                if (taskListItem) {
+                    // Markdown tasks describe source state; they have no editing callback.
+                    role = Role.Checkbox
+                    toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+                }
+            },
         horizontalArrangement = Arrangement.Start,
     ) {
         // Text owns its alignment geometry; markers choose the appropriate alignment line.
@@ -173,6 +199,7 @@ private fun ListItemRow(
                 checked = checked,
                 onCheckedChange = null,
                 modifier = Modifier.width(markerWidth)
+                    .clearAndSetSemantics { }
                     .padding(end = TaskListMarkerGap)
                     .size(TaskListCheckboxSize)
                     .then(if (startsWithText) Modifier.alignBy { it.measuredHeight / 2 } else alignment),
@@ -199,7 +226,9 @@ private fun ListItemRow(
             modifier = Modifier.weight(1f).then(alignment),
             verticalArrangement = Arrangement.spacedBy(theme.blockSpacing),
         ) {
-            content()
+            CompositionLocalProvider(LocalMergeInlineSemantics provides false) {
+                content()
+            }
         }
     }
 }
@@ -207,12 +236,16 @@ private fun ListItemRow(
 @Composable
 private fun RenderListContainer(
     tight: Boolean,
+    itemCount: Int,
     modifier: Modifier,
     content: @Composable () -> Unit,
 ) {
     val theme = LocalMarkdownTheme.current
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().semantics {
+            collectionInfo = CollectionInfo(itemCount, 1)
+            isTraversalGroup = true
+        },
         verticalArrangement = Arrangement.spacedBy(if (tight) LayoutTokens.ListTightItemSpacing else theme.blockSpacing),
     ) {
         content()

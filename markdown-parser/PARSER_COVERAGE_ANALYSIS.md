@@ -670,6 +670,12 @@
 
 > **备注**: 懒加载机制通过 `_lazyInlineContent`、`_lazyInlineParser`、`_inlineParsed` 三个字段实现。`BlockParser.setupLazyInlineParsing()` 在 `finalizeBlock` 阶段为需要内联解析的容器节点设置延迟内容，避免一次性解析所有内联元素的性能开销。
 
+#### 流式一致性验证
+- ✅ 完整语义树对比：节点嵌套、正文、链接/图片目标与属性、任务状态和引用定义；不比较坐标、哈希和解析器内部状态
+- ✅ CommonMark / GFM 语料逐字符前缀与全新流式会话对比，最终结果与全量解析对比；随机切片同时覆盖合并缓冲
+- ✅ 扩展语法、CRLF、Unicode、提前物化行内节点及带缓冲尾部的取消路径
+- ✅ 仅用已结束的空行确定稳定边界；末尾仍可追加的空行不会提前封闭 HTML 等块
+
 #### 块级自动关闭（LLM 容错）
 - ✅ 未关闭围栏代码块自动补结束符
 - ✅ 未关闭数学块（`$$`）自动关闭
@@ -763,7 +769,7 @@
 - ✅ `TABLE_MISSING_HEADER` 检测：表格缺少表头行时警告（屏幕阅读器依赖 `<th>` 建立数据关联）
 - ✅ `LONG_ALT_TEXT` 检测：图片 alt 文本超过 125 字符时建议精简（WCAG 最佳实践）
 
-> **备注**: WCAG 无障碍检测作为 `LintingPostProcessor` 的扩展规则集成，5 个新增诊断码均为 WARNING 级别。检测逻辑遵循 [WCAG 2.1 AA](https://www.w3.org/TR/WCAG21/) 标准，覆盖链接可访问性（1.1.1/2.4.4）、代码语义（1.3.1）、表格结构（1.3.1）和图片描述（1.1.1）。
+> **备注**: 以下为源码诊断，不构成完整 WCAG 合规认证。WCAG 无障碍检测作为 `LintingPostProcessor` 的扩展规则集成，5 个新增诊断码均为 WARNING 级别。检测逻辑遵循 [WCAG 2.1 AA](https://www.w3.org/TR/WCAG21/) 标准，覆盖链接可访问性（1.1.1/2.4.4）、代码语义（1.3.1）、表格结构（1.3.1）和图片描述（1.1.1）。
 
 #### 集成方式
 - ✅ `MarkdownParser(enableLinting = true)` 开关控制
@@ -981,7 +987,7 @@ val html = HtmlRenderer.renderMarkdown(input, flavour = CommonMarkFlavour)
 
 ### 四、特殊场景适配
 
-> **备注**: 无障碍支持（WCAG）已实现，详见第 23 章「语法验证/Linting — WCAG 无障碍检测」。Wiki 链接、Figure 图片标题、Ruby 注音已实现，详见第 19 章「行内扩展」和第 10 章「块级扩展」。目录自动编号在渲染器层面实现（`MarkdownConfig.enableHeadingNumbering`）。
+> **备注**: 无障碍相关源码诊断已实现，详见第 23 章「语法验证/Linting — WCAG 无障碍检测」。Compose 渲染器另提供标题导航标记、段落/列表项阅读分组、原生链接操作以及任务项的只读勾选状态；实际平台读屏体验仍需设备验证。Wiki 链接、Figure 图片标题、Ruby 注音已实现，详见第 19 章「行内扩展」和第 10 章「块级扩展」。目录自动编号在渲染器层面实现（`MarkdownConfig.enableHeadingNumbering`）。
 
 | 优先级 | 特性 | 语法示例 | 说明 |
 |--------|------|----------|------|

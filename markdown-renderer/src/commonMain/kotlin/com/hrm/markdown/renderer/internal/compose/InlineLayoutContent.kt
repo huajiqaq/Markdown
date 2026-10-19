@@ -14,6 +14,10 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.AlignmentLine
 import androidx.compose.ui.layout.HorizontalAlignmentLine
 import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
@@ -61,9 +65,14 @@ internal fun PaintInlineLayoutContent(
         )
     }
     Layout(
-        modifier = modifier,
+        // Merge visual text fragments into a reading unit. Native link and widget semantics
+        // remain descendants, retaining their own accessibility actions.
+        modifier = modifier.semantics(mergeDescendants = LocalMergeInlineSemantics.current) {
+            isTraversalGroup = true
+            if (block.isHeading) heading()
+        },
         content = {
-            for (item in paintItems) {
+            for ((itemIndex, item) in paintItems.withIndex()) {
                 when (item) {
                     is InlineTextPaintItem -> key(
                         item.stableKey,
@@ -71,7 +80,9 @@ internal fun PaintInlineLayoutContent(
                     ) {
                         BasicText(
                             text = item.text,
-                            modifier = Modifier.clipToBounds(),
+                            modifier = Modifier.clipToBounds().semantics {
+                                traversalIndex = itemIndex.toFloat()
+                            },
                             // InlineFlowLayout owns line spacing. Paint with the same
                             // line-height-free style used to measure the fixed run bounds.
                             style = textPaintStyle,
@@ -99,11 +110,11 @@ internal fun PaintInlineLayoutContent(
                             null
                         }
                         Box(
-                            modifier = if (scrollState != null) {
-                                Modifier.horizontalScroll(scrollState)
-                            } else {
-                                Modifier
-                            },
+                            modifier = Modifier.semantics {
+                                traversalIndex = itemIndex.toFloat()
+                            }.then(
+                                if (scrollState != null) Modifier.horizontalScroll(scrollState) else Modifier
+                            ),
                         ) {
                             if (scrollState != null) {
                                 // Keep the payload's slot finite inside the unbounded scroll content.

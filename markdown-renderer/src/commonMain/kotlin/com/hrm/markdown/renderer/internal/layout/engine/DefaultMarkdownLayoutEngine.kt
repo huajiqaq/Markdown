@@ -494,7 +494,7 @@ private fun layoutBlockInternal(
                 insets = insets,
                 environment = environment,
                 showDivider = block.level <= 2,
-            )
+            ).copy(isHeading = true)
         }
 
         else -> {

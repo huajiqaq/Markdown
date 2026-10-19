@@ -272,6 +272,8 @@ Markdown(
 - ✅ Precomputed per-line FNV-1a hashes with O(1) range aggregation for block stability detection
 - ✅ Display-frame coalescing — multiple token updates in one frame commit only the latest document, without an artificial low-fps cap
 
+Streaming stability boundaries require completed blank lines, preventing HTML blocks from being split prematurely when chunks cross a newline.
+
 The `Markdown(document = ...)` overload also supports mutable custom ASTs: nodes without source
 ranges receive deterministic tree-path identities, and rendered semantic fields participate in
 cache invalidation.
@@ -429,7 +431,17 @@ document.diagnostics.forEach { diagnostic ->
 | Table missing header | ⚠️ WARNING | Screen readers need `<th>` |
 | Long alt text | ⚠️ WARNING | Alt text > 125 characters |
 
-> Follows [WCAG 2.1 AA](https://www.w3.org/TR/WCAG21/) standards for accessibility compliance.
+> These rules check selected accessibility-related source issues; they do not certify full WCAG compliance.
+
+### Assistive technology semantics
+
+The Compose renderer provides basic reading semantics by default, independently of `enableLinting`:
+
+- ATX, Setext, and supported safe HTML headings expose heading navigation markers.
+- Inline paint fragments created by wrapping and styling merge into paragraph or list-item reading units in source order. Links and interactive widgets retain native actions.
+- Lists expose collection and item positions. Task items associate their text with checked state as read-only checkboxes, without an editing action.
+
+These semantics are supplied by the shared Compose rendering path. Platform screen readers, including TalkBack and VoiceOver, still need validation on target devices. The preview includes a mixed-content example under “渲染与质量 → 无障碍阅读”.
 
 ---
 
