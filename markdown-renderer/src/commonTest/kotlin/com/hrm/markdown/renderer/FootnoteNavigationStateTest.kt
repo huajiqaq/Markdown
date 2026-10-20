@@ -1,7 +1,7 @@
 package com.hrm.markdown.renderer
 
 import androidx.compose.foundation.relocation.BringIntoViewRequester
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -42,7 +42,7 @@ class FootnoteNavigationStateTest {
     }
 
     @Test
-    fun should_return_false_when_definition_requester_is_missing() = runBlocking {
+    fun should_return_false_when_definition_requester_is_missing() = runTest {
         val state = FootnoteNavigationState()
 
         assertFalse(state.bringDefinitionIntoView("missing"))

@@ -13,11 +13,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrm.codehigh.renderer.CodeDefaults
@@ -57,20 +61,32 @@ class MarkdownPublicApiTest {
             SideEffect { expectedGap = size.height + spacing }
             Box(Modifier.size(500.dp, 1000.dp)) {
                 Markdown(document = document, codeTypography = typography, codeLayout = geometry,
+                    typography = MarkdownTypography(text = TextStyle(fontSize = 16.sp, lineHeight = 48.sp)),
                     codeColors = CodeDefaults.lightColors(), enableScroll = false, enableSelection = false)
             }
         }
         waitForIdle()
         fun gap(): Float = onNodeWithText("after-api").fetchSemanticsNode().boundsInRoot.top -
             onNodeWithText("before-api").fetchSemanticsNode().boundsInRoot.bottom
-        val initialInline = onNodeWithText("inline-api").fetchSemanticsNode().boundsInRoot.height
-        val initialCode = onNodeWithText("val api = 42").fetchSemanticsNode().boundsInRoot.height
+        fun assertPaintedStyle(text: String, fontSize: TextUnit, lineHeight: TextUnit) {
+            val layouts = mutableListOf<TextLayoutResult>()
+            onNodeWithText(text, useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            assertEquals(fontSize, layout.layoutInput.style.fontSize, "$text font size")
+            assertEquals(lineHeight, layout.layoutInput.style.lineHeight, "$text line height")
+            assertFalse(layout.didOverflowHeight, "$text was vertically clipped at font size $fontSize")
+        }
+        // Merged paragraph bounds include the body's line-height floor; their height need not
+        // scale with inline code's font size. Check the actual text styles and vertical clipping.
         assertTrue(abs(gap() - expectedGap) <= 2f, "expected $expectedGap, actual ${gap()}")
+        assertPaintedStyle("inline-api", 13.sp, 20.sp)
+        assertPaintedStyle("val api = 42", 14.sp, 22.sp)
         runOnIdle { large = true }
         waitForIdle()
         assertTrue(abs(gap() - expectedGap) <= 2f, "expected $expectedGap, actual ${gap()}")
-        assertTrue(onNodeWithText("inline-api").fetchSemanticsNode().boundsInRoot.height > initialInline * 1.5f)
-        assertTrue(onNodeWithText("val api = 42").fetchSemanticsNode().boundsInRoot.height > initialCode * 1.5f)
+        assertPaintedStyle("inline-api", 26.sp, 40.sp)
+        assertPaintedStyle("val api = 42", 28.sp, 44.sp)
     }
 
     @Test

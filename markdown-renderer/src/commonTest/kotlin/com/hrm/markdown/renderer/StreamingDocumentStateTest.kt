@@ -6,7 +6,7 @@ import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 import com.hrm.markdown.runtime.MarkdownInputTransformer
 import com.hrm.markdown.runtime.MarkdownTransformResult
 import com.hrm.markdown.runtime.MarkdownTransformerStreamingSupport
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
 class StreamingDocumentStateTest {
 
     @Test
-    fun should_restartStream_when_defaultTransformerRewritesPreviousOutput() = runBlocking {
+    fun should_restartStream_when_defaultTransformerRewritesPreviousOutput() = runTest {
         val transformer = object : MarkdownInputTransformer {
             override val id: String = "default-rewrite"
 
@@ -71,7 +71,7 @@ class StreamingDocumentStateTest {
     }
 
     @Test
-    fun should_parse_initial_empty_non_streaming_document() = runBlocking {
+    fun should_parse_initial_empty_non_streaming_document() = runTest {
         var parseCount = 0
 
         val state = updateStreamingDocumentState(
@@ -93,7 +93,7 @@ class StreamingDocumentStateTest {
     }
 
     @Test
-    fun should_begin_before_append_when_stream_starts() = runBlocking {
+    fun should_begin_before_append_when_stream_starts() = runTest {
         val calls = mutableListOf<String>()
 
         val state = updateStreamingDocumentState(
@@ -124,7 +124,7 @@ class StreamingDocumentStateTest {
     }
 
     @Test
-    fun should_append_tail_before_end_when_stream_finishes() = runBlocking {
+    fun should_append_tail_before_end_when_stream_finishes() = runTest {
         val calls = mutableListOf<String>()
 
         val state = updateStreamingDocumentState(
@@ -160,7 +160,7 @@ class StreamingDocumentStateTest {
     }
 
     @Test
-    fun should_not_parse_when_finishing_stream() = runBlocking {
+    fun should_not_parse_when_finishing_stream() = runTest {
         val calls = mutableListOf<String>()
 
         updateStreamingDocumentState(
@@ -192,7 +192,7 @@ class StreamingDocumentStateTest {
     }
 
     @Test
-    fun should_parse_full_markdown_when_not_streaming() = runBlocking {
+    fun should_parse_full_markdown_when_not_streaming() = runTest {
         val calls = mutableListOf<String>()
 
         val state = updateStreamingDocumentState(
@@ -224,7 +224,7 @@ class StreamingDocumentStateTest {
     }
 
     @Test
-    fun should_restart_stream_when_markdown_is_replaced() = runBlocking {
+    fun should_restart_stream_when_markdown_is_replaced() = runTest {
         val calls = mutableListOf<String>()
 
         val state = updateStreamingDocumentState(
@@ -257,7 +257,7 @@ class StreamingDocumentStateTest {
     }
 
     @Test
-    fun should_parse_replaced_final_markdown_instead_of_ending_old_stream() = runBlocking {
+    fun should_parse_replaced_final_markdown_instead_of_ending_old_stream() = runTest {
         val calls = mutableListOf<String>()
 
         val state = updateStreamingDocumentState(

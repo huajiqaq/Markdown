@@ -30,8 +30,10 @@ jobs:
       - name: Run all JVM tests
         run: ./gradlew jvmTest
 
-      - name: Compile parser tests for JS and Wasm
-        run: ./gradlew :markdown-parser:compileTestKotlinJs :markdown-parser:compileTestKotlinWasmJs
+      - name: Compile parser and renderer tests for JS and Wasm
+        run: >-
+          ./gradlew :markdown-parser:compileTestKotlinJs :markdown-parser:compileTestKotlinWasmJs
+          :markdown-renderer:compileTestKotlinJs :markdown-renderer:compileTestKotlinWasmJs
 
       - name: Upload test reports
         if: always()
