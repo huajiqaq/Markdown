@@ -4,7 +4,9 @@
 
 > **行内布局说明**：超宽行内公式和组件的占位宽度限制为可用行宽，绘制层按向上取整到整像素的有限自然宽度测量内容，并提供横向滚动；填满占位空间和自带横向滚动的组件遵循相同约束。此行为不改变解析语法及覆盖统计。
 
-> **渲染扩展说明**：引用（`[@key]`）、图片与链接通过 `MarkdownInteractions` 提供类型化交互；默认链接交由 Compose `LocalUriHandler`。图片图集按需从当前文档模型提取，并区分重复 URL。`MarkdownComponents` 提供显式高度的代码块标题/操作栏和表格工具栏，参与嵌套布局计算，且不进入正文复制。`MarkdownConfig.softBreakPolicy` 可选择软换行显示为空格或换行，保持 AST 与解析状态不变；Compose 复制和 HTML 导出遵循对应策略。以上均属于 renderer 能力，不增加语法覆盖项。
+> **公开 API 升级**：原生外观分别使用 `MarkdownColors`、`MarkdownTypography`、`MarkdownLayout`，解析选项使用 `MarkdownParserConfig`；显示开关直接传入，交互保留 `MarkdownInteractions`（含 codehigh 原生 Token 点击转发 `onCodeTokenClick`），头尾插槽归入 `MarkdownComponents`，`MarkdownState` 控制实际滚动状态。代码块与行内代码的字号、行高和内边距使用同一份配置完成测量与绘制，正常构建使用已发布的 codehigh `1.2.0`，跨仓库开发可通过 `-PcodehighSource=../codehigh` 源码联调。本次不提供旧 API 兼容层。
+
+> **渲染扩展说明**：引用（`[@key]`）、图片与链接通过 `MarkdownInteractions` 提供类型化交互；默认链接交由 Compose `LocalUriHandler`。图片图集按需从当前文档模型提取，并区分重复 URL。`MarkdownComponents` 提供显式高度的代码块标题/操作栏和表格工具栏，参与嵌套布局计算，且不进入正文复制。`Markdown.softBreakPolicy` 可选择软换行显示为空格或换行，保持 AST 与解析状态不变；Compose 复制和 HTML 导出遵循对应策略。以上均属于 renderer 能力，不增加语法覆盖项。
 
 ## 1. 块级结构 — 标题
 
@@ -253,7 +255,7 @@
 
 > **备注**: 公式编号、环境自动编号和引用功能均由 LaTeX 渲染库（`io.github.huarangmeng:latex-renderer`）原生处理。Parser 层保留完整 LaTeX 文本，不做编号提取，交由 LaTeX 库的 `EquationNumbering` + `TagMeasurer` + `RefMeasurer` 完整处理编号生命周期。
 
-> **渲染配置**：Compose 公式渲染使用 LaTeX 1.6.1，默认传递引入 `latex-fonts-katex` 资源模块，由 LaTeX 运行时自动加载，无需手动初始化；字体缺失或加载失败时安全回退系统字体，进程内不再重试。行内和块级公式统一使用 `MarkdownConfig.latexConfig`；`MarkdownTheme` 不再控制公式字号、主题或背景。此变更不影响 Parser 的语法与原文保留行为。
+> **渲染配置**：Compose 公式渲染使用 LaTeX 1.6.1，默认传递引入 `latex-fonts-katex` 资源模块，由 LaTeX 运行时自动加载，无需手动初始化；字体缺失或加载失败时安全回退系统字体，进程内不再重试。行内和块级公式统一使用 `Markdown.latexConfig`；Markdown 的 colors/typography/layout 不覆盖公式配置。此变更不影响 Parser 的语法与原文保留行为。
 
 #### 定义列表（扩展）
 - ✅ 术语行（紧接定义前的非空行）
@@ -989,8 +991,10 @@ val html = HtmlRenderer.renderMarkdown(input, flavour = CommonMarkFlavour)
 
 ### 四、特殊场景适配
 
-> **备注**: 无障碍相关源码诊断已实现，详见第 23 章「语法验证/Linting — WCAG 无障碍检测」。Compose 渲染器另提供标题导航标记、段落/列表项阅读分组、原生链接操作以及任务项的只读勾选状态；实际平台读屏体验仍需设备验证。Wiki 链接、Figure 图片标题、Ruby 注音已实现，详见第 19 章「行内扩展」和第 10 章「块级扩展」。目录自动编号在渲染器层面实现（`MarkdownConfig.enableHeadingNumbering`）。
+> **备注**: 无障碍相关源码诊断已实现，详见第 23 章「语法验证/Linting — WCAG 无障碍检测」。Compose 渲染器另提供标题导航标记、段落/列表项阅读分组、原生链接操作以及任务项的只读勾选状态；实际平台读屏体验仍需设备验证。Wiki 链接、Figure 图片标题、Ruby 注音已实现，详见第 19 章「行内扩展」和第 10 章「块级扩展」。目录自动编号在渲染器层面实现（`Markdown.enableHeadingNumbering`）。
 
 | 优先级 | 特性 | 语法示例 | 说明 |
 |--------|------|----------|------|
 | **P4** | 嵌入/Transclusion | `![[other-file]]` | 嵌入其他 Markdown 文件内容（Obsidian 风格） |
+
+代码外观入口同步为 codehigh 原生 `codeColors`、`codeTypography`、`codeLayout`；块代码与行内代码共享同一配置，Markdown 不再重复定义代码字体与尺寸。本次仅重组渲染层公开 API，保留原有默认外观与解析、语法覆盖。

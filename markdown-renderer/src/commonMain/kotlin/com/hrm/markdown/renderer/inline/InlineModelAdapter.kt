@@ -20,13 +20,11 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrm.codehigh.renderer.InlineCode as CodeHighInlineCode
-import com.hrm.codehigh.renderer.InlineCodeDefaults
 import com.hrm.codehigh.renderer.measureInlineCodeSize
-import com.hrm.codehigh.theme.CodeTheme
 import com.hrm.latex.renderer.measure.LatexMeasurerState
 import com.hrm.markdown.parser.core.CharacterUtils
 import com.hrm.markdown.renderer.MarkdownImageData
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.internal.adapter.createDirectiveInlineRenderScope
 import com.hrm.markdown.renderer.internal.compose.CitationAnnotationTag
 import com.hrm.markdown.renderer.internal.compose.RenderInteractiveMarkdownImage
@@ -49,7 +47,7 @@ import kotlin.math.ceil
 
 internal fun buildInlineRenderResultFromModel(
     model: InlineModel,
-    theme: MarkdownTheme,
+    theme: ResolvedMarkdownStyle,
     hostTextStyle: TextStyle,
     directiveRegistry: MarkdownDirectiveRegistry,
     onLinkClick: ((String) -> Unit)? = null,
@@ -57,7 +55,6 @@ internal fun buildInlineRenderResultFromModel(
     latexMeasurer: LatexMeasurerState,
     density: Density,
     textMeasurer: TextMeasurer,
-    codeTheme: CodeTheme? = null,
 ): InlineRenderResult {
     val flowSegments = mutableListOf<InlineFlowSegment>()
     val context = InlineRenderBuildContext(
@@ -76,7 +73,6 @@ internal fun buildInlineRenderResultFromModel(
             latexMeasurer = latexMeasurer,
             density = density,
             textMeasurer = textMeasurer,
-            inlineCodeTheme = codeTheme,
         )
     }
     return InlineRenderResult(
@@ -89,7 +85,7 @@ internal fun buildInlineRenderResultFromModel(
 
 internal fun AnnotatedString.Builder.renderInlineModel(
     model: InlineModel,
-    theme: MarkdownTheme,
+    theme: ResolvedMarkdownStyle,
     hostTextStyle: TextStyle,
     context: InlineRenderBuildContext,
     directiveRegistry: MarkdownDirectiveRegistry,
@@ -98,7 +94,6 @@ internal fun AnnotatedString.Builder.renderInlineModel(
     latexMeasurer: LatexMeasurerState,
     density: Density,
     textMeasurer: TextMeasurer,
-    inlineCodeTheme: CodeTheme? = null,
 ) {
     model.atoms.forEachIndexed { index, atom ->
         when (atom) {
@@ -130,7 +125,6 @@ internal fun AnnotatedString.Builder.renderInlineModel(
                 latexMeasurer = latexMeasurer,
                 density = density,
                 textMeasurer = textMeasurer,
-                inlineCodeTheme = inlineCodeTheme,
             )
         }
     }
@@ -170,7 +164,7 @@ private fun InlineAtom?.isInlineMathWidgetAtom(): Boolean {
 
 private fun AnnotatedString.Builder.renderTextAtom(
     atom: TextAtom,
-    theme: MarkdownTheme,
+    theme: ResolvedMarkdownStyle,
     context: InlineRenderBuildContext,
     onLinkClick: ((String) -> Unit)?,
     onFootnoteClick: ((String) -> Unit)?,
@@ -207,7 +201,7 @@ private fun AnnotatedString.Builder.renderTextAtom(
                         tag = clickMark.payload["tag"] ?: "link",
                         styles = TextLinkStyles(
                             style = SpanStyle(
-                                color = theme.linkColor,
+                                color = theme.colors.link,
                                 textDecoration = TextDecoration.Underline,
                             )
                         ),
@@ -222,11 +216,7 @@ private fun AnnotatedString.Builder.renderTextAtom(
                     LinkAnnotation.Clickable(
                         tag = "footnote",
                         styles = TextLinkStyles(
-                            style = SpanStyle(
-                                color = theme.linkColor,
-                                fontSize = theme.footnoteStyle.fontSize,
-                                baselineShift = BaselineShift.Superscript,
-                            )
+                            style = SpanStyle(baselineShift = BaselineShift.Superscript).merge(theme.footnoteStyle)
                         ),
                         linkInteractionListener = { onFootnoteClick?.invoke(label) },
                     )
@@ -238,11 +228,7 @@ private fun AnnotatedString.Builder.renderTextAtom(
                     CitationAnnotationTag,
                     "${atom.identity.stableId}:${clickMark.payload["key"].orEmpty()}",
                 )
-                withStyle(SpanStyle(
-                    color = theme.linkColor,
-                    fontSize = theme.footnoteStyle.fontSize,
-                    baselineShift = BaselineShift.Superscript,
-                )) { appendText() }
+                withStyle(SpanStyle(baselineShift = BaselineShift.Superscript).merge(theme.footnoteStyle)) { appendText() }
                 pop()
             }
 
@@ -257,11 +243,11 @@ private fun AnnotatedString.Builder.renderTextAtom(
     )
 }
 
-internal fun spanStyleForMark(mark: SpanMark, theme: MarkdownTheme): SpanStyle = when (mark.kind) {
+internal fun spanStyleForMark(mark: SpanMark, theme: ResolvedMarkdownStyle): SpanStyle = when (mark.kind) {
     "emphasis" -> SpanStyle(fontStyle = FontStyle.Italic)
     "strong" -> SpanStyle(fontWeight = FontWeight.Bold)
     "strikethrough" -> theme.strikethroughStyle
-    "highlight" -> SpanStyle(background = theme.highlightColor)
+    "highlight" -> SpanStyle(background = theme.colors.highlight)
     "superscript" -> theme.superscriptStyle.merge(SpanStyle(baselineShift = BaselineShift.Superscript))
     "subscript" -> theme.subscriptStyle.merge(SpanStyle(baselineShift = BaselineShift.Subscript))
     "inserted" -> theme.insertedTextStyle
@@ -292,7 +278,7 @@ internal fun spanStyleForMark(mark: SpanMark, theme: MarkdownTheme): SpanStyle =
 
 private fun AnnotatedString.Builder.renderWidgetAtom(
     atom: WidgetAtom,
-    theme: MarkdownTheme,
+    theme: ResolvedMarkdownStyle,
     hostTextStyle: TextStyle,
     context: InlineRenderBuildContext,
     directiveRegistry: MarkdownDirectiveRegistry,
@@ -301,7 +287,6 @@ private fun AnnotatedString.Builder.renderWidgetAtom(
     latexMeasurer: LatexMeasurerState,
     density: Density,
     textMeasurer: TextMeasurer,
-    inlineCodeTheme: CodeTheme? = null,
 ) {
     when (val widget = atom.widget) {
         is InlineCodeWidgetModel -> renderInlineCodeWidget(
@@ -310,7 +295,6 @@ private fun AnnotatedString.Builder.renderWidgetAtom(
             context,
             density,
             textMeasurer,
-            inlineCodeTheme
         )
 
         is ImageWidgetModel -> renderImageWidget(widget, context, density)
@@ -333,7 +317,6 @@ private fun AnnotatedString.Builder.renderWidgetAtom(
             latexMeasurer = latexMeasurer,
             density = density,
             textMeasurer = textMeasurer,
-            inlineCodeTheme = inlineCodeTheme,
         )
 
         is DirectiveInlineWidgetModel -> renderDirectiveInlineWidget(
@@ -350,30 +333,26 @@ private fun AnnotatedString.Builder.renderWidgetAtom(
 
 private fun AnnotatedString.Builder.renderInlineCodeWidget(
     widget: InlineCodeWidgetModel,
-    theme: MarkdownTheme,
+    theme: ResolvedMarkdownStyle,
     context: InlineRenderBuildContext,
-    density: Density?,
-    textMeasurer: TextMeasurer?,
-    inlineCodeTheme: CodeTheme?,
+    density: Density,
+    textMeasurer: TextMeasurer,
 ) {
-    if (density != null && textMeasurer != null && inlineCodeTheme != null) {
-        val inlineCodeStyle = InlineCodeDefaults.style(inlineCodeTheme)
-        val size = measureInlineCodeSize(
-            text = widget.code,
-            style = inlineCodeStyle,
-            density = density,
-            textMeasurer = textMeasurer,
-        )
-        context.emitInlineCodeWidget(
-            builder = this,
-            widget = widget,
-            widthPx = ceil(size.width),
-            heightPx = size.height,
-        ) {
-            CodeHighInlineCode(text = widget.code, style = inlineCodeStyle)
-        }
-    } else {
-        context.emitStyledTextAtom(this, widget.code, theme.inlineCodeStyle)
+    val size = measureInlineCodeSize(
+        text = widget.code,
+        typography = theme.codeTypography,
+        layout = theme.codeLayout,
+        density = density,
+        textMeasurer = textMeasurer,
+    )
+    context.emitInlineCodeWidget(
+        builder = this,
+        widget = widget,
+        widthPx = ceil(size.width),
+        heightPx = size.height,
+    ) {
+        CodeHighInlineCode(text = widget.code, colors = theme.codeColors,
+            typography = theme.codeTypography, layout = theme.codeLayout)
     }
 }
 
@@ -436,7 +415,7 @@ private fun AnnotatedString.Builder.renderInlineMathWidget(
 
 private fun AnnotatedString.Builder.renderSpoilerWidget(
     widget: SpoilerWidgetModel,
-    theme: MarkdownTheme,
+    theme: ResolvedMarkdownStyle,
     hostTextStyle: TextStyle,
     context: InlineRenderBuildContext,
     directiveRegistry: MarkdownDirectiveRegistry,
@@ -445,7 +424,6 @@ private fun AnnotatedString.Builder.renderSpoilerWidget(
     latexMeasurer: LatexMeasurerState,
     density: Density,
     textMeasurer: TextMeasurer,
-    inlineCodeTheme: CodeTheme?,
 ) {
     val fontSize = theme.bodyStyle.fontSize.value
     val avgCharWidth = widget.alternateText.sumOf { ch -> if (ch.code > 0x7F) 12 else 7 }
@@ -466,14 +444,13 @@ private fun AnnotatedString.Builder.renderSpoilerWidget(
             latexMeasurer = latexMeasurer,
             density = density,
             textMeasurer = textMeasurer,
-            inlineCodeTheme = inlineCodeTheme,
         )
     }
 }
 
 private fun AnnotatedString.Builder.renderDirectiveInlineWidget(
     widget: DirectiveInlineWidgetModel,
-    theme: MarkdownTheme,
+    theme: ResolvedMarkdownStyle,
     context: InlineRenderBuildContext,
     directiveRegistry: MarkdownDirectiveRegistry,
     density: Density?,
@@ -504,7 +481,7 @@ private fun AnnotatedString.Builder.renderDirectiveInlineWidget(
             style = SpanStyle(
                 fontFamily = FontFamily.Monospace,
                 fontSize = theme.bodyStyle.fontSize * 0.875f,
-                color = theme.linkColor,
+                color = theme.colors.link,
             ),
         )
     }
@@ -512,7 +489,7 @@ private fun AnnotatedString.Builder.renderDirectiveInlineWidget(
 
 private fun AnnotatedString.Builder.renderRubyTextWidget(
     widget: RubyTextWidgetModel,
-    theme: MarkdownTheme,
+    theme: ResolvedMarkdownStyle,
     context: InlineRenderBuildContext,
     density: Density?,
 ) {

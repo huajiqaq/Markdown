@@ -13,7 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hrm.markdown.parser.ast.BibliographyDefinition
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.internal.core.model.BibliographyDefinitionBlockModel
 import com.hrm.markdown.renderer.internal.core.model.BibliographyEntryBlockModel
 import com.hrm.markdown.renderer.internal.layout.LayoutTokens
@@ -48,13 +48,13 @@ internal fun RenderBibliographyBlockModel(
     model: BibliographyDefinitionBlockModel,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     if (model.entries.isEmpty()) return
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(theme.codeBlockBackground)
+            .background(theme.colors.containerBackground)
             .padding(LayoutTokens.BibliographyPadding),
     ) {
         Text(
@@ -75,7 +75,7 @@ internal fun RenderBibliographyBlockModel(
                     text = "[${entry.key}] ",
                     style = theme.bodyStyle.copy(
                         fontWeight = FontWeight.SemiBold,
-                        color = theme.linkColor,
+                        color = theme.colors.link,
                     ),
                 )
                 Text(

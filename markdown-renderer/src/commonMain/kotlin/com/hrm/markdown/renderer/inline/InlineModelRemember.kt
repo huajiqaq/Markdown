@@ -5,7 +5,7 @@ import androidx.compose.runtime.remember
 import com.hrm.markdown.parser.SourceRange
 import com.hrm.markdown.parser.ast.ContainerNode
 import com.hrm.markdown.parser.ast.Node
-import com.hrm.markdown.renderer.LocalMarkdownConfig
+import com.hrm.markdown.renderer.LocalMarkdownRenderOptions
 import com.hrm.markdown.renderer.internal.core.compile.compileInlineModel
 import com.hrm.markdown.renderer.internal.core.compile.computeSemanticRevision
 import com.hrm.markdown.renderer.internal.core.identity.renderIdentityFromText
@@ -38,7 +38,7 @@ internal fun rememberInlineModel(
     inlineRevision: Long,
     parentStableId: Long,
 ): InlineModel {
-    val softBreakPolicy = LocalMarkdownConfig.current.softBreakPolicy
+    val softBreakPolicy = LocalMarkdownRenderOptions.current.softBreakPolicy
     return remember(inlineRevision, parentStableId, softBreakPolicy) {
         compileInlineModel(
             nodes = nodes,

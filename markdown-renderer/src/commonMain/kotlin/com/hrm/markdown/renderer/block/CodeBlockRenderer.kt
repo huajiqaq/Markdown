@@ -4,18 +4,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import com.hrm.codehigh.renderer.CodeBlock
-import com.hrm.codehigh.theme.LocalCodeTheme
-import com.hrm.markdown.renderer.LocalCodeHighlightTheme
 import com.hrm.markdown.renderer.LocalIsStreaming
 import com.hrm.markdown.renderer.LocalMarkdownComponents
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.MarkdownCodeBlockInfo
+import com.hrm.markdown.renderer.internal.LocalMarkdownInteractions
 
 /**
  * 围栏代码块渲染器 (``` 或 ~~~)
@@ -75,25 +73,29 @@ private fun CodeBlockText(
     highlightedLines: Set<Int>,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
-    val codeTheme = LocalCodeHighlightTheme.current ?: LocalCodeTheme.current
+    val theme = LocalMarkdownStyle.current
     val isStreaming = LocalIsStreaming.current
+    val controller = LocalMarkdownInteractions.current
+    val onTokenClick = remember(controller, controller?.codeTokenEnabled) {
+        controller?.takeIf { it.codeTokenEnabled }?.let { it::codeToken }
+    }
 
     val slot = LocalMarkdownComponents.current.codeBlockHeader
     val body: @Composable (Modifier) -> Unit = { bodyModifier ->
-        Column(modifier = bodyModifier.fillMaxWidth().clip(RoundedCornerShape(theme.codeBlockCornerRadius))) {
-            CodeBlock(
-                code = text.ifEmpty { " " },
-                language = language,
-                title = title.orEmpty(),
-                modifier = Modifier.fillMaxWidth(),
-                isStreaming = isStreaming,
-                theme = codeTheme,
-                showLineNumbers = showLineNumbers,
-                startLine = startLine,
-                highlightedLines = highlightedLines,
-            )
-        }
+        CodeBlock(
+            code = text.ifEmpty { " " },
+            language = language,
+            title = title.orEmpty(),
+            modifier = bodyModifier.fillMaxWidth(),
+            isStreaming = isStreaming,
+            colors = theme.codeColors,
+            typography = theme.codeTypography,
+            layout = theme.codeLayout,
+            onTokenClick = onTokenClick,
+            showLineNumbers = showLineNumbers,
+            startLine = startLine,
+            highlightedLines = highlightedLines,
+        )
     }
     if (slot == null) {
         body(modifier)

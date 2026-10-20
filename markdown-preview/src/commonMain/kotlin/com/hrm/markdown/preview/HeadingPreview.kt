@@ -2,7 +2,7 @@ package com.hrm.markdown.preview
 
 import androidx.compose.runtime.Composable
 import com.hrm.markdown.renderer.Markdown
-import com.hrm.markdown.renderer.MarkdownConfig
+import com.hrm.markdown.renderer.MarkdownParserConfig
 
 internal val headingPreviewGroups = listOf(
     PreviewGroup(
@@ -98,7 +98,7 @@ internal val headingPreviewGroups = listOf(
 #### 四级标题
 ##### 五级标题
 ###### 六级标题
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -131,7 +131,7 @@ internal val headingPreviewGroups = listOf(
 
 # 参考
                         """.trimIndent(),
-                        config = MarkdownConfig(enableHeadingNumbering = true),
+                        enableHeadingNumbering = true,
                     )
                 }
             ),
@@ -153,7 +153,7 @@ internal val headingPreviewGroups = listOf(
 
 ## 第一节
                         """.trimIndent(),
-                        config = MarkdownConfig(enableHeadingNumbering = true),
+                        enableHeadingNumbering = true,
                     )
                 }
             ),

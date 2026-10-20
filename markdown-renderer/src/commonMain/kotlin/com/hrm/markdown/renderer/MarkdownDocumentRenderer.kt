@@ -1,15 +1,13 @@
 package com.hrm.markdown.renderer
 
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -20,7 +18,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.rememberTextMeasurer
-import com.hrm.codehigh.theme.CodeTheme
 import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.renderer.internal.LocalMarkdownInteractions
 import com.hrm.markdown.renderer.internal.MarkdownEngineHost
@@ -42,31 +39,37 @@ import com.hrm.markdown.runtime.MarkdownSourceMap
 internal fun MarkdownDocumentRenderer(
     document: Document,
     modifier: Modifier = Modifier,
-    theme: MarkdownTheme = MarkdownTheme.auto(),
-    codeTheme: CodeTheme? = null,
-    config: MarkdownConfig = MarkdownConfig.Default,
-    scrollState: ScrollState = rememberScrollState(),
+    theme: ResolvedMarkdownStyle = ResolvedMarkdownStyle(),
+    config: MarkdownRenderOptions = MarkdownRenderOptions.Default,
+    state: MarkdownState = rememberMarkdownState(),
     isStreaming: Boolean = false,
     enableScroll: Boolean = true,
     enableSelection: Boolean = true,
-    header: (@Composable () -> Unit)? = null,
-    footer: (@Composable () -> Unit)? = null,
     directiveRegistry: MarkdownDirectiveRegistry = MarkdownDirectiveRegistry.Empty,
     sourceMap: MarkdownSourceMap = MarkdownSourceMap.Identity,
     documentRevision: Long = document.contentHash,
     components: MarkdownComponents = MarkdownComponents.Default,
     interactions: MarkdownInteractions = MarkdownInteractions.Default,
 ) {
+    DisposableEffect(state) { onDispose { state.clearSelectionAction = null; state.scrollEnabled = false } }
     val latexState = rememberMarkdownLatexState(config.latexConfig)
     val renderMode = remember(enableScroll) {
         resolveMarkdownRenderMode(enableScroll = enableScroll)
     }
-    val lazyListState = rememberLazyListState()
+    val lazyListState = state.lazyListState
+    val scrollState = state.scrollState
+    val header = components.header
+    val footer = components.footer
+    SideEffect {
+        state.headerItems = if (header == null) 0 else 1
+        state.footerItems = if (footer == null) 0 else 1
+        state.scrollEnabled = enableScroll
+    }
     // Document is a mutable public AST. A caller may update the same root instance, so reference
     // equality alone is not a sufficient remember key.
     val renderDocumentRevision =
         documentRevision.takeIf { it != 0L } ?: computeSemanticRevision(document)
-    ProvideMarkdownTheme(theme) {
+    ProvideMarkdownStyle(theme) {
         val engineHost = remember { MarkdownEngineHost() }
         val interactionController = remember { MarkdownInteractionController() }
         val uriHandler = LocalUriHandler.current
@@ -77,14 +80,12 @@ internal fun MarkdownDocumentRenderer(
         val facadeState = remember(
             theme,
             config,
-            codeTheme,
             directiveRegistry,
             isStreaming,
         ) {
             RendererFacadeState(
                 theme = theme,
                 config = config,
-                codeTheme = codeTheme,
                 directiveRegistry = directiveRegistry,
                 isStreaming = isStreaming,
             )
@@ -108,7 +109,7 @@ internal fun MarkdownDocumentRenderer(
         val diagramHostRegistry = remember { DiagramHostRegistry() }
         BoxWithConstraints(modifier = modifier) {
             val viewportWidthPx = with(density) { maxWidth.toPx() }
-            val blockSpacingPx = with(density) { theme.blockSpacing.toPx() }
+            val blockSpacingPx = with(density) { theme.layout.blockSpacing.toPx() }
             val textMeasurer = rememberTextMeasurer()
             val selectionController = if (enableSelection) {
                 val selectionScope = rememberCoroutineScope()
@@ -117,6 +118,10 @@ internal fun MarkdownDocumentRenderer(
                 null
             }
             selectionController?.bindClipboard(LocalClipboard.current)
+            SideEffect {
+                state.blockCount = internalRenderDocument.blocks.size
+                state.clearSelectionAction = { selectionController?.clearSelection() }
+            }
             val navigationController = rememberMarkdownNavigationController(
                 renderMode = renderMode,
                 enableScroll = enableScroll,
@@ -205,7 +210,6 @@ internal fun MarkdownDocumentRenderer(
                         footnoteNavigationState = navigationController.footnoteNavigationState,
                         imageContent = components.image,
                         config = config,
-                        codeTheme = codeTheme,
                         isStreaming = isStreaming,
                         directiveRegistry = directiveRegistry,
                         diagramHostRegistry = diagramHostRegistry,

@@ -19,17 +19,14 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-import com.hrm.codehigh.theme.CodeTheme
-import com.hrm.codehigh.theme.LocalCodeTheme
 import com.hrm.latex.renderer.measure.LatexMeasurerState
-import com.hrm.markdown.renderer.LocalCodeHighlightTheme
 import com.hrm.markdown.renderer.LocalMarkdownDirectiveRegistry
-import com.hrm.markdown.renderer.LocalMarkdownConfig
+import com.hrm.markdown.renderer.LocalMarkdownRenderOptions
 import com.hrm.markdown.renderer.LocalMarkdownLatexState
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.LocalOnFootnoteClick
 import com.hrm.markdown.renderer.LocalOnLinkClick
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.internal.compose.PaintInlineLayoutContent
 import com.hrm.markdown.renderer.internal.core.model.InlineModel
 import com.hrm.markdown.renderer.internal.layout.inline.InlineLayoutEpoch
@@ -47,20 +44,18 @@ internal fun InlineLayoutBlockText(
     maxLines: Int = Int.MAX_VALUE,
     isHeading: Boolean = false,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     val directiveRegistry = LocalMarkdownDirectiveRegistry.current
     val onLinkClick = LocalOnLinkClick.current
     val onFootnoteClick = LocalOnFootnoteClick.current
-    val config = LocalMarkdownConfig.current
+    val config = LocalMarkdownRenderOptions.current
     val latexMeasurer = LocalMarkdownLatexState.current.measurer
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
     val textMeasurer = rememberTextMeasurer()
-    val inlineCodeTheme = LocalCodeHighlightTheme.current ?: LocalCodeTheme.current
     val inlineLayoutRuntime = remember { InlineLayoutRuntime() }
     val inlineLayoutEpoch = rememberInlineLayoutEpoch(
         theme = theme,
-        codeTheme = inlineCodeTheme,
         directiveRegistry = directiveRegistry,
         config = config,
         onLinkClick = onLinkClick,
@@ -80,7 +75,6 @@ internal fun InlineLayoutBlockText(
         latexMeasurer = latexMeasurer,
         density = density,
         textMeasurer = textMeasurer,
-        codeTheme = inlineCodeTheme,
     )
     val measurePolicy = remember(
         model.identity,
@@ -118,7 +112,6 @@ internal fun InlineLayoutBlockText(
                 density = density,
                 textMeasurer = textMeasurer,
                 maxLines = maxLines,
-                inlineCodeTheme = inlineCodeTheme,
                 inlineResult = inlineResult,
                 inlineLayoutRuntime = inlineLayoutRuntime,
                 inlineLayoutEpoch = inlineLayoutEpoch,
@@ -134,7 +127,7 @@ internal fun InlineLayoutBlockText(
 private fun InlineLayoutBlockMeasuredContent(
     model: InlineModel,
     style: TextStyle,
-    theme: MarkdownTheme,
+    theme: ResolvedMarkdownStyle,
     directiveRegistry: MarkdownDirectiveRegistry,
     onLinkClick: ((String) -> Unit)?,
     onFootnoteClick: ((String) -> Unit)?,
@@ -142,7 +135,6 @@ private fun InlineLayoutBlockMeasuredContent(
     density: Density,
     textMeasurer: TextMeasurer,
     maxLines: Int,
-    inlineCodeTheme: CodeTheme?,
     inlineResult: InlineRenderResult,
     inlineLayoutRuntime: InlineLayoutRuntime,
     inlineLayoutEpoch: InlineLayoutEpoch,
@@ -163,7 +155,6 @@ private fun InlineLayoutBlockMeasuredContent(
             textMeasurer,
             maxWidthPx,
             maxLines,
-            inlineCodeTheme,
             inlineResult,
             inlineLayoutRuntime,
             inlineLayoutEpoch,

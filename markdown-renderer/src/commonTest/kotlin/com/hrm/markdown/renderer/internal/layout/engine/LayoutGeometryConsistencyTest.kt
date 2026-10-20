@@ -12,8 +12,8 @@ import androidx.compose.ui.unit.Density
 import com.hrm.latex.renderer.measure.rememberLatexMeasurer
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.renderer.DiagramHostRegistry
-import com.hrm.markdown.renderer.MarkdownConfig
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.MarkdownRenderOptions
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.internal.MarkdownEngineHost
 import com.hrm.markdown.renderer.internal.RendererFacadeState
 import com.hrm.markdown.renderer.internal.layout.LayoutTokens
@@ -47,7 +47,7 @@ class LayoutGeometryConsistencyTest {
 
         val heading = assertNotNull(document).blocks.single() as LayoutInlineBlockModel
         val expectedDecoration = with(assertNotNull(density)) {
-            LayoutTokens.HeadingDividerSpacing.toPx() + MarkdownTheme().dividerThickness.toPx()
+            LayoutTokens.HeadingDividerSpacing.toPx() + ResolvedMarkdownStyle().layout.dividerThickness.toPx()
         }
         assertClose(
             expectedDecoration,
@@ -110,15 +110,14 @@ class LayoutGeometryConsistencyTest {
         onResult: (InternalLayoutDocumentModel, Density) -> Unit,
     ) {
         val density = LocalDensity.current
-        val theme = remember { MarkdownTheme() }
+        val theme = remember { ResolvedMarkdownStyle() }
         val textMeasurer = rememberTextMeasurer()
         val latexMeasurer = rememberLatexMeasurer()
         val host = remember { MarkdownEngineHost() }
         val facadeState = remember(theme) {
             RendererFacadeState(
                 theme = theme,
-                config = MarkdownConfig.Default,
-                codeTheme = null,
+                config = MarkdownRenderOptions.Default,
                 directiveRegistry = MarkdownDirectiveRegistry.Empty,
                 isStreaming = false,
             )

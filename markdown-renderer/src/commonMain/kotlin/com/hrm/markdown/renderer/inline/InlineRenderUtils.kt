@@ -10,7 +10,7 @@ import com.hrm.markdown.parser.ast.DirectiveInline
 import com.hrm.markdown.parser.ast.InlineCode
 import com.hrm.markdown.parser.ast.Node
 import com.hrm.markdown.parser.ast.Text
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 
 internal fun buildInlineDirectiveFallbackText(node: DirectiveInline): String {
     val argsText = if (node.args.isNotEmpty()) {
@@ -116,7 +116,7 @@ internal fun parseCssColor(value: String): Color? {
     }
 }
 
-internal fun inferStyleFromClasses(classes: List<String>, theme: MarkdownTheme): SpanStyle? {
+internal fun inferStyleFromClasses(classes: List<String>, theme: ResolvedMarkdownStyle): SpanStyle? {
     if (classes.isEmpty()) return null
     val normalizedClasses = classes.map { it.lowercase() }
     if (normalizedClasses.any { it !in SUPPORTED_STYLE_CLASSES }) return null
@@ -140,7 +140,7 @@ internal fun inferStyleFromClasses(classes: List<String>, theme: MarkdownTheme):
             "italic" -> fontStyle = FontStyle.Italic
             "underline" -> textDecoration = TextDecoration.Underline
             "line-through", "strikethrough" -> textDecoration = TextDecoration.LineThrough
-            "highlight" -> background = theme.highlightColor
+            "highlight" -> background = theme.colors.highlight
         }
     }
     return SpanStyle(

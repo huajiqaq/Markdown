@@ -111,7 +111,10 @@ private fun AccessibilitySample(
     Box(Modifier.size(width.dp, 500.dp)) {
         Markdown(
             document = MarkdownParser().parse(source),
-            theme = MarkdownTheme.light(),
+            colors = ResolvedMarkdownStyle().colors,
+            typography = ResolvedMarkdownStyle().typography,
+            layout = ResolvedMarkdownStyle().layout,
+            diagramTheme = ResolvedMarkdownStyle().diagramTheme,
             enableScroll = scroll,
             interactions = MarkdownInteractions(onLinkClick = onLinkClick),
         )

@@ -22,7 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hrm.markdown.parser.ast.TabBlock
 import com.hrm.markdown.parser.ast.TabItem
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.MarkdownBlockChildren
 import com.hrm.markdown.renderer.internal.core.model.InternalRenderBlockModel
 import com.hrm.markdown.renderer.internal.core.model.TabBlockModel
@@ -91,7 +91,7 @@ private fun RenderTabContainer(
     modifier: Modifier = Modifier,
     content: @Composable (selectedIndex: Int) -> Unit,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     var selectedId by remember { mutableLongStateOf(tabs.first().stableId) }
     val selectedIndex = tabs.indexOfFirst { it.stableId == selectedId }.takeIf { it >= 0 } ?: 0
     if (tabs.none { it.stableId == selectedId }) {
@@ -102,13 +102,13 @@ private fun RenderTabContainer(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(theme.codeBlockBackground),
+            .background(theme.colors.containerBackground),
     ) {
         // 标签栏
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(theme.codeBlockTitleBackground)
+                .background(theme.colors.containerHeaderBackground)
                 .padding(horizontal = 4.dp),
         ) {
             tabs.forEachIndexed { index, tab ->
@@ -125,7 +125,7 @@ private fun RenderTabContainer(
                         text = tab.title,
                         style = theme.bodyStyle.copy(
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) theme.linkColor else Color.Gray,
+                            color = if (isSelected) theme.colors.link else Color.Gray,
                         ),
                     )
                 }

@@ -26,7 +26,7 @@ import com.hrm.markdown.parser.ast.TableCell
 import com.hrm.markdown.parser.ast.TableHead
 import com.hrm.markdown.parser.ast.TableRow
 import com.hrm.markdown.renderer.LocalMarkdownComponents
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.MarkdownTableInfo
 import com.hrm.markdown.renderer.inline.InlineLayoutBlockText
 import com.hrm.markdown.renderer.inline.rememberInlineModel
@@ -50,7 +50,7 @@ internal fun TableRenderer(
     node: Table,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
 
     // 收集所有行（表头 + 表体）
     val allRows = mutableListOf<Pair<TableRow, Boolean>>() // (row, isHeader)
@@ -70,7 +70,7 @@ internal fun TableRenderer(
                 alignments = node.columnAlignments,
                 columnCount = columnCount,
                 availableWidthPx = availableWidthPx,
-                modifier = Modifier.border(width = 1.dp, color = theme.tableBorderColor),
+                modifier = Modifier.border(width = 1.dp, color = theme.colors.tableBorder),
             )
         }
     }
@@ -109,7 +109,7 @@ private fun TableLayout(
     availableWidthPx: Int?,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
 
     TableGridLayout(
         rowCount = allRows.size,
@@ -127,11 +127,11 @@ private fun TableLayout(
                     alignment = alignment,
                     isHeader = isHeader,
                     modifier = Modifier
-                        .border(0.5.dp, theme.tableBorderColor)
+                        .border(0.5.dp, theme.colors.tableBorder)
                         .let {
-                            if (isHeader) it.background(theme.tableHeaderBackground) else it
+                            if (isHeader) it.background(theme.colors.tableHeaderBackground) else it
                         }
-                        .padding(theme.tableCellPadding),
+                        .padding(theme.layout.tableCellPadding),
                 )
             }
         }
@@ -145,7 +145,7 @@ private fun TableCellRenderer(
     isHeader: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
 
     val textAlign = tableTextAlign(alignment)
 
@@ -174,7 +174,7 @@ internal fun RenderTableBlockModel(
     model: TableBlockModel,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     val columnCount = model.columnAlignments.size
         .coerceAtLeast(model.rows.maxOfOrNull { it.cells.size } ?: 1)
         .coerceAtLeast(1)
@@ -185,7 +185,7 @@ internal fun RenderTableBlockModel(
                 alignments = model.columnAlignments,
                 columnCount = columnCount,
                 availableWidthPx = availableWidthPx,
-                modifier = Modifier.border(width = 1.dp, color = theme.tableBorderColor),
+                modifier = Modifier.border(width = 1.dp, color = theme.colors.tableBorder),
             )
         }
     }
@@ -196,7 +196,7 @@ internal fun RenderTableLayoutBlockModel(
     model: LayoutTableBlockModel,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     val columnWidthsPx = roundTableDimensionsPx(model.columnWidths)
     val rowHeightsPx = roundTableDimensionsPx(model.rows.map { it.frame.height })
     TableChrome(MarkdownTableInfo(model.rows.size, columnWidthsPx.size), modifier) { viewportModifier ->
@@ -207,7 +207,7 @@ internal fun RenderTableLayoutBlockModel(
                 availableWidthPx = null,
                 fixedColumnWidthsPx = columnWidthsPx,
                 fixedRowHeightsPx = rowHeightsPx,
-                modifier = Modifier.border(width = 1.dp, color = theme.tableBorderColor),
+                modifier = Modifier.border(width = 1.dp, color = theme.colors.tableBorder),
             ) {
                 for (row in model.rows) {
                     for (cell in row.cells) {
@@ -219,11 +219,11 @@ internal fun RenderTableLayoutBlockModel(
                             alignment = alignment,
                             isHeader = cell.isHeader,
                             modifier = Modifier
-                                .border(0.5.dp, theme.tableBorderColor)
+                                .border(0.5.dp, theme.colors.tableBorder)
                                 .let {
-                                    if (cell.isHeader) it.background(theme.tableHeaderBackground) else it
+                                    if (cell.isHeader) it.background(theme.colors.tableHeaderBackground) else it
                                 }
-                                .padding(theme.tableCellPadding),
+                                .padding(theme.layout.tableCellPadding),
                         )
                     }
                 }
@@ -240,7 +240,7 @@ private fun TableBlockModelLayout(
     availableWidthPx: Int?,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     TableGridLayout(
         rowCount = rows.size,
         columnCount = columnCount,
@@ -256,11 +256,11 @@ private fun TableBlockModelLayout(
                     alignment = alignment,
                     isHeader = row.isHeader,
                     modifier = Modifier
-                        .border(0.5.dp, theme.tableBorderColor)
+                        .border(0.5.dp, theme.colors.tableBorder)
                         .let {
-                            if (row.isHeader) it.background(theme.tableHeaderBackground) else it
+                            if (row.isHeader) it.background(theme.colors.tableHeaderBackground) else it
                         }
-                        .padding(theme.tableCellPadding),
+                        .padding(theme.layout.tableCellPadding),
                 )
             }
         }
@@ -359,7 +359,7 @@ private fun TableBlockModelCellRenderer(
     isHeader: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     val textAlign = tableTextAlign(alignment)
     val style = if (isHeader) {
         theme.bodyStyle.copy(fontWeight = FontWeight.Bold, textAlign = textAlign)

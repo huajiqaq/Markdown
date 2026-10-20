@@ -8,8 +8,8 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
-import com.hrm.markdown.renderer.MarkdownTheme
-import com.hrm.markdown.renderer.ProvideMarkdownTheme
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
+import com.hrm.markdown.renderer.ProvideMarkdownStyle
 import com.hrm.markdown.renderer.internal.core.identity.RenderIdentity
 import com.hrm.markdown.renderer.internal.core.model.FallbackLeafBlockModel
 import com.hrm.markdown.renderer.internal.core.model.TabBlockModel
@@ -25,7 +25,7 @@ class TabBlockRendererTest {
         var items by mutableStateOf(listOf(first, second))
 
         setContent {
-            ProvideMarkdownTheme(MarkdownTheme()) {
+            ProvideMarkdownStyle(ResolvedMarkdownStyle()) {
                 RenderTabBlockModel(
                     model = TabBlockModel(identity(10), items),
                     renderChildren = { children ->

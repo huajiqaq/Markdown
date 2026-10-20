@@ -375,7 +375,7 @@ private fun layoutBlockInternal(
                     taskListItem = item.taskListItem,
                     checked = item.checked,
                     children = itemChildren,
-                    markerWidthPx = itemIndent - with(environment.density) { environment.markdownTheme.listIndent.toPx() },
+                    markerWidthPx = itemIndent - with(environment.density) { environment.markdownTheme.layout.listIndent.toPx() },
                 )
             }
             LayoutListBlockModel(
@@ -633,7 +633,6 @@ private fun layoutInlineBlock(
         textMeasurer = environment.textMeasurer,
         inlineLayoutRuntime = environment.inlineLayoutRuntime,
         inlineLayoutEpoch = environment.inlineLayoutEpoch,
-        codeTheme = environment.codeTheme,
         onLinkClick = environment.onLinkClick,
         onFootnoteClick = environment.onFootnoteClick,
         showDivider = showDivider,
@@ -681,7 +680,7 @@ private fun layoutTableBlock(
     val contentWidth = (width - insets.left - insets.right).coerceAtLeast(0f)
     val columnCount = tableColumnCount(block)
     val cellPadding =
-        with(environment.density) { environment.markdownTheme.tableCellPadding.toPx() }
+        with(environment.density) { environment.markdownTheme.layout.tableCellPadding.toPx() }
     val columnWidths = environment.computeTableColumnWidths(block, contentWidth)
     var cursorY = contentTop
     val rows = block.rows.map { row ->
@@ -853,7 +852,7 @@ private fun layoutFigureBlock(
         fontStyle = FontStyle.Italic,
         fontSize = environment.markdownTheme.bodyStyle.fontSize * 0.875f,
         textAlign = TextAlign.Center,
-        color = environment.markdownTheme.blockQuoteTextColor,
+        color = environment.markdownTheme.colors.blockQuoteText,
     )
     val captionHeight = if (block.caption.isNotBlank() && captionWidth > 0f) {
         environment.textMeasurer.measure(
@@ -970,7 +969,7 @@ private fun layoutBibliographyBlock(
     }
     val prefixStyle = environment.markdownTheme.bodyStyle.copy(
         fontWeight = FontWeight.SemiBold,
-        color = environment.markdownTheme.linkColor,
+        color = environment.markdownTheme.colors.link,
     )
     var cursorY = contentTop + titleHeight + titleSpacing
     val entries = block.entries.map { entry ->
@@ -1109,8 +1108,8 @@ private fun blockInsets(
         is HtmlBlockModel -> LayoutInsets()
 
         is BlockQuoteBlockModel -> LayoutInsets(
-            left = environment.markdownTheme.blockQuotePadding.toPx() +
-                environment.markdownTheme.blockQuoteBorderWidth.toPx(),
+            left = environment.markdownTheme.layout.blockQuotePadding.toPx() +
+                environment.markdownTheme.layout.blockQuoteBorderWidth.toPx(),
         )
 
         is AdmonitionBlockModel,

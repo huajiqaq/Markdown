@@ -7,7 +7,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.onGloballyPositioned
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutBlockModel
 
 /**
@@ -23,7 +23,7 @@ internal fun Modifier.selectableBlock(
     if (controller == null) return this
     return this.composed {
         val stableId = block.identity.stableId
-        val highlightColor = LocalMarkdownTheme.current.linkColor.copy(alpha = 0.3f)
+        val highlightColor = LocalMarkdownStyle.current.colors.link.copy(alpha = 0.3f)
         DisposableEffect(block, controller) {
             controller.registerVisibleBlock(block)
             onDispose {

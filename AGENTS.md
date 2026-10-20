@@ -49,7 +49,7 @@ composeApp
 
 ### `markdown-renderer`
 
-- Entry: `Markdown()` and `MarkdownHtml`
+- Entry: `Markdown()` and `MarkdownHtml`; public settings use `MarkdownColors`, `MarkdownTypography`, `MarkdownLayout`, `MarkdownParserConfig`, `MarkdownState`, `MarkdownComponents`, and `MarkdownInteractions`
 - Owns block renderers, inline rendering, theme, image loading, HTML export
 - Compose-specific changes belong here, not in parser/runtime
 

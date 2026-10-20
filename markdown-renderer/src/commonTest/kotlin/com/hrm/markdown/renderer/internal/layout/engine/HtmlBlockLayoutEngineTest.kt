@@ -9,8 +9,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import com.hrm.latex.renderer.measure.rememberLatexMeasurer
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.renderer.DiagramHostRegistry
-import com.hrm.markdown.renderer.MarkdownConfig
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.MarkdownRenderOptions
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.internal.MarkdownEngineHost
 import com.hrm.markdown.renderer.internal.RendererFacadeState
 import com.hrm.markdown.renderer.internal.layout.inline.runPlacements
@@ -31,11 +31,10 @@ class HtmlBlockLayoutEngineTest {
 
         setContent {
             val density = LocalDensity.current
-            val theme = MarkdownTheme()
+            val theme = ResolvedMarkdownStyle()
             val facadeState = RendererFacadeState(
                 theme = theme,
-                config = MarkdownConfig.Default,
-                codeTheme = null,
+                config = MarkdownRenderOptions.Default,
                 directiveRegistry = MarkdownDirectiveRegistry.Empty,
                 isStreaming = false,
             )
@@ -51,7 +50,7 @@ class HtmlBlockLayoutEngineTest {
                 renderDocument = renderDocument,
                 facadeState = facadeState,
                 viewportWidth = 320f,
-                blockSpacing = with(density) { theme.blockSpacing.toPx() },
+                blockSpacing = with(density) { theme.layout.blockSpacing.toPx() },
                 density = density,
                 textMeasurer = rememberTextMeasurer(),
                 latexMeasurer = rememberLatexMeasurer(),
@@ -89,11 +88,10 @@ class HtmlBlockLayoutEngineTest {
 
         setContent {
             val density = LocalDensity.current
-            val theme = MarkdownTheme()
+            val theme = ResolvedMarkdownStyle()
             val facadeState = RendererFacadeState(
                 theme = theme,
-                config = MarkdownConfig.Default,
-                codeTheme = null,
+                config = MarkdownRenderOptions.Default,
                 directiveRegistry = MarkdownDirectiveRegistry.Empty,
                 isStreaming = false,
             )
@@ -111,7 +109,7 @@ class HtmlBlockLayoutEngineTest {
                 renderDocument = renderDocument,
                 facadeState = facadeState,
                 viewportWidth = 320f,
-                blockSpacing = with(density) { theme.blockSpacing.toPx() },
+                blockSpacing = with(density) { theme.layout.blockSpacing.toPx() },
                 density = density,
                 textMeasurer = rememberTextMeasurer(),
                 latexMeasurer = rememberLatexMeasurer(),

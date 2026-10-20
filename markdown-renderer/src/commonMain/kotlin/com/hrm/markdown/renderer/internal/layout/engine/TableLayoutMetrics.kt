@@ -30,7 +30,7 @@ internal fun LayoutEnvironment.computeTableColumnWidths(
     availableWidthPx: Float?,
 ): List<Float> {
     val columnCount = tableColumnCount(block)
-    val cellPadding = with(density) { markdownTheme.tableCellPadding.toPx() }
+    val cellPadding = with(density) { markdownTheme.layout.tableCellPadding.toPx() }
     val horizontalPadding = cellPadding * 2f
     val minWidths = MutableList(columnCount) { horizontalPadding }
     val maxWidths = MutableList(columnCount) { horizontalPadding }
@@ -51,7 +51,6 @@ internal fun LayoutEnvironment.computeTableColumnWidths(
                 latexMeasurer = latexMeasurer,
                 density = density,
                 textMeasurer = textMeasurer,
-                codeTheme = codeTheme,
             ).flowInput
             val minWidth = computeMinIntrinsicWidthPx(flowInput, style, textMeasurer).toFloat() + horizontalPadding
             val maxWidth = computeMaxIntrinsicWidthPx(flowInput, style, textMeasurer).toFloat() + horizontalPadding

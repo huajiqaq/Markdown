@@ -26,10 +26,10 @@ internal fun MarkdownBlockColumn(
     blocks: List<Node>,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(theme.blockSpacing),
+        verticalArrangement = Arrangement.spacedBy(theme.layout.blockSpacing),
     ) {
         MarkdownBlockItems(blocks)
     }

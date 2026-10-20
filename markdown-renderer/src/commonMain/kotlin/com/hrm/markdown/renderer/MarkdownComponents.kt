@@ -31,10 +31,13 @@ data class MarkdownTableInfo(val rowCount: Int, val columnCount: Int)
 /** Optional chrome around standard blocks. It does not replace the selectable body. */
 @Immutable
 data class MarkdownComponents(
+    val header: (@Composable () -> Unit)? = null,
+    val footer: (@Composable () -> Unit)? = null,
     val codeBlockHeader: MarkdownBlockSlot<MarkdownCodeBlockInfo>? = null,
     val tableToolbar: MarkdownBlockSlot<MarkdownTableInfo>? = null,
     /** Optional image loader/painter; image click handling is supplied through interactions. */
     val image: MarkdownImageRenderer? = null,
+    val admonitionIcons: Map<String, String> = mapOf("NOTE" to "ℹ️", "TIP" to "💡", "IMPORTANT" to "❗", "WARNING" to "⚠️", "CAUTION" to "🔴"),
 ) {
     companion object {
         val Default = MarkdownComponents()

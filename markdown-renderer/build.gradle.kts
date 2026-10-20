@@ -54,8 +54,8 @@ kotlin {
 
             api(libs.latex.renderer)
             implementation(libs.latex.fonts.katex)
-            implementation(libs.bundles.codehigh)
-            implementation(libs.diagram.render)
+            api(libs.bundles.codehigh)
+            api(libs.diagram.render)
 
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor3)

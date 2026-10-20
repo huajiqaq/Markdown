@@ -42,7 +42,6 @@ internal fun LayoutEnvironment.measureInlineBlock(
         latexMeasurer = latexMeasurer,
         density = density,
         textMeasurer = textMeasurer,
-        codeTheme = codeTheme,
     )
     return inlineLayoutRuntime.flowLayout(
         identity = model.identity,
@@ -79,7 +78,7 @@ internal fun LayoutEnvironment.measureLeafBlockContentHeight(
         )]
         measureInlineBlock(block.inline, style, widthPx) + if (block.level <= 2) {
             with(density) {
-                LayoutTokens.HeadingDividerSpacing.toPx() + markdownTheme.dividerThickness.toPx()
+                LayoutTokens.HeadingDividerSpacing.toPx() + markdownTheme.layout.dividerThickness.toPx()
             }
         } else {
             0f
@@ -114,7 +113,7 @@ internal fun LayoutEnvironment.measureLeafBlockContentHeight(
         maxLines = 1,
         softWrap = false,
     ).size.height.toFloat() + with(density) { LayoutTokens.PageBreakVerticalPadding.toPx() * 2f }
-    is ThematicBreakBlockModel -> with(density) { markdownTheme.dividerThickness.toPx() }
+    is ThematicBreakBlockModel -> with(density) { markdownTheme.layout.dividerThickness.toPx() }
     is TabBlockModel -> lineHeightPx(markdownTheme.bodyStyle) + with(density) {
         LayoutTokens.TabTitleVerticalPadding.toPx() * 2f +
             LayoutTokens.TabContentPadding.toPx() * 2f
@@ -129,7 +128,7 @@ private fun LayoutEnvironment.measureTableBlockContentHeight(
 ): Float {
     if (block.rows.isEmpty()) return lineHeightPx(markdownTheme.bodyStyle)
     val columnCount = tableColumnCount(block)
-    val horizontalPadding = with(density) { markdownTheme.tableCellPadding.toPx() } * 2f
+    val horizontalPadding = with(density) { markdownTheme.layout.tableCellPadding.toPx() } * 2f
     val columnWidths = computeTableColumnWidths(block, widthPx)
     return block.rows.sumOf { row ->
         var rowHeight = lineHeightPx(markdownTheme.bodyStyle) + horizontalPadding

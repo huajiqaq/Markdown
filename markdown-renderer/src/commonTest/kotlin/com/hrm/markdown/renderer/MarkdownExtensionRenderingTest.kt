@@ -5,10 +5,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
@@ -19,7 +21,10 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.hrm.codehigh.ast.CodeToken
+import com.hrm.codehigh.ast.TokenType
 import com.hrm.markdown.parser.MarkdownParser
+import com.hrm.markdown.parser.ast.Document
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -91,6 +96,55 @@ class MarkdownExtensionRenderingTest {
     }
 
     @Test
+    fun should_forward_code_token_clicks_and_update_handlers_without_reshaping_text() {
+        for (selectionEnabled in listOf(false, true)) runComposeUiTest {
+            var interactions by mutableStateOf(MarkdownInteractions.Default)
+            val source = "```kotlin\nval sample = 42\n```"
+            val calls = mutableListOf<String>()
+            var token: CodeToken? = null
+            var renderedDocument: Document? = null
+            setContent {
+                Markdown(
+                    markdown = source,
+                    enableScroll = false,
+                    enableSelection = selectionEnabled,
+                    interactions = interactions,
+                    components = MarkdownComponents(header = {
+                        val document = LocalRendererDocument.current
+                        SideEffect { renderedDocument = document }
+                    }),
+                )
+            }
+            waitUntil(timeoutMillis = 5_000) { renderedDocument != null }
+            onNodeWithText("val sample = 42").performTouchInput { click(Offset(1f, center.y)) }
+            assertTrue(calls.isEmpty())
+            val originalDocument = assertNotNull(renderedDocument)
+            runOnIdle {
+                interactions = MarkdownInteractions(onCodeTokenClick = { token = it; calls += "old:${it.text}" })
+            }
+            onNodeWithText("val sample = 42").performTouchInput { click(Offset(1f, center.y)) }
+            fun textLayout(): TextLayoutResult {
+                val layouts = mutableListOf<TextLayoutResult>()
+                onNodeWithText("val sample = 42").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+                return layouts.single()
+            }
+            val before = textLayout()
+            runOnIdle {
+                interactions = MarkdownInteractions(onCodeTokenClick = { token = it; calls += "new:${it.text}" })
+            }
+            waitForIdle()
+            assertSame(before.multiParagraph, textLayout().multiParagraph, "Replacing a handler must reuse shaped code")
+            assertSame(originalDocument, renderedDocument, "Replacing a handler must reuse the parsed document")
+            onNodeWithText("val sample = 42").performTouchInput { click(Offset(1f, center.y)) }
+            assertEquals(TokenType.KEYWORD, assertNotNull(token).type)
+            assertEquals(0..2, assertNotNull(token).range)
+            runOnIdle { interactions = MarkdownInteractions.Default }
+            onNodeWithText("val sample = 42").performTouchInput { click(Offset(1f, center.y)) }
+            assertEquals(listOf("old:val", "new:val"), calls)
+        }
+    }
+
+    @Test
     fun should_use_platform_uri_handler_when_link_action_is_not_overridden() = runComposeUiTest {
         var opened: String? = null
         val uriHandler = object : UriHandler {
@@ -112,9 +166,11 @@ class MarkdownExtensionRenderingTest {
         val document = MarkdownParser().parse("prefix ![first](same.png) ![second](same.png)")
         setContent {
             Markdown(
-                document, enableScroll = false, enableSelection = false,
-                components = MarkdownComponents(image = { data, modifier -> BasicText(data.altText, modifier) }),
+                document,
+                enableScroll = false,
+                enableSelection = false,
                 interactions = MarkdownInteractions(onImageClick = { event = it }),
+                components = MarkdownComponents(image = { data, modifier -> BasicText(data.altText, modifier) }),
             )
         }
         waitForIdle()

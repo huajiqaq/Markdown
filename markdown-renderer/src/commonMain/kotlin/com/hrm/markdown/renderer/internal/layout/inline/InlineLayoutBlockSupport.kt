@@ -5,9 +5,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-import com.hrm.codehigh.theme.CodeTheme
 import com.hrm.latex.renderer.measure.LatexMeasurerState
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.inline.InlinePlaceholderId
 import com.hrm.markdown.renderer.inline.InlineRenderResult
 import com.hrm.markdown.renderer.inline.InlineWidgetPaintPayload
@@ -137,14 +136,13 @@ internal fun buildInlineLayoutBlockFromModel(
     top: Float,
     width: Float,
     insets: LayoutInsets = LayoutInsets(),
-    theme: MarkdownTheme,
+    theme: ResolvedMarkdownStyle,
     directiveRegistry: MarkdownDirectiveRegistry,
     latexMeasurer: LatexMeasurerState,
     density: Density,
     textMeasurer: TextMeasurer,
     inlineLayoutRuntime: InlineLayoutRuntime,
     inlineLayoutEpoch: InlineLayoutEpoch,
-    codeTheme: CodeTheme? = null,
     onLinkClick: ((String) -> Unit)? = null,
     onFootnoteClick: ((String) -> Unit)? = null,
     maxLines: Int = Int.MAX_VALUE,
@@ -162,7 +160,6 @@ internal fun buildInlineLayoutBlockFromModel(
         latexMeasurer = latexMeasurer,
         density = density,
         textMeasurer = textMeasurer,
-        codeTheme = codeTheme,
     )
     return buildInlineLayoutBlockFromResult(
         identity = identity,
@@ -192,7 +189,7 @@ internal fun buildInlineLayoutBlockFromResult(
     top: Float,
     width: Float,
     insets: LayoutInsets = LayoutInsets(),
-    theme: MarkdownTheme,
+    theme: ResolvedMarkdownStyle,
     inlineResult: InlineRenderResult,
     density: Density,
     textMeasurer: TextMeasurer,
@@ -216,7 +213,7 @@ internal fun buildInlineLayoutBlockFromResult(
         maxLines = maxLines,
     )
     val dividerHeight = if (showDivider) {
-        with(density) { LayoutTokens.HeadingDividerSpacing.toPx() + theme.dividerThickness.toPx() }
+        with(density) { LayoutTokens.HeadingDividerSpacing.toPx() + theme.layout.dividerThickness.toPx() }
     } else {
         0f
     }

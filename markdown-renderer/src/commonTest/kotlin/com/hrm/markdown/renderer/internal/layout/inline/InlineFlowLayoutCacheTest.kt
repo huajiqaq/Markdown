@@ -5,8 +5,8 @@ import com.hrm.markdown.parser.block.postprocessors.PostProcessor
 import com.hrm.markdown.parser.block.starters.BlockStarter
 import com.hrm.markdown.parser.flavour.CommonMarkFlavour
 import com.hrm.markdown.parser.flavour.MarkdownFlavour
-import com.hrm.markdown.renderer.MarkdownConfig
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.MarkdownParserConfig
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -43,8 +43,8 @@ class InlineFlowLayoutCacheTest {
     fun should_notReuseLayout_when_epochValuesHaveSameHashCode() {
         val firstFlavour = CollidingFlavour()
         val secondFlavour = CollidingFlavour()
-        val firstConfig = MarkdownConfig(flavour = firstFlavour)
-        val secondConfig = MarkdownConfig(flavour = secondFlavour)
+        val firstConfig = MarkdownParserConfig(flavour = firstFlavour)
+        val secondConfig = MarkdownParserConfig(flavour = secondFlavour)
         val collaborator = ReferentialIdentity.of(Any())
         val firstEpoch = testEpoch(firstConfig, collaborator)
         val secondEpoch = testEpoch(secondConfig, collaborator)
@@ -96,11 +96,10 @@ class InlineFlowLayoutCacheTest {
     }
 
     private fun testEpoch(
-        config: MarkdownConfig = MarkdownConfig.Default,
+        config: MarkdownParserConfig = MarkdownParserConfig.Default,
         collaborator: ReferentialIdentity = ReferentialIdentity.of(Any()),
     ): InlineLayoutEpoch = InlineLayoutEpoch(
-        themeIdentity = StructuralIdentity.of(MarkdownTheme()),
-        codeThemeIdentity = StructuralIdentity.of(null),
+        themeIdentity = StructuralIdentity.of(ResolvedMarkdownStyle()),
         directiveRegistryIdentity = collaborator,
         configIdentity = StructuralIdentity.of(config),
         densityBits = 1f.toBits(),

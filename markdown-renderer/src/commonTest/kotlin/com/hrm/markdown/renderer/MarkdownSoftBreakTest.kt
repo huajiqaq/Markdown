@@ -34,26 +34,27 @@ class MarkdownSoftBreakTest {
 
     @Test
     fun should_export_matching_html_and_preserve_explicit_override() {
-        val config = MarkdownConfig(softBreakPolicy = MarkdownSoftBreakPolicy.LineBreak)
+        val policy = MarkdownSoftBreakPolicy.LineBreak
         assertEquals("<p>first\nsecond</p>\n", MarkdownHtml.render("first\nsecond"))
-        assertEquals("<p>first<br />\nsecond</p>\n", MarkdownHtml.render("first\nsecond", config))
-        assertEquals("<p>first<br>\nsecond</p>\n", MarkdownHtml.render("first\nsecond", config, xhtml = false))
-        assertEquals("<p>first second</p>\n", MarkdownHtml.render("first\nsecond", config, softBreak = " "))
+        assertEquals("<p>first<br />\nsecond</p>\n", MarkdownHtml.render("first\nsecond", softBreakPolicy = policy))
+        assertEquals("<p>first<br>\nsecond</p>\n", MarkdownHtml.render("first\nsecond", softBreakPolicy = policy, xhtml = false))
+        assertEquals("<p>first second</p>\n", MarkdownHtml.render("first\nsecond", softBreakPolicy = policy, softBreak = " "))
     }
 
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun should_keep_streaming_parser_snapshot_when_only_display_policy_changes() = runComposeUiTest {
-        var config by mutableStateOf(MarkdownConfig.Default)
+        var policy by mutableStateOf(MarkdownSoftBreakPolicy.Space)
         var document: Document? = null
         setContent {
-            val snapshot = rememberStreamingDocument("first\nsecond", true, config)
+            val snapshot = rememberStreamingDocument("first\nsecond", true)
+            androidx.compose.foundation.text.BasicText(policy.name)
             SideEffect { document = snapshot?.document }
         }
         waitForIdle()
         val original = document
         assertTrue(original != null)
-        runOnIdle { config = config.copy(softBreakPolicy = MarkdownSoftBreakPolicy.LineBreak) }
+        runOnIdle { policy = MarkdownSoftBreakPolicy.LineBreak }
         waitForIdle()
         assertSame(original, document)
     }

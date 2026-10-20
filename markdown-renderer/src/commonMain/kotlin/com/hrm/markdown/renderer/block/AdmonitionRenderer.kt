@@ -15,8 +15,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hrm.markdown.parser.ast.Admonition
-import com.hrm.markdown.renderer.AdmonitionStyle
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
+import com.hrm.markdown.renderer.LocalMarkdownComponents
 import com.hrm.markdown.renderer.MarkdownBlockChildren
 import com.hrm.markdown.renderer.internal.core.model.AdmonitionBlockModel
 import com.hrm.markdown.renderer.internal.layout.LayoutTokens
@@ -72,9 +72,9 @@ private fun RenderAdmonitionContainer(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val theme = LocalMarkdownTheme.current
-    val style = theme.admonitionStyles[type.uppercase()]
-        ?: theme.admonitionStyles["NOTE"]
+    val theme = LocalMarkdownStyle.current
+    val style = theme.colors.admonitions[type.uppercase()]
+        ?: theme.colors.admonitions["NOTE"]
         ?: return
 
     Column(
@@ -100,7 +100,7 @@ private fun RenderAdmonitionContainer(
         // 标题行
         Row {
             Text(
-                text = style.iconText,
+                text = LocalMarkdownComponents.current.admonitionIcons[type.uppercase()] ?: "ℹ️",
                 modifier = Modifier.padding(end = 8.dp),
             )
             Text(

@@ -3,7 +3,7 @@ package com.hrm.markdown.renderer.inline
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.internal.core.model.SpanMark
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -20,7 +20,7 @@ class InlineHtmlStyleTest {
                     "style" to "color:red",
                 ),
             ),
-            theme = MarkdownTheme(),
+            theme = ResolvedMarkdownStyle(),
         )
 
         assertEquals(Color.Red, style.color)

@@ -2,6 +2,7 @@ package com.hrm.markdown.renderer
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.geometry.Rect
+import com.hrm.codehigh.ast.CodeToken
 
 /** Typed host actions. Replacing handlers does not reparse or remeasure Markdown. */
 @Immutable
@@ -9,6 +10,8 @@ data class MarkdownInteractions(
     val onLinkClick: ((String) -> Unit)? = null,
     val onCitationClick: ((MarkdownCitationClickEvent) -> Unit)? = null,
     val onImageClick: ((MarkdownImageClickEvent) -> Unit)? = null,
+    /** Matches codehigh's callback. Token ranges are relative to the containing code block. */
+    val onCodeTokenClick: ((CodeToken) -> Unit)? = null,
 ) {
     companion object {
         val Default = MarkdownInteractions()

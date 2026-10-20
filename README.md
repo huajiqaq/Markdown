@@ -97,8 +97,6 @@ dependencies {
 
 ```kotlin
 import com.hrm.markdown.renderer.Markdown
-import com.hrm.markdown.renderer.MarkdownTheme
-import com.hrm.codehigh.theme.OneDarkProTheme
 
 @Composable
 fun MyScreen() {
@@ -116,38 +114,32 @@ fun MyScreen() {
             ```
         """.trimIndent(),
         modifier = Modifier.fillMaxSize(),
-        theme = MarkdownTheme.auto(), // Follows system light/dark mode
-        codeTheme = OneDarkProTheme,  // Optional: pass a codehigh theme directly
     )
 }
 ```
 
 That's it — **3 lines** to render beautiful Markdown across all platforms.
 
-### LaTeX Configuration
+### LaTeX configuration
 
-Pass the complete LaTeX 1.6.1 configuration through `MarkdownConfig.latexConfig`. Inline and block formulas share it for measurement and rendering:
+Pass the native `LatexConfig` directly. Inline and block formulas share its fonts, theme, callbacks, and measurements.
 
 ```kotlin
-import androidx.compose.ui.unit.sp
 import com.hrm.latex.renderer.model.LatexConfig
 import com.hrm.latex.renderer.model.LatexTheme
-import com.hrm.markdown.renderer.MarkdownConfig
 
 Markdown(
-    markdown = "Inline math \$E = mc^2\$.\n\n\$\$\nE = mc^2\n\$\$",
-    config = MarkdownConfig(
-        latexConfig = LatexConfig(
-            fontSize = 24.sp,
-            theme = LatexTheme.material3(),
-            accessibilityEnabled = true,
-            onHyperlinkClick = { url -> /* Handle links inside formulas */ },
-        ),
+    markdown = text,
+    latexConfig = LatexConfig(
+        fontSize = 24.sp,
+        theme = LatexTheme.material3(),
+        accessibilityEnabled = true,
+        onHyperlinkClick = { url -> /* host navigation */ },
     ),
 )
 ```
 
-`MarkdownTheme` no longer configures formulas. Migrate `mathFontSize`, `latexTheme`, and `mathBlockBackground` to `LatexConfig.fontSize`, `LatexConfig.theme`, and its background color, respectively. Markdown's light/dark and Material 3 themes do not override formula settings. The default is `LatexConfig()` (20.sp, system light/dark mode, transparent background); block formulas no longer apply an extra 1.2× size multiplier.
+The default is `LatexConfig()` (20.sp, system light/dark, transparent background). Markdown colors do not override it.
 
 **We recommend keeping the bundled KaTeX fonts**: system fonts may have missing glyphs or layout differences.
 If you need to omit the font resources, exclude `latex-fonts-katex`. The default configuration safely falls back to system fonts without crashing when fonts are missing:
@@ -259,7 +251,7 @@ LaunchedEffect(Unit) {
 Markdown(
     markdown = text,
     isStreaming = isStreaming,
-    config = MarkdownConfig.LlmStreaming, // 16-char parser coalescing + frame-coalesced UI commits
+    parserConfig = MarkdownParserConfig.LlmStreaming, // 16-char parser coalescing + frame-coalesced UI commits
 )
 ```
 
@@ -289,7 +281,7 @@ import androidx.compose.ui.unit.dp
 import com.hrm.markdown.renderer.Markdown
 import com.hrm.markdown.renderer.MarkdownBlockSlot
 import com.hrm.markdown.renderer.MarkdownComponents
-import com.hrm.markdown.renderer.MarkdownConfig
+import com.hrm.markdown.renderer.MarkdownParserConfig
 import com.hrm.markdown.renderer.MarkdownInteractions
 import com.hrm.markdown.renderer.MarkdownSoftBreakPolicy
 
@@ -304,7 +296,7 @@ Markdown(
             // gallery.images[gallery.initialIndex] is the clicked occurrence.
         },
     ),
-    config = MarkdownConfig(softBreakPolicy = MarkdownSoftBreakPolicy.LineBreak),
+    softBreakPolicy = MarkdownSoftBreakPolicy.LineBreak,
     components = MarkdownComponents(
         codeBlockHeader = MarkdownBlockSlot(48.dp) { code ->
             TextButton(onClick = { runCode(code.code, code.language) }) { Text("Run") }
@@ -316,68 +308,76 @@ Markdown(
 )
 ```
 
-`runCode` above is a host application action. Image loading still uses Coil by default; `components.image` can replace it, and both custom images and figures share the image action. The host owns the preview UI and reference data. Coordinates are optional window-space pixels. Occurrence IDs distinguish repeated URLs within one rendered document and are not persistent storage IDs. `event.gallery` is a lazy snapshot of all document images, including offscreen content; it preserves the clicked revision when streaming continues.
+The host implements `runCode`. Images use Coil by default; customize them with `components.image`. `event.gallery` provides the document image gallery.
 
-Callbacks bind after layout, so replacing an action does not reparse or remeasure the document. Slots reserve their explicit, finite, non-negative height before layout; keep their content inside that height, including at increased font scales. Toolbars remain outside horizontal scrolling, and their text is excluded from Markdown copy. Both slots are additive; existing code titles, syntax highlighting and table layout remain active. `MarkdownTableInfo.rowCount` includes the header row.
+Keep slot content within its declared height; toolbar text is excluded from Markdown copy. `MarkdownTableInfo.rowCount` includes the header row.
 
-For content with a height limit, use Markdown's default internal scrolling. When an outer `Column` provides `verticalScroll`, set `enableScroll = false` so Markdown measures its complete content and the outer viewport handles vertical scrolling.
+Set `enableScroll = false` when a parent container handles vertical scrolling.
 
-Soft breaks default to `Space`; `LineBreak` changes display and copy without mutating the AST or restarting a streaming parser. Hard breaks are unaffected. `MarkdownHtml.render(markdown, config = ...)` applies the same policy; an explicit `softBreak` string overrides it. The AST export overload accepts `softBreakPolicy` directly. Component chrome and action callbacks do not change HTML export.
+Soft breaks default to `Space`. Use `LineBreak` to preserve line breaks in display and copy. HTML export also accepts `softBreakPolicy`.
 
 ---
 
-## 🎨 Theming
+## 🎨 Colors, typography, layout, and state
+
+All settings are optional. `Markdown(markdown = text)` follows system colors. Native Markdown settings have three independent groups; code, LaTeX, and diagrams retain their native configuration types.
 
 ```kotlin
-// Built-in themes
-Markdown(markdown = text, theme = MarkdownTheme.light())  // GitHub Light
-Markdown(markdown = text, theme = MarkdownTheme.dark())   // GitHub Dark
-Markdown(markdown = text, theme = MarkdownTheme.auto())   // Auto-detect
+import androidx.compose.foundation.layout.PaddingValues
+import com.hrm.codehigh.renderer.CodeDefaults
+import com.hrm.codehigh.renderer.CodeTypography
+import com.hrm.codehigh.renderer.CodeLayout
 
-// Full customization (30+ properties)
 Markdown(
     markdown = text,
-    theme = MarkdownTheme(
-        headingStyles = listOf(
-            TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold),
-            // h2 ~ h6 ...
-        ),
-        bodyStyle = TextStyle(fontSize = 16.sp),
-        codeBlockBackground = Color(0xFFF5F5F5),
-        // ...and much more
+    colors = MarkdownDefaults.colors(link = Color(0xFF0969DA)),
+    typography = MarkdownTypography(
+        h1 = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold),
+        text = TextStyle(fontSize = 16.sp, lineHeight = 28.sp),
     ),
-    interactions = MarkdownInteractions(onLinkClick = { url -> /* handle click */ }),
+    layout = MarkdownLayout(blockSpacing = 12.dp),
+    codeColors = CodeDefaults.oneDarkProColors(),
+    codeTypography = CodeTypography(
+        text = TextStyle(fontSize = 18.sp, lineHeight = 28.sp),
+        inlineCode = TextStyle(fontSize = 15.sp),
+    ),
+    codeLayout = CodeLayout(contentPadding = PaddingValues(16.dp)),
+    interactions = MarkdownInteractions(
+        onLinkClick = { url -> /* host navigation */ },
+        onCodeTokenClick = { token -> /* codehigh CodeToken */ },
+    ),
 )
 ```
 
-Code highlighting and code block/inline code theming are provided by the `codehigh` library. `markdown-renderer` no longer bundles its own regex-based highlighter.
+Choose palettes with `MarkdownDefaults.lightColors()`, `darkColors()`, or `material3Colors()`. `ProvideMarkdownDefaults` sets app defaults; instance arguments take precedence.
+
+Code settings reuse codehigh's `CodeColors`, `CodeTypography`, and `CodeLayout`, so the same configuration works with both Markdown and `CodeBlock`.
+
+| Purpose | Parameter |
+|---|---|
+| Source parsing: flavour, emoji, lint, append coalescing | `parserConfig = MarkdownParserConfig(...)` |
+| Soft breaks and heading numbering | `softBreakPolicy`, `enableHeadingNumbering` |
+| Internal scroll and selection | `enableScroll`, `enableSelection` |
+| Streaming lifecycle | `isStreaming` |
+| Link, citation, image, and code-token handlers | `interactions = MarkdownInteractions(...)` |
+| Header/footer, image renderer, code/table chrome, admonition icons | `components = MarkdownComponents(...)` |
+| Code appearance (native codehigh types) | `codeColors`, `codeTypography`, `codeLayout` |
+| LaTeX and diagram settings | `latexConfig`, `diagramTheme` |
+| Directive extensions | `directivePlugins` |
+
+`onCodeTokenClick` receives codehigh's `CodeToken`; its `range` is relative to the containing code block.
 
 ```kotlin
-import com.hrm.codehigh.theme.DraculaProTheme
-import com.hrm.codehigh.theme.LocalCodeTheme
-import com.hrm.codehigh.theme.OneDarkProTheme
-
-// Option 1: Pass codehigh theme per Markdown call
-Markdown(
-    markdown = text,
-    theme = MarkdownTheme.auto(),
-    codeTheme = OneDarkProTheme,
-)
-
-// Option 2: Provide a default codehigh theme globally via CompositionLocal
-CompositionLocalProvider(
-    LocalCodeTheme provides DraculaProTheme
-) {
-    Markdown(
-        markdown = text,
-        theme = MarkdownTheme.auto(),
-    )
-}
+val state = rememberMarkdownState()
+val scope = rememberCoroutineScope()
+Button(onClick = { scope.launch { state.scrollToBlock(10) } }) { Text("Jump") }
+Markdown(markdown = text, state = state, components = MarkdownComponents(
+    header = { Text("Introduction") },
+    footer = { Text("End") },
+))
 ```
 
-- `theme` controls general Markdown UI (headings, body, tables, quotes, math, etc.)
-- `codeTheme` controls code highlighting and styling for code blocks and inline code
-- If `codeTheme` is not provided, the default from `codehigh` is used
+Use `rememberMarkdownState()` to control scrolling and clear selection. Block indexes exclude header/footer.
 
 ---
 

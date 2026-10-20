@@ -1,5 +1,7 @@
 package com.hrm.markdown.preview
 
+import com.hrm.markdown.renderer.MarkdownComponents
+
 import com.hrm.markdown.renderer.Markdown
 import androidx.compose.material3.Text
 
@@ -42,7 +44,7 @@ internal val extendedPreviewGroups = listOf(
 这是一段带有脚注的文本[^1]。
 
 [^1]: 这是脚注的内容。
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -59,8 +61,7 @@ internal val extendedPreviewGroups = listOf(
                 content = {
                     Markdown(
                         markdown = footnoteJumpLipsumMarkdown,
-                        header = { Text("AAA (header slot)") },
-                        footer = { Text("CCC (footer slot)") },
+                        components = MarkdownComponents(header = { Text("AAA (header slot)") }, footer = { Text("CCC (footer slot)") }),
                     )
                 }
             ),
@@ -84,7 +85,7 @@ Compose Multiplatform
 : JetBrains 的跨平台 UI 框架。
 
   支持 Android、iOS、Desktop、Web 多平台开发。
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -106,7 +107,7 @@ Compose Multiplatform
 
   - 声明式 UI
   - 跨平台复用
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -169,7 +170,7 @@ Compose Multiplatform
 *[CSS]: Cascading Style Sheets
 
 HTML 和 CSS 是 Web 开发的基础技术。HTML 定义页面结构，CSS 负责样式。
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -193,7 +194,7 @@ HTML 和 CSS 是 Web 开发的基础技术。HTML 定义页面结构，CSS 负�
 - 项目一
 - 项目二
 :::
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -206,7 +207,7 @@ HTML 和 CSS 是 Web 开发的基础技术。HTML 定义页面结构，CSS 负�
 ::: warning
 未指定标题时，容器类型名作为默认标题显示。
 :::
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -221,7 +222,7 @@ HTML 和 CSS 是 Web 开发的基础技术。HTML 定义页面结构，CSS 负�
 容器支持**嵌套**，外层使用更多冒号（`::::`）。
 :::
 ::::
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -243,7 +244,7 @@ HTML 和 CSS 是 Web 开发的基础技术。HTML 定义页面结构，CSS 负�
 ---
 
 下面的内容
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -275,7 +276,7 @@ HTML 和 CSS 是 Web 开发的基础技术。HTML 定义页面结构，CSS 负�
 
 > 引用块也可以放在列中。
 :::
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -299,7 +300,7 @@ HTML 和 CSS 是 Web 开发的基础技术。HTML 定义页面结构，CSS 负�
 
 最后一列。
 :::
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -328,7 +329,7 @@ HTML 和 CSS 是 Web 开发的基础技术。HTML 定义页面结构，CSS 负�
 #### 四级标题（不会出现在目录中）
 
 ## 另一个二级标题
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -353,7 +354,7 @@ HTML 和 CSS 是 Web 开发的基础技术。HTML 定义页面结构，CSS 负�
 ### 快速开始
 
 # 参考
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -407,7 +408,7 @@ HTML 和 CSS 是 Web 开发的基础技术。HTML 定义页面结构，CSS 负�
 # 第二页内容
 
 这是第二页的内容。
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -431,7 +432,7 @@ HTML 和 CSS 是 Web 开发的基础技术。HTML 定义页面结构，CSS 负�
 {.subtitle data-section="intro"}
 
 普通段落跟在后面。
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -445,7 +446,7 @@ HTML 和 CSS 是 Web 开发的基础技术。HTML 定义页面结构，CSS 负�
 {.highlight style="background:yellow"}
 
 这是普通段落，没有属性。
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -469,7 +470,7 @@ HTML 和 CSS 是 Web 开发的基础技术。HTML 定义页面结构，CSS 负�
 |-----|-----|
 | 1   | 2   |
 {.striped-table #data-table}
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -492,7 +493,7 @@ HTML 和 CSS 是 Web 开发的基础技术。HTML 定义页面结构，CSS 负�
 
 [^bibliography]: smith2020: Smith, J. "Modern Programming Languages". Tech Press, 2020
 jones2021: Jones, A. "Kotlin in Practice". Developer Publishing, 2021
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -508,7 +509,7 @@ Compose Multiplatform[@compose2023] 基于 Jetpack Compose[@jetpack2022] 构建�
 [^bibliography]: compose2023: JetBrains. "Compose Multiplatform Guide". 2023
 jetpack2022: Google. "Jetpack Compose Documentation". 2022
 kmp2024: JetBrains. "Kotlin Multiplatform Handbook". 2024
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -544,7 +545,7 @@ kmp2024: JetBrains. "Kotlin Multiplatform Handbook". 2024
         print("Hello, World!")
     }
     ```
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -577,7 +578,7 @@ kmp2024: JetBrains. "Kotlin Multiplatform Handbook". 2024
     ```
 
     > 支持 Android、iOS、Desktop、Web 四大平台。
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -593,7 +594,7 @@ kmp2024: JetBrains. "Kotlin Multiplatform Handbook". 2024
                 title = "基础剧透文本",
                 content = {
                     Markdown(
-                        markdown = "这部电影的结局是 >!主角最终拯救了世界!<，非常精彩。"
+                        markdown = "这部电影的结局是 >!主角最终拯救了世界!<，非常精彩。",
                     )
                 }
             ),
@@ -608,7 +609,7 @@ kmp2024: JetBrains. "Kotlin Multiplatform Handbook". 2024
 - 第一章：>!主角发现了一个神秘的入口!<
 - 第二章：>!与反派展开了激烈的对决!<
 - 结局：>!一切回归平静，但留下了悬念!<
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),

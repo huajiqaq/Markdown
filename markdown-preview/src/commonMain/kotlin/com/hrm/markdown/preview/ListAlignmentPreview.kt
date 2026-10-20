@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrm.markdown.renderer.Markdown
 import com.hrm.markdown.renderer.MarkdownComponents
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.MarkdownTypography
 
 private val listAlignmentMarkdown = """
 ## 任务框与正文间隔 8 dp
@@ -97,7 +97,7 @@ internal val listAlignmentPreviewGroup = PreviewGroup(
 private fun ListAlignmentPreview() {
     var width by remember { mutableStateOf(280.dp) }
     var fontSize by remember { mutableStateOf(16.sp) }
-    val theme = MarkdownTheme.auto()
+    val typography = MarkdownTypography()
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = "任务框与正文间隔 8 dp。切换宽度与字号，检查首行对齐、换行与嵌套。默认缩进仍为 24 dp。",
@@ -125,7 +125,7 @@ private fun ListAlignmentPreview() {
             Markdown(
                 markdown = listAlignmentMarkdown,
                 modifier = Modifier.fillMaxSize(),
-                theme = theme.copy(bodyStyle = theme.bodyStyle.copy(fontSize = fontSize, lineHeight = fontSize * 1.5f)),
+                typography = typography.copy(text = typography.text.copy(fontSize = fontSize, lineHeight = fontSize * 1.5f)),
                 components = MarkdownComponents(image = { data, modifier ->
                     Box(
                         modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.primaryContainer),

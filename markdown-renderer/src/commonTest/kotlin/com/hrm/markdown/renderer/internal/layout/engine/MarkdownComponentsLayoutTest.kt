@@ -1,5 +1,7 @@
 package com.hrm.markdown.renderer.internal.layout.engine
 
+import com.hrm.markdown.renderer.MarkdownComponents
+
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -31,7 +33,7 @@ class MarkdownComponentsLayoutTest {
             val latexMeasurer = rememberLatexMeasurer()
             val host = remember { MarkdownEngineHost() }
             val facade = remember {
-                RendererFacadeState(MarkdownTheme(), MarkdownConfig.Default, null, MarkdownDirectiveRegistry.Empty, false)
+                RendererFacadeState(ResolvedMarkdownStyle(), MarkdownRenderOptions.Default, MarkdownDirectiveRegistry.Empty, false)
             }
             val document = remember {
                 host.compile(MarkdownParser().parse("""

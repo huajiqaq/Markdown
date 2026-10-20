@@ -30,7 +30,7 @@ import com.hrm.markdown.parser.ast.HtmlBlock
 import com.hrm.markdown.parser.ast.Paragraph
 import com.hrm.markdown.parser.ast.Node
 import com.hrm.markdown.renderer.LocalFootnoteNavigationState
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.LocalOnFootnoteBackClick
 import com.hrm.markdown.renderer.MarkdownBlockChildren
 import com.hrm.markdown.renderer.inline.InlineLayoutBlockText
@@ -77,7 +77,7 @@ internal fun RenderHtmlBlockModel(
     model: HtmlBlockModel,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     Text(
         text = model.html.trimEnd('\n'),
         modifier = modifier.fillMaxWidth(),
@@ -93,7 +93,7 @@ internal fun DefinitionListRenderer(
     node: DefinitionList,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(LayoutTokens.DefinitionSpacing),
@@ -127,7 +127,7 @@ internal fun RenderDefinitionListBlockModel(
     renderChildren: @Composable (List<InternalRenderBlockModel>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(LayoutTokens.DefinitionSpacing),
@@ -144,7 +144,7 @@ internal fun RenderDefinitionListBlockModel(
                 is DefinitionDescriptionBlockModel -> {
                     Column(
                         modifier = Modifier.padding(start = LayoutTokens.DefinitionIndent),
-                        verticalArrangement = Arrangement.spacedBy(theme.blockSpacing),
+                        verticalArrangement = Arrangement.spacedBy(theme.layout.blockSpacing),
                     ) {
                         renderChildren(item.children)
                     }
@@ -161,7 +161,7 @@ internal fun RenderDefinitionListLayoutBlockModel(
     renderChildren: @Composable (List<InternalLayoutBlockModel>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(LayoutTokens.DefinitionSpacing),
@@ -175,7 +175,7 @@ internal fun RenderDefinitionListLayoutBlockModel(
                 is LayoutDefinitionDescriptionGroup -> {
                     Column(
                         modifier = Modifier.padding(start = LayoutTokens.DefinitionIndent),
-                        verticalArrangement = Arrangement.spacedBy(theme.blockSpacing),
+                        verticalArrangement = Arrangement.spacedBy(theme.layout.blockSpacing),
                     ) {
                         renderChildren(item.children)
                     }
@@ -190,7 +190,7 @@ internal fun RenderTocLayoutBlockModel(
     model: LayoutTocBlockModel,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     val onLinkClick = com.hrm.markdown.renderer.LocalOnLinkClick.current
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -213,7 +213,7 @@ internal fun RenderTocLayoutBlockModel(
                         }
                     ),
                 style = theme.bodyStyle,
-                color = theme.linkColor,
+                color = theme.colors.link,
             )
         }
     }
@@ -252,10 +252,10 @@ internal fun FootnoteDefinitionRenderer(
         },
         renderTrailingContent = {
             if (contentBlocks.size > 1) {
-            val theme = LocalMarkdownTheme.current
+            val theme = LocalMarkdownStyle.current
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(theme.blockSpacing),
+                verticalArrangement = Arrangement.spacedBy(theme.layout.blockSpacing),
             ) {
                 for (child in contentBlocks.drop(1)) {
                     key(child::class, child.stableKey) {
@@ -275,7 +275,7 @@ internal fun RenderFootnoteDefinitionBlockModel(
     renderLeadContent: @Composable () -> Unit,
     renderTrailingContent: @Composable () -> Unit,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     val footnoteNavigationState = LocalFootnoteNavigationState.current
     val onFootnoteBackClick = LocalOnFootnoteBackClick.current
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
@@ -301,10 +301,7 @@ internal fun RenderFootnoteDefinitionBlockModel(
             Text(
                 text = "[${model.index}]",
                 modifier = Modifier.alignByBaseline(),
-                style = theme.bodyStyle.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = theme.footnoteStyle.fontSize,
-                ),
+                style = theme.bodyStyle.copy(fontWeight = FontWeight.SemiBold).merge(theme.footnoteStyle),
             )
             Text(
                 text = "↩",
@@ -317,10 +314,7 @@ internal fun RenderFootnoteDefinitionBlockModel(
                             Modifier
                         }
                     ),
-                style = theme.bodyStyle.copy(
-                    color = theme.linkColor,
-                    fontSize = theme.footnoteStyle.fontSize,
-                ),
+                style = theme.bodyStyle.merge(theme.footnoteStyle),
             )
             Box(
                 modifier = Modifier

@@ -27,10 +27,10 @@ import kotlinx.coroutines.withContext
 internal fun rememberStreamingDocument(
     markdown: String,
     isStreaming: Boolean,
-    config: MarkdownConfig = MarkdownConfig.Default,
+    parserConfig: MarkdownParserConfig = MarkdownParserConfig.Default,
     runtimePipeline: MarkdownDirectivePipeline = remember { MarkdownDirectivePipeline(MarkdownDirectiveRegistry.Empty) },
 ): StreamingMarkdownSnapshot? {
-    val parserOptions = config.parserOptions()
+    val parserOptions = parserConfig.parserOptions()
     val parser = remember(parserOptions) { parserOptions.newParser() }
     var snapshotState by remember(parser, runtimePipeline) {
         mutableStateOf(StreamingMarkdownState())
@@ -96,7 +96,7 @@ internal data class MarkdownParserOptions(
     )
 }
 
-internal fun MarkdownConfig.parserOptions() = MarkdownParserOptions(
+internal fun MarkdownParserConfig.parserOptions() = MarkdownParserOptions(
     flavour, customEmojiMap.toMap(), enableAsciiEmoticons, enableLinting, appendCoalesceThreshold,
 )
 

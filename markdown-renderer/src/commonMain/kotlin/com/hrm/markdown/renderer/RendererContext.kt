@@ -8,7 +8,6 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import com.hrm.codehigh.theme.CodeTheme
 import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 
@@ -36,10 +35,9 @@ internal val LocalRendererDocument = compositionLocalOf { Document() }
 /**
  * Markdown 渲染配置，通过 CompositionLocal 传递。
  */
-internal val LocalMarkdownConfig = compositionLocalOf { MarkdownConfig.Default }
+internal val LocalMarkdownRenderOptions = compositionLocalOf { MarkdownRenderOptions.Default }
 internal val LocalFootnoteNavigationState = compositionLocalOf<FootnoteNavigationState?> { null }
 
-internal val LocalCodeHighlightTheme = compositionLocalOf<CodeTheme?> { null }
 internal val LocalIsStreaming = compositionLocalOf { false }
 internal val LocalMarkdownDirectiveRegistry = compositionLocalOf { MarkdownDirectiveRegistry.Empty }
 internal val LocalDiagramHostRegistry = compositionLocalOf { DiagramHostRegistry() }
@@ -104,8 +102,7 @@ internal fun ProvideRendererContext(
     onFootnoteBackClick: ((String) -> Unit)? = null,
     footnoteNavigationState: FootnoteNavigationState? = null,
     imageContent: MarkdownImageRenderer? = null,
-    config: MarkdownConfig = MarkdownConfig.Default,
-    codeTheme: CodeTheme? = null,
+    config: MarkdownRenderOptions = MarkdownRenderOptions.Default,
     isStreaming: Boolean = false,
     directiveRegistry: MarkdownDirectiveRegistry = MarkdownDirectiveRegistry.Empty,
     diagramHostRegistry: DiagramHostRegistry = remember { DiagramHostRegistry() },
@@ -140,9 +137,8 @@ internal fun ProvideRendererContext(
         LocalOnFootnoteBackClick provides stableOnFootnoteBackClick,
         LocalRendererDocument provides document,
         LocalImageRenderer provides imageContent,
-        LocalMarkdownConfig provides config,
+        LocalMarkdownRenderOptions provides config,
         LocalFootnoteNavigationState provides footnoteNavigationState,
-        LocalCodeHighlightTheme provides codeTheme,
         LocalIsStreaming provides isStreaming,
         LocalMarkdownDirectiveRegistry provides directiveRegistry,
         LocalDiagramHostRegistry provides diagramHostRegistry,

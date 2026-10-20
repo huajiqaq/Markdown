@@ -15,7 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrm.markdown.parser.ast.DirectiveBlock
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.MarkdownBlockChildren
 import com.hrm.markdown.renderer.internal.layout.LayoutTokens
 
@@ -63,12 +63,12 @@ private fun RenderDirectiveFallbackBlock(
     modifier: Modifier = Modifier,
     renderChildren: (@Composable () -> Unit)? = null,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     val shape = RoundedCornerShape(8.dp)
-    val borderColor = theme.blockQuoteBorderColor
-    val backgroundColor = theme.codeBlockBackground
-    val tagColor = theme.linkColor
-    val argsColor = theme.blockQuoteTextColor
+    val borderColor = theme.colors.blockQuoteBorder
+    val backgroundColor = theme.colors.containerBackground
+    val tagColor = theme.colors.link
+    val argsColor = theme.colors.blockQuoteText
 
     Column(
         modifier = modifier

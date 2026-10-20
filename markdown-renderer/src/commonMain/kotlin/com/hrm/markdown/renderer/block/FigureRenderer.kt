@@ -13,7 +13,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrm.markdown.parser.ast.Figure
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.MarkdownImageData
 import com.hrm.markdown.renderer.internal.compose.RenderInteractiveMarkdownImage
 import com.hrm.markdown.renderer.internal.core.identity.RenderIdentity
@@ -54,7 +54,7 @@ internal fun RenderFigureBlockModel(
     model: FigureBlockModel,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -81,7 +81,7 @@ internal fun RenderFigureBlockModel(
                     fontStyle = FontStyle.Italic,
                     fontSize = theme.bodyStyle.fontSize * 0.875f,
                     textAlign = TextAlign.Center,
-                    color = theme.blockQuoteTextColor,
+                    color = theme.colors.blockQuoteText,
                 ),
                 modifier = Modifier.padding(
                     top = LayoutTokens.FigureCaptionSpacing,

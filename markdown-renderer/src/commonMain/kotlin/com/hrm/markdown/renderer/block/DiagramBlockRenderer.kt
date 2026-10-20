@@ -22,7 +22,7 @@ import com.hrm.markdown.renderer.DiagramHostRoute
 import com.hrm.markdown.renderer.LocalDiagramHostRegistry
 import com.hrm.markdown.renderer.LocalIsStreaming
 import com.hrm.markdown.parser.ast.DiagramBlock
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.diagram.DiagramFallback
 import com.hrm.markdown.renderer.internal.core.identity.renderIdentityFromText
 import com.hrm.markdown.renderer.internal.core.identity.renderIdentityFromValues
@@ -64,7 +64,7 @@ internal fun RenderDiagramBlockWidgetModel(
     model: DiagramBlockWidgetModel,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     val isStreaming = LocalIsStreaming.current
     val hostRegistry = LocalDiagramHostRegistry.current
     val density = LocalDensity.current
@@ -97,9 +97,9 @@ internal fun RenderDiagramBlockWidgetModel(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(theme.codeBlockCornerRadius))
+            .clip(RoundedCornerShape(theme.layout.blockCornerRadius))
             .background(diagramBackground)
-            .padding(theme.codeBlockPadding),
+            .padding(theme.layout.blockPadding),
     ) {
         when (route) {
             DiagramHostRoute.Diagram -> {

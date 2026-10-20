@@ -3,7 +3,7 @@ package com.hrm.markdown.preview
 import com.hrm.markdown.parser.flavour.CommonMarkFlavour
 import com.hrm.markdown.parser.flavour.GFMFlavour
 import com.hrm.markdown.renderer.Markdown
-import com.hrm.markdown.renderer.MarkdownConfig
+import com.hrm.markdown.renderer.MarkdownParserConfig
 
 /**
  * Flavour 配置预览 — 展示不同方言对同一 Markdown 文本的解析差异。
@@ -29,7 +29,7 @@ internal val flavourConfigPreviewGroups = listOf(
                 content = {
                     Markdown(
                         markdown = flavourComparisonMarkdown,
-                        config = MarkdownConfig(flavour = GFMFlavour),
+                        parserConfig = MarkdownParserConfig(flavour = GFMFlavour),
                     )
                 }
             ),
@@ -39,7 +39,7 @@ internal val flavourConfigPreviewGroups = listOf(
                 content = {
                     Markdown(
                         markdown = flavourComparisonMarkdown,
-                        config = MarkdownConfig(flavour = CommonMarkFlavour),
+                        parserConfig = MarkdownParserConfig(flavour = CommonMarkFlavour),
                     )
                 }
             ),
@@ -65,7 +65,7 @@ internal val flavourConfigPreviewGroups = listOf(
                 content = {
                     Markdown(
                         markdown = mathMarkdown,
-                        config = MarkdownConfig(flavour = GFMFlavour),
+                        parserConfig = MarkdownParserConfig(flavour = GFMFlavour),
                     )
                 }
             ),
@@ -74,7 +74,7 @@ internal val flavourConfigPreviewGroups = listOf(
     PreviewGroup(
         id = "custom_emoji",
         title = "自定义 Emoji",
-        description = "通过 MarkdownConfig 配置自定义 Emoji 别名",
+        description = "通过 MarkdownParserConfig 配置自定义 Emoji 别名",
         items = listOf(
             PreviewItem(
                 id = "custom_emoji_map",
@@ -84,11 +84,9 @@ internal val flavourConfigPreviewGroups = listOf(
                         markdown = """
                             自定义 Emoji 测试 :rocket: :star: :custom:
                         """.trimIndent(),
-                        config = MarkdownConfig(
-                            customEmojiMap = mapOf(
+                        parserConfig = MarkdownParserConfig(customEmojiMap = mapOf(
                                 "custom" to "\uD83C\uDF89",
-                            ),
-                        ),
+                            )),
                     )
                 }
             ),

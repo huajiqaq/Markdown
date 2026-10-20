@@ -1,5 +1,7 @@
 package com.hrm.markdown.preview
 
+import com.hrm.markdown.renderer.MarkdownComponents
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.hrm.markdown.renderer.Markdown
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.MarkdownDefaults
 
 private val fullDarkThemeMarkdown = """
 # Markdown Dark Theme Showcase
@@ -45,7 +47,7 @@ fun Greeting(name: String) {
 
 | Feature | Status | Note |
 |--------|--------|------|
-| Theme | Done | `MarkdownTheme.dark()` |
+| Theme | Done | `MarkdownDefaults.darkColors()` |
 | Footnote | Done | Jump + back navigation |
 | Slot | Done | Header / footer are in same scroll container |
 
@@ -74,14 +76,14 @@ internal val themePreviewGroups = listOf(
                     ) {
                         Markdown(
                             markdown = fullDarkThemeMarkdown,
-                            theme = MarkdownTheme.dark(),
-                            header = {
+                            colors = MarkdownDefaults.darkColors(),
+                            components = MarkdownComponents(header = {
                                 Text(
                                     text = "Forced Dark Theme",
                                     color = Color(0xFFE6EDF3),
                                     modifier = Modifier.padding(bottom = 8.dp)
                                 )
-                            },
+                            }),
                         )
                     }
                 }

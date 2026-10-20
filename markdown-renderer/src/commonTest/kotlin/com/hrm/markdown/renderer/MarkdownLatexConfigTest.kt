@@ -55,10 +55,10 @@ class MarkdownLatexConfigTest {
 
     @Test
     fun should_share_state_within_document_and_isolate_other_markdown_instances() = runComposeUiTest {
-        val firstConfig = MarkdownConfig(
+        val firstConfig = MarkdownRenderOptions(
             latexConfig = LatexConfig(fontFamilies = systemLatexFontFamilies()),
         )
-        val secondConfig = MarkdownConfig(
+        val secondConfig = MarkdownRenderOptions(
             latexConfig = LatexConfig(fontSize = 32.sp, fontFamilies = systemLatexFontFamilies()),
         )
         val document = MarkdownParser().parse("行内 \$x^2\$\n\n\$\$\nx^2\n\$\$")
@@ -72,30 +72,33 @@ class MarkdownLatexConfigTest {
             Column {
                 Markdown(
                     document = document,
-                    config = firstConfig,
+                    latexConfig = firstConfig.latexConfig,
+                    softBreakPolicy = firstConfig.softBreakPolicy,
+                    enableHeadingNumbering = firstConfig.enableHeadingNumbering,
                     enableScroll = false,
                     enableSelection = false,
-                    header = {
+                    components = MarkdownComponents(header = {
                         val state = LocalMarkdownLatexState.current
                         // 运行时字体解析不应改写对下游公开的原始配置。
-                        assertSame(firstConfig, LocalMarkdownConfig.current)
+                        assertSame(firstConfig.latexConfig, LocalMarkdownLatexState.current.config)
                         SideEffect { headerState = state }
-                    },
-                    footer = {
+                    }, footer = {
                         val state = LocalMarkdownLatexState.current
                         SideEffect { footerState = state }
                         BasicText(tick.toString())
-                    },
+                    }),
                 )
                 Markdown(
                     document = document,
-                    config = secondConfig,
+                    latexConfig = secondConfig.latexConfig,
+                    softBreakPolicy = secondConfig.softBreakPolicy,
+                    enableHeadingNumbering = secondConfig.enableHeadingNumbering,
                     enableScroll = false,
                     enableSelection = false,
-                    header = {
+                    components = MarkdownComponents(header = {
                         val state = LocalMarkdownLatexState.current
                         SideEffect { otherState = state }
-                    },
+                    }),
                 )
             }
             recompose = { tick++ }
@@ -158,15 +161,15 @@ class MarkdownLatexConfigTest {
             val latexConfig = latexState.config
             // 显式字体配置必须完整保留，包括回调、主题和所有渲染选项。
             assertSame(requestedConfig, latexConfig)
-            val config = MarkdownConfig(latexConfig = requestedConfig)
-            val theme = MarkdownTheme.light()
+            val config = MarkdownRenderOptions(latexConfig = requestedConfig)
+            val theme = ResolvedMarkdownStyle()
             val density = LocalDensity.current
             val measurer = latexState.measurer
             val textMeasurer = rememberTextMeasurer()
             val host = remember { MarkdownEngineHost() }
             val document = remember { MarkdownParser().parse("\$$formula\$\n\n\$\$\n$formula\n\$\$") }
             val facade = RendererFacadeState(
-                theme, config, null, MarkdownDirectiveRegistry.Empty, false,
+                theme, config, MarkdownDirectiveRegistry.Empty, false,
             )
             val layout = host.layout(
                 renderDocument = host.compile(document, facade),
@@ -180,7 +183,7 @@ class MarkdownLatexConfigTest {
             val dimensions = assertNotNull(measurer.measure(formula, latexConfig))
             val inline = (layout.blocks[0] as LayoutInlineBlockModel).inlinePayloads.values.single()
             val block = layout.blocks[1] as LayoutWidgetBlockModel
-            val padding = with(density) { theme.codeBlockPadding.toPx() }
+            val padding = with(density) { theme.layout.blockPadding.toPx() }
             assertEquals(dimensions.widthPx, inline.placeholder.widthPx, 0.01f)
             assertEquals(dimensions.heightPx, inline.placeholder.heightPx, 0.01f)
             assertEquals(dimensions.heightPx + 2 * padding, block.measurement.heightPx, 0.01f)

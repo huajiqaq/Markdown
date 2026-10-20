@@ -10,8 +10,8 @@ import androidx.compose.ui.Modifier
 import com.hrm.markdown.parser.ast.Heading
 import com.hrm.markdown.parser.ast.Node
 import com.hrm.markdown.parser.ast.SetextHeading
-import com.hrm.markdown.renderer.LocalMarkdownConfig
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownRenderOptions
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.internal.layout.LayoutTokens
 import com.hrm.markdown.renderer.LocalRendererDocument
 import com.hrm.markdown.renderer.inline.InlineLayoutBlockText
@@ -30,8 +30,8 @@ internal fun HeadingRenderer(
     node: Heading,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
-    val config = LocalMarkdownConfig.current
+    val theme = LocalMarkdownStyle.current
+    val config = LocalMarkdownRenderOptions.current
     val level = (node.level - 1).coerceIn(0, theme.headingStyles.lastIndex)
     val inlineModel = rememberInlineModel(node)
     val numbering = if (config.enableHeadingNumbering) {
@@ -55,8 +55,8 @@ internal fun SetextHeadingRenderer(
     node: SetextHeading,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
-    val config = LocalMarkdownConfig.current
+    val theme = LocalMarkdownStyle.current
+    val config = LocalMarkdownRenderOptions.current
     val level = (node.level - 1).coerceIn(0, theme.headingStyles.lastIndex)
     val inlineModel = rememberInlineModel(node)
     val numbering = if (config.enableHeadingNumbering) {
@@ -80,7 +80,7 @@ internal fun RenderHeadingBlockModel(
     showDivider: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     val style = theme.headingStyles[level.coerceIn(0, theme.headingStyles.lastIndex)]
     val finalModel = remember(inlineModel, numbering) {
         inlineModel.prependHeadingNumbering(numbering)
@@ -96,8 +96,8 @@ internal fun RenderHeadingBlockModel(
         if (showDivider) {
             HorizontalDivider(
                 modifier = Modifier.padding(top = LayoutTokens.HeadingDividerSpacing),
-                thickness = theme.dividerThickness,
-                color = theme.dividerColor,
+                thickness = theme.layout.dividerThickness,
+                color = theme.colors.divider,
             )
         }
     }

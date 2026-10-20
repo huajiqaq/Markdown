@@ -8,7 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import com.hrm.markdown.parser.ast.BlockQuote
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.MarkdownBlockChildren
 import com.hrm.markdown.renderer.internal.core.model.BlockQuoteBlockModel
 
@@ -40,9 +40,9 @@ private fun RenderBlockQuoteContainer(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val theme = LocalMarkdownTheme.current
-    val borderColor = theme.blockQuoteBorderColor
-    val borderWidthPx = theme.blockQuoteBorderWidth
+    val theme = LocalMarkdownStyle.current
+    val borderColor = theme.colors.blockQuoteBorder
+    val borderWidthPx = theme.layout.blockQuoteBorderWidth
 
     Box(
         modifier = modifier
@@ -56,7 +56,7 @@ private fun RenderBlockQuoteContainer(
                     strokeWidth = strokeWidth,
                 )
             }
-            .padding(start = theme.blockQuotePadding + theme.blockQuoteBorderWidth),
+            .padding(start = theme.layout.blockQuotePadding + theme.layout.blockQuoteBorderWidth),
     ) {
         content()
     }

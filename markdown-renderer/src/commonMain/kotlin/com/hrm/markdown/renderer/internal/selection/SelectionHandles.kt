@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import kotlin.math.roundToInt
 
 internal const val SelectionStartHandleDescription = "Markdown selection start handle"
@@ -60,7 +60,7 @@ private fun SelectionHandlePopup(
     } else {
         SelectionEndHandleDescription
     }
-    val color = LocalMarkdownTheme.current.linkColor
+    val color = LocalMarkdownStyle.current.colors.link
 
     Popup(
         alignment = Alignment.TopStart,

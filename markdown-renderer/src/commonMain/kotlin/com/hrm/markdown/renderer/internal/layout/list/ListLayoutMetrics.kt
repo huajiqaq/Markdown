@@ -6,7 +6,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import kotlin.math.ceil
 
 internal val UnorderedListMarkerWidth: Dp = 16.dp
@@ -63,11 +63,11 @@ internal fun listMarkerWidth(
 }
 
 internal fun Density.listItemContentIndentPx(
-    theme: MarkdownTheme,
+    theme: ResolvedMarkdownStyle,
     taskListItem: Boolean,
     ordered: Boolean,
     orderedMarkerWidth: Dp = OrderedListMarkerWidth,
-): Float = theme.listIndent.toPx() + listMarkerWidth(
+): Float = theme.layout.listIndent.toPx() + listMarkerWidth(
     taskListItem = taskListItem,
     ordered = ordered,
     orderedMarkerWidth = orderedMarkerWidth,

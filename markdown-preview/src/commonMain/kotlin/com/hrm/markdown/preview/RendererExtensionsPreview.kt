@@ -1,6 +1,7 @@
 package com.hrm.markdown.preview
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -13,20 +14,64 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.hrm.codehigh.renderer.CodeLayout
+import com.hrm.codehigh.renderer.CodeTypography
 import com.hrm.markdown.renderer.Markdown
 import com.hrm.markdown.renderer.MarkdownBlockSlot
 import com.hrm.markdown.renderer.MarkdownComponents
-import com.hrm.markdown.renderer.MarkdownConfig
+import com.hrm.markdown.renderer.MarkdownDefaults
 import com.hrm.markdown.renderer.MarkdownImageClickEvent
 import com.hrm.markdown.renderer.MarkdownInteractions
 import com.hrm.markdown.renderer.MarkdownSoftBreakPolicy
+import com.hrm.markdown.renderer.MarkdownTypography
 
 internal val rendererExtensionsPreviewGroup = PreviewGroup(
     id = "renderer_extensions",
     title = "交互与标准组件插槽",
     description = "引用来源、图片图集、软换行和代码/表格操作栏",
     items = listOf(
+        PreviewItem("public_api_styles", "颜色、排版与代码尺寸", content = {
+            var large by remember { mutableStateOf(false) }
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Button(onClick = { large = !large }) { Text("切换字号与代码内边距") }
+                Markdown(
+                    markdown = "# 独立样式配置\n\n正文与 `inline code`。\n\n```kotlin {title=\"api.kt\"}\nval answer = 42\nprintln(answer)\n```\n\n| 入口 | 职责 |\n| --- | --- |\n| interactions | 点击回调 |",
+                    colors = MarkdownDefaults.colors(link = androidx.compose.ui.graphics.Color(0xFF0969DA)),
+                    typography = MarkdownTypography(
+                        text = TextStyle(fontSize = 16.sp, lineHeight = 28.sp),
+                    ),
+                    codeTypography = CodeTypography(
+                        text = TextStyle(fontSize = if (large) 24.sp else 14.sp, lineHeight = if (large) 36.sp else 22.sp),
+                        inlineCode = TextStyle(fontSize = if (large) 20.sp else 14.sp),
+                    ),
+                    codeLayout = CodeLayout(contentPadding = PaddingValues(if (large) 20.dp else 8.dp)),
+                    enableScroll = false,
+                )
+            }
+        }),
+        PreviewItem("code_token_actions", "代码 Token 点击与回调更新", content = {
+            var enabled by remember { mutableStateOf(true) }
+            var revision by remember { mutableStateOf(1) }
+            var selected by remember { mutableStateOf<String?>(null) }
+            val label = "回调 $revision"
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Row {
+                    Button(onClick = { enabled = !enabled }) { Text(if (enabled) "关闭 Token 点击" else "启用 Token 点击") }
+                    Button(onClick = { revision++ }) { Text("更新回调") }
+                }
+                Markdown(
+                    markdown = "点击代码中的关键字、变量或数字。\n\n```kotlin\nval answer = 42\nprintln(answer)\n```",
+                    enableScroll = false,
+                    interactions = MarkdownInteractions(onCodeTokenClick = if (enabled) {
+                        { token -> selected = "$label：${token.type} / ${token.text} / ${token.range}" }
+                    } else null),
+                )
+                Text(selected ?: "点击代码 Token 查看类型、内容与块内位置")
+            }
+        }),
         PreviewItem("citation_actions", "引用点击与回调更新", content = {
             var selected by remember { mutableStateOf<String?>(null) }
             var label by remember { mutableStateOf("来源") }
@@ -78,7 +123,7 @@ internal val rendererExtensionsPreviewGroup = PreviewGroup(
                 Button(onClick = { lineBreak = !lineBreak }) { Text(if (lineBreak) "当前：换行" else "当前：空格") }
                 Markdown(
                     markdown = "第一行\n第二行\n**第三行\n第四行**",
-                    config = MarkdownConfig(softBreakPolicy = if (lineBreak) MarkdownSoftBreakPolicy.LineBreak else MarkdownSoftBreakPolicy.Space),
+                    softBreakPolicy = if (lineBreak) MarkdownSoftBreakPolicy.LineBreak else MarkdownSoftBreakPolicy.Space,
                     enableScroll = false,
                 )
             }

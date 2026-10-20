@@ -1,14 +1,12 @@
 package com.hrm.markdown.renderer.internal
 
-import com.hrm.codehigh.theme.CodeTheme
-import com.hrm.markdown.renderer.MarkdownConfig
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.MarkdownRenderOptions
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 
-data class RendererFacadeState(
-    val theme: MarkdownTheme,
-    val config: MarkdownConfig,
-    val codeTheme: CodeTheme?,
+internal data class RendererFacadeState(
+    val theme: ResolvedMarkdownStyle,
+    val config: MarkdownRenderOptions,
     val directiveRegistry: MarkdownDirectiveRegistry,
     val isStreaming: Boolean,
 )

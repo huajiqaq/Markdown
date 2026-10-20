@@ -97,8 +97,6 @@ dependencies {
 
 ```kotlin
 import com.hrm.markdown.renderer.Markdown
-import com.hrm.markdown.renderer.MarkdownTheme
-import com.hrm.codehigh.theme.OneDarkProTheme
 
 @Composable
 fun MyScreen() {
@@ -116,8 +114,6 @@ fun MyScreen() {
             ```
         """.trimIndent(),
         modifier = Modifier.fillMaxSize(),
-        theme = MarkdownTheme.auto(), // 自动跟随系统日夜间模式
-        codeTheme = OneDarkProTheme, // 可选：直接传入 codehigh 主题
     )
 }
 ```
@@ -126,28 +122,24 @@ fun MyScreen() {
 
 ### LaTeX 配置
 
-通过 `MarkdownConfig.latexConfig` 传入完整的 LaTeX 1.6.1 配置，行内和块级公式的测量与绘制共用此配置：
+直接传入原生 `LatexConfig`。行内和块级公式共享字体、主题、回调与测量配置。
 
 ```kotlin
-import androidx.compose.ui.unit.sp
 import com.hrm.latex.renderer.model.LatexConfig
 import com.hrm.latex.renderer.model.LatexTheme
-import com.hrm.markdown.renderer.MarkdownConfig
 
 Markdown(
-    markdown = "行内公式 \$E = mc^2\$。\n\n\$\$\nE = mc^2\n\$\$",
-    config = MarkdownConfig(
-        latexConfig = LatexConfig(
-            fontSize = 24.sp,
-            theme = LatexTheme.material3(),
-            accessibilityEnabled = true,
-            onHyperlinkClick = { url -> /* 处理公式内的链接 */ },
-        ),
+    markdown = text,
+    latexConfig = LatexConfig(
+        fontSize = 24.sp,
+        theme = LatexTheme.material3(),
+        accessibilityEnabled = true,
+        onHyperlinkClick = { url -> /* host navigation */ },
     ),
 )
 ```
 
-`MarkdownTheme` 不再配置公式样式。原来的 `mathFontSize`、`latexTheme`、`mathBlockBackground` 分别迁移至 `LatexConfig.fontSize`、`LatexConfig.theme` 及其背景色；Markdown 的亮暗主题和 Material 3 主题不会覆盖公式配置。默认使用 `LatexConfig()`（20.sp、跟随系统亮暗模式、透明背景），块级公式不再额外放大 1.2 倍。
+默认使用 `LatexConfig()`（20.sp、跟随系统亮暗、透明背景）；Markdown 配色不会覆盖公式配置。
 
 **不建议移除配套的 KaTeX 字体**：系统字体可能出现缺字或排版偏差。
 如果确实不需要携带字体资源，可排除 `latex-fonts-katex` 模块；默认配置会安全回退到系统字体，不会因字体缺失而崩溃：
@@ -257,7 +249,7 @@ LaunchedEffect(Unit) {
 Markdown(
     markdown = text,
     isStreaming = isStreaming,
-    config = MarkdownConfig.LlmStreaming, // 16 字符解析合并 + UI 按显示帧提交
+    parserConfig = MarkdownParserConfig.LlmStreaming, // 16 字符解析合并 + UI 按显示帧提交
 )
 ```
 
@@ -285,7 +277,7 @@ import androidx.compose.ui.unit.dp
 import com.hrm.markdown.renderer.Markdown
 import com.hrm.markdown.renderer.MarkdownBlockSlot
 import com.hrm.markdown.renderer.MarkdownComponents
-import com.hrm.markdown.renderer.MarkdownConfig
+import com.hrm.markdown.renderer.MarkdownParserConfig
 import com.hrm.markdown.renderer.MarkdownInteractions
 import com.hrm.markdown.renderer.MarkdownSoftBreakPolicy
 
@@ -300,7 +292,7 @@ Markdown(
             // gallery.images[gallery.initialIndex] is the clicked occurrence.
         },
     ),
-    config = MarkdownConfig(softBreakPolicy = MarkdownSoftBreakPolicy.LineBreak),
+    softBreakPolicy = MarkdownSoftBreakPolicy.LineBreak,
     components = MarkdownComponents(
         codeBlockHeader = MarkdownBlockSlot(48.dp) { code ->
             TextButton(onClick = { runCode(code.code, code.language) }) { Text("Run") }
@@ -312,68 +304,76 @@ Markdown(
 )
 ```
 
-示例中的 `runCode` 由宿主应用实现。图片默认继续使用 Coil 加载，也可通过 `components.image` 自定义；行内图片、HTML 图片和 Figure 共用点击入口。预览界面与引用来源由业务管理。事件坐标是可空的窗口像素矩形；实例 ID 用于区分当前文档中的重复 URL，不应持久化。`event.gallery` 按需生成包含离屏图片的文档顺序快照；流式内容继续更新时，已触发事件仍保留点击时的版本。
+`runCode` 由宿主应用实现。图片默认使用 Coil 加载，可通过 `components.image` 自定义；`event.gallery` 提供文档图片图集。
 
-回调在布局后绑定，更新处理函数不会重新解析或测量正文。操作栏使用显式、有限、非负的高度，布局引擎提前预留空间；增大系统字号时也应给插槽足够高度。工具栏位于横向滚动区域外，文字不进入 Markdown 复制内容。插槽为附加内容，原有代码标题、高亮和表格布局继续保留。`MarkdownTableInfo.rowCount` 包含表头行。
+插槽内容应保持在声明高度内，工具栏文字不计入 Markdown 复制内容。`MarkdownTableInfo.rowCount` 包含表头行。
 
-内容区域有高度限制时，使用 Markdown 默认的内部滚动。若外层 `Column` 已通过 `verticalScroll` 负责滚动，则设置 `enableScroll = false`，让 Markdown 按完整内容高度布局，由外层视口统一处理垂直滚动。
+外层容器负责垂直滚动时，设置 `enableScroll = false`。
 
-软换行默认为 `Space`；`LineBreak` 同步改变显示与复制文本，不修改 AST，不重启流式 Parser，也不改变硬换行。`MarkdownHtml.render(markdown, config = ...)` 使用同一策略，显式 `softBreak` 字符串优先；AST 导出重载可直接传 `softBreakPolicy`。操作栏和交互回调不影响 HTML 导出。
+软换行默认为 `Space`；使用 `LineBreak` 可在显示与复制时保留换行。HTML 导出同样支持 `softBreakPolicy`。
 
 ---
 
-## 🎨 主题定制
+## 🎨 颜色、排版、尺寸与状态
+
+所有设置均可省略，`Markdown(markdown = text)` 默认跟随系统配色。Markdown 自身样式分为三个独立入口；代码、公式、图表使用各自库的原生配置。
 
 ```kotlin
-// 内置主题
-Markdown(markdown = text, theme = MarkdownTheme.light())  // GitHub 亮色
-Markdown(markdown = text, theme = MarkdownTheme.dark())   // GitHub 暗色
-Markdown(markdown = text, theme = MarkdownTheme.auto())   // 自动检测
+import androidx.compose.foundation.layout.PaddingValues
+import com.hrm.codehigh.renderer.CodeDefaults
+import com.hrm.codehigh.renderer.CodeTypography
+import com.hrm.codehigh.renderer.CodeLayout
 
-// 完全自定义（30+ 可配置属性）
 Markdown(
     markdown = text,
-    theme = MarkdownTheme(
-        headingStyles = listOf(
-            TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold),
-            // h2 ~ h6 ...
-        ),
-        bodyStyle = TextStyle(fontSize = 16.sp),
-        codeBlockBackground = Color(0xFFF5F5F5),
-        // ...更多属性
+    colors = MarkdownDefaults.colors(link = Color(0xFF0969DA)),
+    typography = MarkdownTypography(
+        h1 = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold),
+        text = TextStyle(fontSize = 16.sp, lineHeight = 28.sp),
     ),
-    interactions = MarkdownInteractions(onLinkClick = { url -> /* 处理链接点击 */ }),
+    layout = MarkdownLayout(blockSpacing = 12.dp),
+    codeColors = CodeDefaults.oneDarkProColors(),
+    codeTypography = CodeTypography(
+        text = TextStyle(fontSize = 18.sp, lineHeight = 28.sp),
+        inlineCode = TextStyle(fontSize = 15.sp),
+    ),
+    codeLayout = CodeLayout(contentPadding = PaddingValues(16.dp)),
+    interactions = MarkdownInteractions(
+        onLinkClick = { url -> /* 宿主导航 */ },
+        onCodeTokenClick = { token -> /* codehigh CodeToken */ },
+    ),
 )
 ```
 
-代码高亮与代码块/行内代码主题由 `codehigh` 提供，`markdown-renderer` 不再内置独立的语法高亮器。
+配色可选 `MarkdownDefaults.lightColors()`、`darkColors()` 或 `material3Colors()`。通过 `ProvideMarkdownDefaults` 提供应用默认设置，实例参数优先。
+
+代码外观使用 codehigh 的 `CodeColors`、`CodeTypography`、`CodeLayout`，同一份配置可用于 Markdown 和 `CodeBlock`。
+
+| 设置内容 | 入口 |
+|---|---|
+| 方言、Emoji、Lint、流式合并阈值 | `parserConfig = MarkdownParserConfig(...)` |
+| 软换行、标题编号 | `softBreakPolicy`、`enableHeadingNumbering` |
+| 内部滚动、文本选择 | `enableScroll`、`enableSelection` |
+| 流式生成状态 | `isStreaming` |
+| 链接、引用、图片与代码 Token 点击 | `interactions = MarkdownInteractions(...)` |
+| 头尾插槽、图片渲染、代码/表格工具栏、告示图标 | `components = MarkdownComponents(...)` |
+| 代码外观（codehigh 原生类型） | `codeColors`、`codeTypography`、`codeLayout` |
+| 公式与图表配置 | `latexConfig`、`diagramTheme` |
+| 指令插件 | `directivePlugins` |
+
+`onCodeTokenClick` 接收 codehigh 的 `CodeToken`，其中 `range` 相对于当前代码块。
 
 ```kotlin
-import com.hrm.codehigh.theme.DraculaProTheme
-import com.hrm.codehigh.theme.LocalCodeTheme
-import com.hrm.codehigh.theme.OneDarkProTheme
-
-// 方式 1：对单个 Markdown 直接传入 codehigh 主题
-Markdown(
-    markdown = text,
-    theme = MarkdownTheme.auto(),
-    codeTheme = OneDarkProTheme,
-)
-
-// 方式 2：通过 codehigh 的 CompositionLocal 统一注入默认代码主题
-CompositionLocalProvider(
-    LocalCodeTheme provides DraculaProTheme
-) {
-    Markdown(
-        markdown = text,
-        theme = MarkdownTheme.auto(),
-    )
-}
+val state = rememberMarkdownState()
+val scope = rememberCoroutineScope()
+Button(onClick = { scope.launch { state.scrollToBlock(10) } }) { Text("跳转") }
+Markdown(markdown = text, state = state, components = MarkdownComponents(
+    header = { Text("前言") },
+    footer = { Text("结束") },
+))
 ```
 
-- `theme` 负责普通 Markdown 内容样式，如标题、正文、表格、引用、数学公式等
-- `codeTheme` 只负责代码块与行内代码的高亮和配色
-- 如果不传 `codeTheme`，则使用 `codehigh` 当前的默认主题
+使用 `rememberMarkdownState()` 控制滚动和清除选区；块索引不包含头尾插槽。
 
 ---
 

@@ -1,5 +1,7 @@
 package com.hrm.markdown.renderer.internal.layout.engine
 
+import com.hrm.markdown.renderer.MarkdownTypography
+
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -13,8 +15,8 @@ import androidx.compose.ui.unit.sp
 import com.hrm.latex.renderer.measure.rememberLatexMeasurer
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.renderer.DiagramHostRegistry
-import com.hrm.markdown.renderer.MarkdownConfig
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.MarkdownRenderOptions
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.internal.MarkdownEngineHost
 import com.hrm.markdown.renderer.internal.RendererFacadeState
 import com.hrm.markdown.renderer.internal.layout.list.listItemContentIndentPx
@@ -35,7 +37,7 @@ class ListLayoutEngineTest {
     @Test
     fun should_reserveCheckboxAndGapInNestedChildGeometry_when_taskTextWraps() = runComposeUiTest {
         val density = Density(density = 2f, fontScale = 1.5f)
-        val theme = MarkdownTheme.light()
+        val theme = ResolvedMarkdownStyle()
         val width = 640f
         var document: InternalLayoutDocumentModel? = null
         val markdown = """
@@ -47,8 +49,7 @@ class ListLayoutEngineTest {
             CompositionLocalProvider(LocalDensity provides density) {
                 val facade = RendererFacadeState(
                     theme = theme,
-                    config = MarkdownConfig.Default,
-                    codeTheme = null,
+                    config = MarkdownRenderOptions.Default,
                     directiveRegistry = MarkdownDirectiveRegistry.Empty,
                     isStreaming = false,
                 )
@@ -57,7 +58,7 @@ class ListLayoutEngineTest {
                     renderDocument = host.compile(MarkdownParser().parse(markdown), facade),
                     facadeState = facade,
                     viewportWidth = width,
-                    blockSpacing = with(density) { theme.blockSpacing.toPx() },
+                    blockSpacing = with(density) { theme.layout.blockSpacing.toPx() },
                     density = density,
                     textMeasurer = rememberTextMeasurer(),
                     latexMeasurer = rememberLatexMeasurer(),
@@ -70,7 +71,7 @@ class ListLayoutEngineTest {
         assertEquals(2, list.items.size)
         val nested = list.items.first().children.filterIsInstance<LayoutListBlockModel>().single()
         val markerWidth = with(density) { (20.dp + 8.dp).toPx() }
-        val indent = with(density) { theme.listIndent.toPx() } + markerWidth
+        val indent = with(density) { theme.layout.listIndent.toPx() } + markerWidth
         for (item in list.items + nested.items) {
             assertTrue(item.taskListItem)
             assertClose(markerWidth, item.markerWidthPx, "checkbox column includes the gap")
@@ -106,7 +107,7 @@ class ListLayoutEngineTest {
 
     @Test
     fun should_reserveSharedMarkerWidthInChildGeometry_when_largeNumberingCrossesDigitBoundary() = runComposeUiTest {
-        val theme = MarkdownTheme.light().copy(bodyStyle = TextStyle(fontSize = 24.sp, lineHeight = 36.sp))
+        val theme = ResolvedMarkdownStyle().copy(typography = MarkdownTypography(text = TextStyle(fontSize = 24.sp, lineHeight = 36.sp)))
         val width = 480f
         var document: InternalLayoutDocumentModel? = null
         var indent = 0f
@@ -116,14 +117,13 @@ class ListLayoutEngineTest {
             CompositionLocalProvider(LocalDensity provides Density(density = 2f, fontScale = 1.5f)) {
                 val density = LocalDensity.current
                 val textMeasurer = rememberTextMeasurer()
-                indent = with(density) { theme.listIndent.toPx() }
+                indent = with(density) { theme.layout.listIndent.toPx() }
                 unorderedIndent = density.listItemContentIndentPx(theme, taskListItem = false, ordered = false)
                 minimumMarkerWidth = textMeasurer.measure("100.", style = theme.bodyStyle).size.width +
                     with(density) { 4.dp.toPx() }
                 val facade = RendererFacadeState(
                     theme = theme,
-                    config = MarkdownConfig.Default,
-                    codeTheme = null,
+                    config = MarkdownRenderOptions.Default,
                     directiveRegistry = MarkdownDirectiveRegistry.Empty,
                     isStreaming = false,
                 )
@@ -135,7 +135,7 @@ class ListLayoutEngineTest {
                     ),
                     facadeState = facade,
                     viewportWidth = width,
-                    blockSpacing = with(density) { theme.blockSpacing.toPx() },
+                    blockSpacing = with(density) { theme.layout.blockSpacing.toPx() },
                     density = density,
                     textMeasurer = textMeasurer,
                     latexMeasurer = rememberLatexMeasurer(),
@@ -165,7 +165,7 @@ class ListLayoutEngineTest {
 - 第一层列表项包含很长的中文描述，并且紧跟多个标点，观察缩进后剩余宽度是否仍能正确换行。
   - 第二层列表项继续使用中英文混排 MixedTextWithoutSpaces 和中文标点（A、B、C）。
         """.trimIndent()
-        val theme = MarkdownTheme()
+        val theme = ResolvedMarkdownStyle()
         val viewportWidthPx = 180f
         var document: InternalLayoutDocumentModel? = null
         var unorderedIndentPx = 0f
@@ -174,8 +174,7 @@ class ListLayoutEngineTest {
             val density = LocalDensity.current
             val facadeState = RendererFacadeState(
                 theme = theme,
-                config = MarkdownConfig.Default,
-                codeTheme = null,
+                config = MarkdownRenderOptions.Default,
                 directiveRegistry = MarkdownDirectiveRegistry.Empty,
                 isStreaming = false,
             )
@@ -193,7 +192,7 @@ class ListLayoutEngineTest {
                 renderDocument = renderDocument,
                 facadeState = facadeState,
                 viewportWidth = viewportWidthPx,
-                blockSpacing = with(density) { theme.blockSpacing.toPx() },
+                blockSpacing = with(density) { theme.layout.blockSpacing.toPx() },
                 density = density,
                 textMeasurer = rememberTextMeasurer(),
                 latexMeasurer = rememberLatexMeasurer(),

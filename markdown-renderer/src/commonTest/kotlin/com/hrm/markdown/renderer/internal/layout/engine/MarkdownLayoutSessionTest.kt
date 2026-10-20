@@ -12,10 +12,10 @@ import androidx.compose.ui.unit.dp
 import com.hrm.latex.renderer.measure.rememberLatexMeasurer
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.renderer.DiagramHostRegistry
-import com.hrm.markdown.renderer.MarkdownConfig
+import com.hrm.markdown.renderer.MarkdownRenderOptions
 import com.hrm.markdown.renderer.MarkdownRenderMode
-import com.hrm.markdown.renderer.MarkdownTheme
-import com.hrm.markdown.renderer.ProvideMarkdownTheme
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
+import com.hrm.markdown.renderer.ProvideMarkdownStyle
 import com.hrm.markdown.renderer.internal.MarkdownEngineHost
 import com.hrm.markdown.renderer.internal.RendererFacadeState
 import com.hrm.markdown.renderer.internal.compose.ComposeRenderEnvironment
@@ -35,8 +35,8 @@ class MarkdownLayoutSessionTest {
         var secondSession: MarkdownLayoutSession? = null
 
         setContent {
-            val theme = MarkdownTheme()
-            ProvideMarkdownTheme(theme) {
+            val theme = ResolvedMarkdownStyle()
+            ProvideMarkdownStyle(theme) {
                 val density = LocalDensity.current
                 val textMeasurer = rememberTextMeasurer()
                 val latexMeasurer = rememberLatexMeasurer()
@@ -44,8 +44,7 @@ class MarkdownLayoutSessionTest {
                 val facadeState = remember {
                     RendererFacadeState(
                         theme = theme,
-                        config = MarkdownConfig.Default,
-                        codeTheme = null,
+                        config = MarkdownRenderOptions.Default,
                         directiveRegistry = MarkdownDirectiveRegistry.Empty,
                         isStreaming = true,
                     )
@@ -98,12 +97,12 @@ class MarkdownLayoutSessionTest {
     @Test
     fun should_layout_only_composed_blocks_and_cache_each_result_in_lazy_column() = runComposeUiTest {
         val markdown = (1..200).joinToString("\n\n") { "block $it" }
-        val theme = MarkdownTheme()
+        val theme = ResolvedMarkdownStyle()
         var renderBlockCount = 0
         var session: MarkdownLayoutSession? = null
 
         setContent {
-            ProvideMarkdownTheme(theme) {
+            ProvideMarkdownStyle(theme) {
                 val density = LocalDensity.current
                 val textMeasurer = rememberTextMeasurer()
                 val latexMeasurer = rememberLatexMeasurer()
@@ -111,8 +110,7 @@ class MarkdownLayoutSessionTest {
                 val facadeState = remember {
                     RendererFacadeState(
                         theme = theme,
-                        config = MarkdownConfig.Default,
-                        codeTheme = null,
+                        config = MarkdownRenderOptions.Default,
                         directiveRegistry = MarkdownDirectiveRegistry.Empty,
                         isStreaming = false,
                     )
@@ -128,7 +126,7 @@ class MarkdownLayoutSessionTest {
                         renderDocument = renderDocument,
                         facadeState = facadeState,
                         viewportWidth = 240f,
-                        blockSpacing = with(density) { theme.blockSpacing.toPx() },
+                        blockSpacing = with(density) { theme.layout.blockSpacing.toPx() },
                         density = density,
                         textMeasurer = textMeasurer,
                         latexMeasurer = latexMeasurer,
@@ -170,14 +168,14 @@ class MarkdownLayoutSessionTest {
         val markdown = (1..blockCount).joinToString("\n\n") { index ->
             "block $index with \$x_$index^2\$, \$y_$index^2\$, and \$z_$index^2\$"
         }
-        val theme = MarkdownTheme()
+        val theme = ResolvedMarkdownStyle()
         val started = TimeSource.Monotonic.markNow()
         var host: MarkdownEngineHost? = null
         var session: MarkdownLayoutSession? = null
         var recreateSession: (() -> MarkdownLayoutSession)? = null
 
         setContent {
-            ProvideMarkdownTheme(theme) {
+            ProvideMarkdownStyle(theme) {
                 val density = LocalDensity.current
                 val textMeasurer = rememberTextMeasurer()
                 val latexMeasurer = rememberLatexMeasurer()
@@ -185,8 +183,7 @@ class MarkdownLayoutSessionTest {
                 val facadeState = remember {
                     RendererFacadeState(
                         theme = theme,
-                        config = MarkdownConfig.Default,
-                        codeTheme = null,
+                        config = MarkdownRenderOptions.Default,
                         directiveRegistry = MarkdownDirectiveRegistry.Empty,
                         isStreaming = false,
                     )
@@ -202,7 +199,7 @@ class MarkdownLayoutSessionTest {
                         renderDocument = renderDocument,
                         facadeState = facadeState,
                         viewportWidth = 240f,
-                        blockSpacing = with(density) { theme.blockSpacing.toPx() },
+                        blockSpacing = with(density) { theme.layout.blockSpacing.toPx() },
                         density = density,
                         textMeasurer = textMeasurer,
                         latexMeasurer = latexMeasurer,
@@ -216,7 +213,7 @@ class MarkdownLayoutSessionTest {
                         renderDocument = renderDocument,
                         facadeState = facadeState,
                         viewportWidth = 240f,
-                        blockSpacing = with(density) { theme.blockSpacing.toPx() },
+                        blockSpacing = with(density) { theme.layout.blockSpacing.toPx() },
                         density = density,
                         textMeasurer = textMeasurer,
                         latexMeasurer = latexMeasurer,

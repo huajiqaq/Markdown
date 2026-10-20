@@ -16,7 +16,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hrm.markdown.parser.ast.CustomContainer
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
+import com.hrm.markdown.renderer.LocalMarkdownComponents
 import com.hrm.markdown.renderer.MarkdownBlockChildren
 import com.hrm.markdown.renderer.internal.core.model.CustomContainerBlockModel
 import com.hrm.markdown.renderer.internal.layout.LayoutTokens
@@ -81,15 +82,15 @@ private fun RenderCustomContainerContainer(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
 
     // 尝试匹配 Admonition 样式
-    val admonitionStyle = theme.admonitionStyles[type.uppercase()]
+    val admonitionStyle = theme.colors.admonitions[type.uppercase()]
 
-    val borderColor = admonitionStyle?.borderColor ?: Color(0xFF8B949E)
-    val backgroundColor = admonitionStyle?.backgroundColor ?: Color(0xFFF6F8FA)
-    val iconText = admonitionStyle?.iconText ?: "📦"
-    val titleColor = admonitionStyle?.titleColor ?: Color(0xFF1F2328)
+    val borderColor = admonitionStyle?.borderColor ?: theme.colors.blockQuoteBorder
+    val backgroundColor = admonitionStyle?.backgroundColor ?: theme.colors.containerBackground
+    val iconText = LocalMarkdownComponents.current.admonitionIcons[type.uppercase()] ?: "📦"
+    val titleColor = admonitionStyle?.titleColor ?: theme.colors.text
 
     Column(
         modifier = modifier

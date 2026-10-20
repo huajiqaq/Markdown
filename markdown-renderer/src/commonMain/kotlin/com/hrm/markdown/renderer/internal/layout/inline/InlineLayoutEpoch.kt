@@ -43,7 +43,6 @@ internal class ReferentialIdentity private constructor(
 
 internal class InlineLayoutEpoch(
     private val themeIdentity: StructuralIdentity,
-    private val codeThemeIdentity: StructuralIdentity,
     private val directiveRegistryIdentity: ReferentialIdentity,
     private val configIdentity: StructuralIdentity,
     private val densityBits: Int,
@@ -59,7 +58,6 @@ internal class InlineLayoutEpoch(
         if (this === other) return true
         if (other !is InlineLayoutEpoch) return false
         return themeIdentity == other.themeIdentity &&
-            codeThemeIdentity == other.codeThemeIdentity &&
             directiveRegistryIdentity == other.directiveRegistryIdentity &&
             configIdentity == other.configIdentity &&
             densityBits == other.densityBits &&
@@ -74,7 +72,6 @@ internal class InlineLayoutEpoch(
 
     private fun calculateHashCode(): Int {
         var result = themeIdentity.hashCode()
-        result = 31 * result + codeThemeIdentity.hashCode()
         result = 31 * result + directiveRegistryIdentity.hashCode()
         result = 31 * result + configIdentity.hashCode()
         result = 31 * result + densityBits

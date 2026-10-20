@@ -14,7 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import com.hrm.latex.renderer.Latex
 import com.hrm.markdown.renderer.LocalMarkdownLatexState
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 
 /**
  * 数学公式块渲染器 ($$...$$)
@@ -28,7 +28,7 @@ internal fun MathBlockRenderer(
     latex: String,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     val trimmedLatex = latex.trim()
     val latexState = LocalMarkdownLatexState.current
 
@@ -46,7 +46,7 @@ internal fun MathBlockRenderer(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(theme.codeBlockPadding),
+            .padding(theme.layout.blockPadding),
     ) {
         BoxWithConstraints(
             modifier = Modifier

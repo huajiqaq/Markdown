@@ -31,8 +31,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrm.markdown.renderer.Markdown
-import androidx.compose.foundation.rememberScrollState
-import com.hrm.markdown.renderer.MarkdownConfig
+import com.hrm.markdown.renderer.rememberMarkdownState
+import com.hrm.markdown.renderer.MarkdownParserConfig
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -133,7 +133,7 @@ private fun StringStreamingMarkdownDemo(
     var isRunning by remember { mutableStateOf(false) }
     var streamFinished by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val scrollState = rememberScrollState()
+    val scrollState = rememberMarkdownState()
     var autoFollow by remember { mutableStateOf(true) }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -227,9 +227,9 @@ private fun StringStreamingMarkdownDemo(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
-                    config = MarkdownConfig.LlmStreaming,
-                    scrollState = scrollState,
-                    isStreaming = isRunning
+                    parserConfig = MarkdownParserConfig.LlmStreaming,
+                    state = scrollState,
+                    isStreaming = isRunning,
                 )
             }
         }
@@ -240,32 +240,19 @@ private fun StringStreamingMarkdownDemo(
         autoFollow = true
 
         launch {
-            snapshotFlow { scrollState.isScrollInProgress to scrollState.value }
-                .collect { (isScrolling, value) ->
-                    if (isScrolling && value < scrollState.maxValue - 100) {
-                        autoFollow = false
-                    }
-                }
+            snapshotFlow { scrollState.isScrollInProgress && scrollState.lastScrolledBackward }
+                .collect { backwards -> if (backwards) autoFollow = false }
         }
-
         launch {
-            snapshotFlow { Triple(scrollState.value, scrollState.maxValue, autoFollow) }
-                .collect { (value, maxValue, follow) ->
-                    if (!follow && maxValue > 0 && value >= maxValue - 100) {
-                        autoFollow = true
-                    }
-                }
+            snapshotFlow { !scrollState.canScrollForward && !scrollState.isScrollInProgress }
+                .collect { atEnd -> if (atEnd) autoFollow = true }
         }
+    }
 
-        launch {
-            snapshotFlow { scrollState.maxValue to autoFollow }
-                .collect { (maxValue, follow) ->
-                    if (!follow) return@collect
-                    withFrameNanos { }
-                    if (kotlin.math.abs(scrollState.value - maxValue) > 6) {
-                        scrollState.scrollTo(maxValue)
-                    }
-                }
+    LaunchedEffect(text, autoFollow) {
+        if (autoFollow) {
+            withFrameNanos { }
+            scrollState.scrollToEnd()
         }
     }
 
@@ -273,9 +260,9 @@ private fun StringStreamingMarkdownDemo(
         if (!streamFinished || text != markdown) return@LaunchedEffect
         withFrameNanos { }
         withFrameNanos { }
-        scrollState.scrollTo(scrollState.maxValue)
+        scrollState.scrollToEnd()
         delay(50L)
-        scrollState.animateScrollTo(scrollState.maxValue)
+        scrollState.scrollToEnd()
     }
 }
 

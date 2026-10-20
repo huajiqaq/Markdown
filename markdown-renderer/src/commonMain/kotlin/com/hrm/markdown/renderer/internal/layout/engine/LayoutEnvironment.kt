@@ -3,11 +3,10 @@ package com.hrm.markdown.renderer.internal.layout.engine
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-import com.hrm.codehigh.theme.CodeTheme
 import com.hrm.latex.renderer.measure.LatexMeasurerState
 import com.hrm.latex.renderer.model.LatexConfig
 import com.hrm.markdown.renderer.DiagramHostRegistry
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.internal.core.compile.RenderCompileEnvironment
 import com.hrm.markdown.renderer.internal.layout.inline.InlineLayoutEpoch
 import com.hrm.markdown.renderer.internal.layout.inline.InlineLayoutRuntime
@@ -16,8 +15,7 @@ import com.hrm.markdown.renderer.internal.layout.list.measureOrderedListMarkerMe
 internal data class LayoutEnvironment(
     val viewportWidth: Float,
     val blockSpacing: Float = 0f,
-    val markdownTheme: MarkdownTheme,
-    val codeTheme: CodeTheme? = null,
+    val markdownTheme: ResolvedMarkdownStyle,
     val onLinkClick: ((String) -> Unit)? = null,
     val onFootnoteClick: ((String) -> Unit)? = null,
     val density: Density,

@@ -4,10 +4,9 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
-import com.hrm.codehigh.theme.CodeTheme
 import com.hrm.latex.renderer.measure.LatexMeasurerState
-import com.hrm.markdown.renderer.MarkdownConfig
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.MarkdownRenderOptions
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.inline.InlineRenderResult
 import com.hrm.markdown.renderer.inline.buildInlineRenderResultFromModel
 import com.hrm.markdown.renderer.internal.core.identity.RenderIdentity
@@ -35,14 +34,13 @@ internal class InlineLayoutRuntime {
         model: InlineModel,
         style: TextStyle,
         epoch: InlineLayoutEpoch,
-        theme: MarkdownTheme,
+        theme: ResolvedMarkdownStyle,
         directiveRegistry: MarkdownDirectiveRegistry,
         onLinkClick: ((String) -> Unit)?,
         onFootnoteClick: ((String) -> Unit)?,
         latexMeasurer: LatexMeasurerState,
         density: Density,
         textMeasurer: TextMeasurer,
-        codeTheme: CodeTheme?,
     ): InlineRenderResult {
         metrics.renderResultRequests++
         return renderResultCache.getOrPut(
@@ -62,7 +60,6 @@ internal class InlineLayoutRuntime {
                 latexMeasurer = latexMeasurer,
                 density = density,
                 textMeasurer = textMeasurer,
-                codeTheme = codeTheme,
             )
             metrics.inlineMathBuildRequests += result.inlineMathBuildRequests
             result
@@ -134,10 +131,9 @@ internal class InlineLayoutRuntime {
 }
 
 internal fun inlineLayoutEpoch(
-    theme: MarkdownTheme,
-    codeTheme: CodeTheme?,
+    theme: ResolvedMarkdownStyle,
     directiveRegistry: MarkdownDirectiveRegistry,
-    config: MarkdownConfig?,
+    config: MarkdownRenderOptions?,
     onLinkClick: ((String) -> Unit)?,
     onFootnoteClick: ((String) -> Unit)?,
     density: Density,
@@ -145,7 +141,6 @@ internal fun inlineLayoutEpoch(
     latexMeasurer: LatexMeasurerState,
 ): InlineLayoutEpoch = InlineLayoutEpoch(
     themeIdentity = StructuralIdentity.of(theme),
-    codeThemeIdentity = StructuralIdentity.of(codeTheme),
     directiveRegistryIdentity = ReferentialIdentity.of(directiveRegistry),
     configIdentity = StructuralIdentity.of(config),
     densityBits = density.density.toBits(),

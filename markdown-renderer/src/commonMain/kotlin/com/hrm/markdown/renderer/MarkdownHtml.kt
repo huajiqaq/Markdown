@@ -17,27 +17,28 @@ import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 object MarkdownHtml {
     fun render(
         markdown: String,
-        config: MarkdownConfig = MarkdownConfig.Default,
+        parserConfig: MarkdownParserConfig = MarkdownParserConfig.Default,
         directivePlugins: List<MarkdownDirectivePlugin> = emptyList(),
         softBreak: String? = null,
         escapeHtml: Boolean = false,
         xhtml: Boolean = true,
+        softBreakPolicy: MarkdownSoftBreakPolicy = MarkdownSoftBreakPolicy.Space,
     ): String {
         val registry = MarkdownDirectiveRegistry(directivePlugins)
         val normalized = MarkdownDirectivePipeline(registry).transform(markdown).markdown
 
         val parser = MarkdownParser(
-            flavour = config.flavour,
-            customEmojiMap = config.customEmojiMap,
-            enableAsciiEmoticons = config.enableAsciiEmoticons,
-            enableLinting = config.enableLinting,
+            flavour = parserConfig.flavour,
+            customEmojiMap = parserConfig.customEmojiMap,
+            enableAsciiEmoticons = parserConfig.enableAsciiEmoticons,
+            enableLinting = parserConfig.enableLinting,
         )
         val document = parser.parse(normalized)
 
         return render(
             document = document,
             directivePlugins = directivePlugins,
-            softBreak = softBreak ?: config.softBreakPolicy.htmlSoftBreak(xhtml),
+            softBreak = softBreak ?: softBreakPolicy.htmlSoftBreak(xhtml),
             escapeHtml = escapeHtml,
             xhtml = xhtml,
         )

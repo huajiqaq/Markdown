@@ -1,5 +1,7 @@
 package com.hrm.markdown.renderer.block
 
+import com.hrm.markdown.renderer.MarkdownTypography
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -37,11 +39,11 @@ import androidx.compose.ui.unit.sp
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.ast.ListBlock
 import com.hrm.markdown.renderer.LocalMarkdownLatexState
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.Markdown
 import com.hrm.markdown.renderer.MarkdownComponents
-import com.hrm.markdown.renderer.MarkdownConfig
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.MarkdownRenderOptions
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.rememberMarkdownLatexState
 import kotlin.math.abs
 import kotlin.test.Test
@@ -69,7 +71,7 @@ class ListRendererTest {
                     val lines = onAllNodes(hasText("", substring = true), useUnmergedTree = true).fetchSemanticsNodes()
                     assertTrue(lines.size > 1, "Expected wrapped task text")
                     val checkbox = checkboxBoundsInRoot(checked)
-                    val contentIndent = with(density) { (MarkdownTheme.light().listIndent + 20.dp + 8.dp).toPx() }
+                    val contentIndent = with(density) { (ResolvedMarkdownStyle().layout.listIndent + 20.dp + 8.dp).toPx() }
                     val expectedStart = if (direction == LayoutDirection.Ltr) contentIndent else
                         with(density) { 180.dp.toPx() } - contentIndent
                     for (line in lines) {
@@ -119,10 +121,10 @@ class ListRendererTest {
     @Test
     fun should_propagateFirstTextCenterThroughLegacyContainers_when_renderingAstDirectly() = runComposeUiTest {
         setContent {
-            val theme = MarkdownTheme.light().copy(bodyStyle = TextStyle(fontSize = 32.sp, lineHeight = 48.sp))
-            CompositionLocalProvider(LocalDensity provides Density(1f), LocalMarkdownTheme provides theme) {
+            val theme = ResolvedMarkdownStyle().copy(typography = MarkdownTypography(text = TextStyle(fontSize = 32.sp, lineHeight = 48.sp)))
+            CompositionLocalProvider(LocalDensity provides Density(1f), LocalMarkdownStyle provides theme) {
                 val list = remember { MarkdownParser().parse("- [x] 中文任务正文").children.filterIsInstance<ListBlock>().single() }
-                val latexState = rememberMarkdownLatexState(MarkdownConfig.Default.latexConfig)
+                val latexState = rememberMarkdownLatexState(MarkdownRenderOptions.Default.latexConfig)
                 CompositionLocalProvider(LocalMarkdownLatexState provides latexState) {
                     Box(Modifier.size(300.dp, 200.dp)) { ListBlockRenderer(list) }
                 }
@@ -248,7 +250,7 @@ private fun ComposeUiTest.checkboxCenterInRoot(checked: Boolean): Float {
 
 @OptIn(ExperimentalTestApi::class)
 private fun ComposeUiTest.checkboxBoundsInRoot(checked: Boolean): Rect {
-    val target = (if (checked) MarkdownTheme.light().taskCheckedColor else MarkdownTheme.light().taskUncheckedColor).toArgb()
+    val target = (if (checked) ResolvedMarkdownStyle().colors.taskChecked else ResolvedMarkdownStyle().colors.taskUnchecked).toArgb()
     val pixels = onRoot().captureToImage().toPixelMap()
     var top = pixels.height
     var bottom = -1
@@ -270,7 +272,7 @@ private fun ComposeUiTest.checkboxBoundsInRoot(checked: Boolean): Rect {
 private fun ListSample(
     markdown: String,
     width: Int = 360,
-    style: TextStyle = MarkdownTheme.light().bodyStyle,
+    style: TextStyle = ResolvedMarkdownStyle().bodyStyle,
     enableScroll: Boolean = false,
     components: MarkdownComponents = MarkdownComponents.Default,
     density: Density = Density(1f),
@@ -281,7 +283,10 @@ private fun ListSample(
             Markdown(
                 document = document,
                 modifier = Modifier.fillMaxSize(),
-                theme = MarkdownTheme.light().copy(bodyStyle = style),
+                colors = ResolvedMarkdownStyle().copy(typography = MarkdownTypography(text = style)).colors,
+                typography = ResolvedMarkdownStyle().copy(typography = MarkdownTypography(text = style)).typography,
+                layout = ResolvedMarkdownStyle().copy(typography = MarkdownTypography(text = style)).layout,
+                diagramTheme = ResolvedMarkdownStyle().copy(typography = MarkdownTypography(text = style)).diagramTheme,
                 enableScroll = enableScroll,
                 enableSelection = false,
                 components = components,

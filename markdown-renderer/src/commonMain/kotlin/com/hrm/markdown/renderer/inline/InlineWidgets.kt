@@ -17,9 +17,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
-import com.hrm.codehigh.theme.CodeTheme
 import com.hrm.latex.renderer.measure.LatexMeasurerState
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.internal.core.model.InlineModel
 import com.hrm.markdown.renderer.internal.layout.inline.InlineLayoutRuntime
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
@@ -27,7 +26,7 @@ import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 @Composable
 internal fun SpoilerContent(
     model: InlineModel,
-    theme: MarkdownTheme,
+    theme: ResolvedMarkdownStyle,
     hostTextStyle: TextStyle,
     directiveRegistry: MarkdownDirectiveRegistry,
     onLinkClick: ((String) -> Unit)?,
@@ -35,7 +34,6 @@ internal fun SpoilerContent(
     latexMeasurer: LatexMeasurerState,
     density: Density,
     textMeasurer: TextMeasurer,
-    inlineCodeTheme: CodeTheme?,
 ) {
     var revealed by remember(model.identity.stableId) { mutableStateOf(false) }
     val currentOnLinkClick = rememberUpdatedState(onLinkClick)
@@ -53,7 +51,6 @@ internal fun SpoilerContent(
     val inlineLayoutRuntime = remember { InlineLayoutRuntime() }
     val inlineLayoutEpoch = rememberInlineLayoutEpoch(
         theme = theme,
-        codeTheme = inlineCodeTheme,
         directiveRegistry = directiveRegistry,
         config = null,
         onLinkClick = stableOnLinkClick,
@@ -73,7 +70,6 @@ internal fun SpoilerContent(
         latexMeasurer = latexMeasurer,
         density = density,
         textMeasurer = textMeasurer,
-        codeTheme = inlineCodeTheme,
     ).annotated
     val annotated = remember(
         content,
@@ -82,7 +78,7 @@ internal fun SpoilerContent(
     ) {
         if (revealed) {
             buildAnnotatedString {
-                withStyle(SpanStyle(background = theme.spoilerColor)) {
+                withStyle(SpanStyle(background = theme.colors.spoiler)) {
                     append(content)
                 }
             }
@@ -90,8 +86,8 @@ internal fun SpoilerContent(
             buildAnnotatedString {
                 withStyle(
                     SpanStyle(
-                        background = theme.spoilerColor,
-                        color = theme.spoilerColor,
+                        background = theme.colors.spoiler,
+                        color = theme.colors.spoiler,
                     )
                 ) {
                     append(content)
@@ -110,7 +106,7 @@ internal fun SpoilerContent(
 internal fun RubyTextContent(
     base: String,
     annotation: String,
-    theme: MarkdownTheme,
+    theme: ResolvedMarkdownStyle,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         BasicText(

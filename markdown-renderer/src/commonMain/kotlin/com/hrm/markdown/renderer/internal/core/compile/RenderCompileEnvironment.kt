@@ -4,13 +4,8 @@ import com.hrm.markdown.renderer.MarkdownSoftBreakPolicy
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 
 data class RenderCompileEnvironment(
-    val theme: RenderThemeSnapshot = RenderThemeSnapshot(),
     val config: RenderConfigSnapshot = RenderConfigSnapshot(),
     val directiveRegistry: MarkdownDirectiveRegistry = MarkdownDirectiveRegistry.Empty,
-)
-
-data class RenderThemeSnapshot(
-    val darkMode: Boolean = false,
 )
 
 data class RenderConfigSnapshot(

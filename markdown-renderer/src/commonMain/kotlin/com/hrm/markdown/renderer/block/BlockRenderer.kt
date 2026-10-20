@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.hrm.markdown.parser.ast.*
 import com.hrm.markdown.renderer.MarkdownBlockChildren
 import com.hrm.markdown.renderer.LocalMarkdownDirectiveRegistry
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.LocalRendererDocument
 import com.hrm.markdown.renderer.internal.adapter.createDirectiveBlockRenderScope
 import com.hrm.markdown.runtime.DirectiveBlockRenderScope
@@ -217,7 +217,7 @@ internal fun TocPlaceholderRenderer(
     node: TocPlaceholder,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     val document = LocalRendererDocument.current
 
     // 收集 + 过滤 + 排序结果，避免每次重组都全量遍历 AST
@@ -245,7 +245,7 @@ internal fun TocPlaceholderRenderer(
             Text(
                 text = "${"  ".repeat(adjustedLevel)}• $text",
                 style = theme.bodyStyle.copy(
-                    color = theme.linkColor,
+                    color = theme.colors.link,
                     fontStyle = FontStyle.Normal,
                 ),
                 modifier = Modifier.padding(start = adjustedLevel.dp * 12),

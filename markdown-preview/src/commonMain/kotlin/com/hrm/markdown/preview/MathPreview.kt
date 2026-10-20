@@ -5,8 +5,8 @@ import androidx.compose.ui.unit.sp
 import com.hrm.latex.renderer.model.LatexConfig
 import com.hrm.latex.renderer.model.LatexTheme
 import com.hrm.markdown.renderer.Markdown
-import com.hrm.markdown.renderer.MarkdownConfig
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.MarkdownParserConfig
+import com.hrm.markdown.renderer.MarkdownDefaults
 
 private val issue31LongMathMarkdown = """
 # 方程 cosx＝x 是否有解析解？
@@ -290,9 +290,8 @@ internal val mathPreviewGroups = listOf(
                 content = {
                     Markdown(
                         markdown = "行内字体：\$\\mathbb{R} + \\mathcal{F} + \\mathfrak{g}\$。\n\n\$\$\n\\left(\\frac{1}{\\sqrt{x}}\\right) + \\sum_{i=1}^{n} x_i\n\$\$",
-                        theme = MarkdownTheme.light(),
-                        config = MarkdownConfig(
-                            latexConfig = LatexConfig(
+                        colors = MarkdownDefaults.lightColors(),
+                        latexConfig = LatexConfig(
                                 fontSize = 24.sp,
                                 theme = LatexTheme.light(
                                     color = Color(0xFF6A1B9A),
@@ -300,7 +299,6 @@ internal val mathPreviewGroups = listOf(
                                 ),
                                 accessibilityEnabled = true,
                             ),
-                        ),
                     )
                 },
             ),
@@ -316,7 +314,7 @@ internal val mathPreviewGroups = listOf(
                 title = "多个行内公式",
                 content = {
                     Markdown(
-                        markdown = "全量解析复杂度：\$O(n)\$，其中 \$n\$ 为文档总字符数。流式增量解析复杂度：\$O(k)\$，其中 \$k\$ 为尾部脏区域大小。"
+                        markdown = "全量解析复杂度：\$O(n)\$，其中 \$n\$ 为文档总字符数。流式增量解析复杂度：\$O(k)\$，其中 \$k\$ 为尾部脏区域大小。",
                     )
                 }
             ),
@@ -342,7 +340,7 @@ ${'$'}${'$'}
 ${'$'}${'$'}
 Q = \frac{144}{12} = 12\text{ C}
 ${'$'}${'$'}
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -351,7 +349,7 @@ ${'$'}${'$'}
                 title = "高行内公式行高",
                 content = {
                     Markdown(
-                        markdown = "这是一段带高行内公式的文本：\$\\frac{1}{\\sqrt{1+x^2}} + \\sum_{i=1}^{n} x_i^2\$，修复后该行应自动增高，避免与上下文本重叠。第二行的内容用于检测行高"
+                        markdown = "这是一段带高行内公式的文本：\$\\frac{1}{\\sqrt{1+x^2}} + \\sum_{i=1}^{n} x_i^2\$，修复后该行应自动增高，避免与上下文本重叠。第二行的内容用于检测行高",
                     )
                 }
             ),
@@ -371,7 +369,7 @@ ${'$'}${'$'}
 $$
 \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
 $$
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -384,7 +382,7 @@ $$
 $$
 \text{Speedup} = \frac{T_{full}}{T_{incremental}} = \frac{O(n)}{O(k)} \approx \frac{n}{k}
 $$
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -397,7 +395,7 @@ $$
 $$
 \operatorname{score}(x)=\sum_{i=1}^{n}\frac{\alpha_i\beta_i\gamma_i\delta_i}{1+\exp\left(-\frac{x_i-\mu_i}{\sigma_i+\varepsilon}\right)}+\prod_{j=1}^{m}\left(1+\frac{\lambda_j^2}{\omega_j^2+\theta_j^2}\right)+\int_{0}^{T}\frac{\sin(\kappa t)+\cos(\rho t)}{\sqrt{1+t^2}}\,dt
 $$
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -419,7 +417,7 @@ E = mc^2 \tag{1}
 $$
 
 质能方程见公式(1)。
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -438,7 +436,7 @@ $$
 $$
 
 勾股定理见公式(eq:pythagoras)，求根公式见公式(eq:quadratic)。
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),
@@ -466,7 +464,7 @@ $$
 ${'$'}${'$'}
 \text{Speedup} = \frac{T_{full}}{T_{incremental}} = \frac{O(n)}{O(k)} \approx \frac{n}{k}
 ${'$'}${'$'}
-                        """.trimIndent()
+                        """.trimIndent(),
                     )
                 }
             ),

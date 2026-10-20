@@ -21,7 +21,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 
 /**
  * 无法识别的图表类型的回退渲染器，以代码形式展示。
@@ -33,13 +33,13 @@ internal fun DiagramFallback(
     modifier: Modifier = Modifier,
     decorate: Boolean = true,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     val contentModifier = if (decorate) {
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(theme.codeBlockCornerRadius))
+            .clip(RoundedCornerShape(theme.layout.blockCornerRadius))
             .background(Color(0xFFF0F4F8))
-            .padding(theme.codeBlockPadding)
+            .padding(theme.layout.blockPadding)
     } else {
         modifier.fillMaxWidth()
     }

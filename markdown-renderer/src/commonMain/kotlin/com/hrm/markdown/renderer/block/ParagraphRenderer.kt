@@ -8,7 +8,7 @@ import androidx.compose.ui.Modifier
 import com.hrm.markdown.parser.ast.Paragraph
 import com.hrm.markdown.renderer.DefaultMarkdownImage
 import com.hrm.markdown.renderer.LocalImageRenderer
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.MarkdownImageData
 import com.hrm.markdown.renderer.inline.InlineLayoutBlockText
 import com.hrm.markdown.renderer.inline.inlineNodesRevision
@@ -79,7 +79,7 @@ internal fun RenderParagraphBlockModel(
     inlineModel: InlineModel,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     InlineLayoutBlockText(
         model = inlineModel,
         modifier = modifier.fillMaxWidth(),
@@ -109,7 +109,7 @@ internal fun RenderMixedParagraphBlockModel(
     inlineModel: InlineModel,
     modifier: Modifier = Modifier,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     val customRenderer = LocalImageRenderer.current
 
     val segments = remember(inlineModel.identity.contentRevision) {

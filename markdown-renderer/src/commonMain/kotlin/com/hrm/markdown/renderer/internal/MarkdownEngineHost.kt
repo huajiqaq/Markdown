@@ -1,6 +1,5 @@
 package com.hrm.markdown.renderer.internal
 
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -8,13 +7,12 @@ import com.hrm.latex.renderer.measure.LatexMeasurerState
 import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.renderer.DiagramHostRegistry
 import com.hrm.markdown.renderer.MarkdownComponents
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.internal.compose.DefaultMarkdownComposePainter
 import com.hrm.markdown.renderer.internal.compose.MarkdownComposePainter
 import com.hrm.markdown.renderer.internal.core.compile.DefaultRenderModelCompiler
 import com.hrm.markdown.renderer.internal.core.compile.RenderCompileEnvironment
 import com.hrm.markdown.renderer.internal.core.compile.RenderConfigSnapshot
-import com.hrm.markdown.renderer.internal.core.compile.RenderThemeSnapshot
 import com.hrm.markdown.renderer.internal.core.model.InternalRenderDocumentModel
 import com.hrm.markdown.renderer.internal.layout.engine.DefaultMarkdownLayoutEngine
 import com.hrm.markdown.renderer.internal.layout.engine.LayoutEnvironment
@@ -131,7 +129,6 @@ internal class MarkdownEngineHost(
         viewportWidth = viewportWidth,
         blockSpacing = blockSpacing,
         markdownTheme = facadeState.theme,
-        codeTheme = facadeState.codeTheme,
         onLinkClick = onLinkClick,
         onFootnoteClick = onFootnoteClick,
         density = density,
@@ -146,7 +143,6 @@ internal class MarkdownEngineHost(
         inlineLayoutRuntime = inlineLayoutRuntime,
         inlineLayoutEpoch = inlineLayoutEpoch(
             theme = facadeState.theme,
-            codeTheme = facadeState.codeTheme,
             directiveRegistry = facadeState.directiveRegistry,
             config = facadeState.config,
             onLinkClick = onLinkClick,
@@ -160,9 +156,6 @@ internal class MarkdownEngineHost(
 
 internal fun RendererFacadeState.toCompileEnvironment(): RenderCompileEnvironment {
     return RenderCompileEnvironment(
-        theme = RenderThemeSnapshot(
-            darkMode = theme.isDarkLike(),
-        ),
         config = RenderConfigSnapshot(
             enableHeadingNumbering = config.enableHeadingNumbering,
             streaming = isStreaming,
@@ -170,8 +163,4 @@ internal fun RendererFacadeState.toCompileEnvironment(): RenderCompileEnvironmen
         ),
         directiveRegistry = directiveRegistry,
     )
-}
-
-private fun MarkdownTheme.isDarkLike(): Boolean {
-    return bodyStyle.color.luminance() < 0.5f
 }

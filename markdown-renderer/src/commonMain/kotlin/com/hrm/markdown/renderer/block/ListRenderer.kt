@@ -38,7 +38,7 @@ import com.hrm.markdown.parser.ast.ListBlock
 import com.hrm.markdown.parser.ast.ListItem
 import com.hrm.markdown.parser.ast.Paragraph
 import com.hrm.markdown.parser.ast.SetextHeading
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.MarkdownBlockChildren
 import com.hrm.markdown.renderer.internal.compose.LocalMergeInlineSemantics
 import com.hrm.markdown.renderer.internal.compose.FirstTextLineCenter
@@ -151,7 +151,7 @@ internal fun RenderListLayoutBlockModel(
 @Composable
 private fun rememberOrderedMarkerWidth(ordered: Boolean, startNumber: Int, itemCount: Int): Dp {
     if (!ordered) return OrderedListMarkerWidth
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
     val digitCount = orderedListMarkerDigitCount(startNumber, itemCount)
@@ -174,9 +174,9 @@ private fun ListItemRow(
     startsWithText: Boolean,
     content: @Composable () -> Unit,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     Row(
-        modifier = Modifier.fillMaxWidth().padding(start = theme.listIndent)
+        modifier = Modifier.fillMaxWidth().padding(start = theme.layout.listIndent)
             .semantics(mergeDescendants = true) {
                 isTraversalGroup = true
                 collectionItemInfo = CollectionItemInfo(itemIndex, 1, 0, 1)
@@ -204,8 +204,8 @@ private fun ListItemRow(
                     .size(TaskListCheckboxSize)
                     .then(if (startsWithText) Modifier.alignBy { it.measuredHeight / 2 } else alignment),
                 colors = CheckboxDefaults.colors(
-                    checkedColor = theme.taskCheckedColor,
-                    uncheckedColor = theme.taskUncheckedColor,
+                    checkedColor = theme.colors.taskChecked,
+                    uncheckedColor = theme.colors.taskUnchecked,
                 ),
             )
         } else {
@@ -215,7 +215,7 @@ private fun ListItemRow(
                     .then(if (ordered) Modifier.padding(end = OrderedListMarkerGap) else Modifier)
                     .then(alignment),
                 style = theme.bodyStyle.copy(
-                    color = theme.listBulletColor,
+                    color = theme.colors.listBullet,
                     textAlign = if (ordered) TextAlign.End else TextAlign.Start,
                 ),
                 maxLines = 1,
@@ -224,7 +224,7 @@ private fun ListItemRow(
         }
         Column(
             modifier = Modifier.weight(1f).then(alignment),
-            verticalArrangement = Arrangement.spacedBy(theme.blockSpacing),
+            verticalArrangement = Arrangement.spacedBy(theme.layout.blockSpacing),
         ) {
             CompositionLocalProvider(LocalMergeInlineSemantics provides false) {
                 content()
@@ -240,13 +240,13 @@ private fun RenderListContainer(
     modifier: Modifier,
     content: @Composable () -> Unit,
 ) {
-    val theme = LocalMarkdownTheme.current
+    val theme = LocalMarkdownStyle.current
     Column(
         modifier = modifier.fillMaxWidth().semantics {
             collectionInfo = CollectionInfo(itemCount, 1)
             isTraversalGroup = true
         },
-        verticalArrangement = Arrangement.spacedBy(if (tight) LayoutTokens.ListTightItemSpacing else theme.blockSpacing),
+        verticalArrangement = Arrangement.spacedBy(if (tight) LayoutTokens.ListTightItemSpacing else theme.layout.blockSpacing),
     ) {
         content()
     }

@@ -1,5 +1,7 @@
 package com.hrm.markdown.renderer.inline
 
+import com.hrm.markdown.renderer.MarkdownDefaults
+
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -11,7 +13,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.text.rememberTextMeasurer
 import com.hrm.latex.renderer.measure.rememberLatexMeasurer
-import com.hrm.markdown.renderer.MarkdownTheme
+import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.internal.layout.inline.InlineLayoutEpoch
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 import kotlin.test.Test
@@ -29,10 +31,9 @@ class InlineLayoutEpochRememberTest {
         setContent {
             var tick by remember { mutableStateOf(0) }
             var darkTheme by remember { mutableStateOf(false) }
-            val theme = if (darkTheme) MarkdownTheme.dark() else MarkdownTheme.light()
+            val theme = if (darkTheme) ResolvedMarkdownStyle(colors = MarkdownDefaults.darkColors()) else ResolvedMarkdownStyle()
             val epoch = rememberInlineLayoutEpoch(
                 theme = theme,
-                codeTheme = null,
                 directiveRegistry = MarkdownDirectiveRegistry.Empty,
                 config = null,
                 onLinkClick = null,

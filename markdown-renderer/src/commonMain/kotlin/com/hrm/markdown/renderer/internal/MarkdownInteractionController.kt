@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
+import com.hrm.codehigh.ast.CodeToken
 import com.hrm.markdown.renderer.*
 import com.hrm.markdown.renderer.internal.core.model.*
 
@@ -16,6 +17,9 @@ internal class MarkdownInteractionController {
         private set
     var imageEnabled by mutableStateOf(false)
         private set
+    var codeTokenEnabled by mutableStateOf(false)
+        private set
+    private var onCodeTokenClick: ((CodeToken) -> Unit)? = null
     private var onCitationClick: ((MarkdownCitationClickEvent) -> Unit)? = null
     private var onImageClick: ((MarkdownImageClickEvent) -> Unit)? = null
     private var document: InternalRenderDocumentModel? = null
@@ -25,10 +29,16 @@ internal class MarkdownInteractionController {
         handlers: MarkdownInteractions,
     ) {
         this.document = document
+        this.onCodeTokenClick = handlers.onCodeTokenClick
+        codeTokenEnabled = handlers.onCodeTokenClick != null
         this.onCitationClick = handlers.onCitationClick
         this.onImageClick = handlers.onImageClick
         citationEnabled = handlers.onCitationClick != null
         imageEnabled = handlers.onImageClick != null
+    }
+
+    fun codeToken(token: CodeToken) {
+        onCodeTokenClick?.invoke(token)
     }
 
     fun citation(key: String, id: Long, bounds: Rect?) {

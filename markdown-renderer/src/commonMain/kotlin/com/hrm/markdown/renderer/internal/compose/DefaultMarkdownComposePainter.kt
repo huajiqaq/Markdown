@@ -21,7 +21,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import com.hrm.markdown.renderer.LocalMarkdownDirectiveRegistry
-import com.hrm.markdown.renderer.LocalMarkdownTheme
+import com.hrm.markdown.renderer.LocalMarkdownStyle
 import com.hrm.markdown.renderer.MarkdownRenderMode
 import com.hrm.markdown.renderer.block.FencedCodeBlockRenderer
 import com.hrm.markdown.renderer.block.MathBlockRenderer
@@ -119,7 +119,7 @@ internal object DefaultMarkdownComposePainter : MarkdownComposePainter {
                 LazyColumn(
                     state = lazyListState,
                     modifier = environment.modifier.graphicsLayer { },
-                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownTheme.current.blockSpacing),
+                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownStyle.current.layout.blockSpacing),
                 ) {
                     environment.header?.let { header ->
                         item(key = "markdown_header") { header() }
@@ -140,7 +140,7 @@ internal object DefaultMarkdownComposePainter : MarkdownComposePainter {
                 val body: @Composable () -> Unit = {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(LocalMarkdownTheme.current.blockSpacing),
+                        verticalArrangement = Arrangement.spacedBy(LocalMarkdownStyle.current.layout.blockSpacing),
                     ) {
                         for (index in 0 until document.blockCount) {
                             key(document.stableIdAt(index)) {
@@ -159,7 +159,7 @@ internal object DefaultMarkdownComposePainter : MarkdownComposePainter {
                             }
                         )
                         .graphicsLayer { },
-                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownTheme.current.blockSpacing),
+                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownStyle.current.layout.blockSpacing),
                 ) {
                     environment.header?.invoke()
                     body()
@@ -262,7 +262,7 @@ private fun PaintBlock(block: InternalLayoutBlockModel) {
             renderTrailingChildren = { children ->
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownTheme.current.blockSpacing),
+                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownStyle.current.layout.blockSpacing),
                 ) {
                     PaintLayoutBlockChildren(children)
                 }
@@ -324,7 +324,7 @@ private fun PaintRenderBlock(block: LayoutRenderBlockModel) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownTheme.current.blockSpacing),
+                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownStyle.current.layout.blockSpacing),
                 ) {
                     PaintLayoutBlockChildren(block.children)
                 }
@@ -345,7 +345,7 @@ private fun PaintRenderBlock(block: LayoutRenderBlockModel) {
             if (block.children.isNotEmpty()) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownTheme.current.blockSpacing),
+                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownStyle.current.layout.blockSpacing),
                 ) {
                     PaintLayoutBlockChildren(block.children)
                 }
@@ -375,13 +375,13 @@ private fun PaintRenderBlock(block: LayoutRenderBlockModel) {
             if (renderBlock.entries.isNotEmpty()) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownTheme.current.blockSpacing / 2),
+                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownStyle.current.layout.blockSpacing / 2),
                 ) {
                     renderBlock.entries.forEach { entry ->
                         Text(
                             text = "${"  ".repeat((entry.level - 1).coerceAtLeast(0))}• ${entry.text}",
-                            style = LocalMarkdownTheme.current.bodyStyle,
-                            color = LocalMarkdownTheme.current.linkColor,
+                            style = LocalMarkdownStyle.current.bodyStyle,
+                            color = LocalMarkdownStyle.current.colors.link,
                         )
                     }
                 }
@@ -450,7 +450,7 @@ private fun PaintRenderBlock(block: LayoutRenderBlockModel) {
             if (block.children.isNotEmpty()) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownTheme.current.blockSpacing),
+                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownStyle.current.layout.blockSpacing),
                 ) {
                     PaintLayoutBlockChildren(block.children)
                 }
@@ -461,7 +461,7 @@ private fun PaintRenderBlock(block: LayoutRenderBlockModel) {
             if (block.children.isNotEmpty()) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownTheme.current.blockSpacing),
+                    verticalArrangement = Arrangement.spacedBy(LocalMarkdownStyle.current.layout.blockSpacing),
                 ) {
                     PaintLayoutBlockChildren(block.children)
                 }
@@ -502,8 +502,8 @@ private fun PaintInlineBlock(block: LayoutInlineBlockModel) {
         if (block.showDivider) {
             HorizontalDivider(
                 modifier = Modifier.padding(top = LayoutTokens.HeadingDividerSpacing),
-                thickness = LocalMarkdownTheme.current.dividerThickness,
-                color = LocalMarkdownTheme.current.dividerColor,
+                thickness = LocalMarkdownStyle.current.layout.dividerThickness,
+                color = LocalMarkdownStyle.current.colors.divider,
             )
         }
     }
@@ -515,7 +515,7 @@ private fun PaintRenderBlockColumn(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(LocalMarkdownTheme.current.blockSpacing),
+        verticalArrangement = Arrangement.spacedBy(LocalMarkdownStyle.current.layout.blockSpacing),
     ) {
         PaintRenderBlockChildren(blocks)
     }
@@ -538,7 +538,7 @@ private fun PaintLayoutBlockColumn(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(LocalMarkdownTheme.current.blockSpacing),
+        verticalArrangement = Arrangement.spacedBy(LocalMarkdownStyle.current.layout.blockSpacing),
     ) {
         PaintLayoutBlockChildren(blocks)
     }
