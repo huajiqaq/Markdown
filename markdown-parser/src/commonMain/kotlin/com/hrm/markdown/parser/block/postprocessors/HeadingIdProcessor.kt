@@ -41,6 +41,9 @@ class HeadingIdProcessor : PostProcessor {
     }
 
     companion object {
+        private val NON_SLUG_CHARACTERS = Regex("[^\\w\\u4e00-\\u9fff-]")
+        private val REPEATED_HYPHENS = Regex("-+")
+
         fun extractPlainText(node: Node): String {
             return when (node) {
                 is Text -> node.literal
@@ -57,8 +60,8 @@ class HeadingIdProcessor : PostProcessor {
 
         fun generateSlug(text: String): String {
             return text.lowercase()
-                .replace(Regex("[^\\w\\u4e00-\\u9fff-]"), "-")
-                .replace(Regex("-+"), "-")
+                .replace(NON_SLUG_CHARACTERS, "-")
+                .replace(REPEATED_HYPHENS, "-")
                 .trim('-')
                 .ifEmpty { "heading" }
         }

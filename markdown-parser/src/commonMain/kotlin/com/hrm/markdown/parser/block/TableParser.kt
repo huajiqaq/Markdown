@@ -10,7 +10,12 @@ import com.hrm.markdown.parser.ast.Table
 internal object TableParser {
 
     fun parseTableDelimiterRow(line: String): List<Table.Alignment>? {
-        val trimmed = line.trim().let { if (it.startsWith('|')) it.drop(1) else it }
+        val text = line.trim()
+        when (text.firstOrNull()) {
+            '|', '-', ':' -> Unit
+            else -> return null
+        }
+        val trimmed = text.let { if (it.startsWith('|')) it.drop(1) else it }
             .let { if (it.endsWith('|')) it.dropLast(1) else it }
         if (trimmed.isBlank()) return null
 

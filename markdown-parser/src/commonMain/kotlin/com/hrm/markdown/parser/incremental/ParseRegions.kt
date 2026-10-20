@@ -79,7 +79,12 @@ internal fun containsDefinition(node: Node): Boolean = when (node) {
     else -> false
 }
 
-internal fun isAttributeParagraph(node: Node?): Boolean =
-    node is Paragraph && ATTRIBUTE_PARAGRAPH.matches(node.rawContent.orEmpty())
+internal fun isAttributeParagraph(node: Node?): Boolean {
+    if (node !is Paragraph) return false
+    val raw = node.rawContent.orEmpty()
+    val first = raw.firstOrNull() ?: return false
+    if (first in '!'..'~' && first != '{') return false
+    return ATTRIBUTE_PARAGRAPH.matches(raw)
+}
 
 private val ATTRIBUTE_PARAGRAPH = Regex("^\\s*\\{[^}]+\\}\\s*$")

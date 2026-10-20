@@ -66,6 +66,7 @@ O(log L + log B + I + A + R + S + G)
 ./gradlew jvmTest
 ./gradlew :markdown-parser:compileKotlinJs :markdown-parser:compileKotlinWasmJs
 ./gradlew :markdown-benchmark:performanceGate
+./gradlew :markdown-benchmark:fullParsingBenchmark
 ./gradlew :markdown-benchmark:incrementalScalingBenchmark --args='--warmups 20 --iterations 40'
 ```
 
@@ -79,6 +80,20 @@ O(log L + log B + I + A + R + S + G)
 - 100 / 1,000 / 10,000 段文档的实际重解析行数和完整更新分配量检查。分配门禁要求前缀增长 100 倍时，单次固定尾部追加分配增长小于 4 倍，不使用易受机器负载影响的耗时断言。
 
 规模基准在计时外初始化解析器，测量完整 append / replace 调用，报告中位数、p95 和线程分配量。它不把 currentText() 展平或 AST 全量遍历混入局部更新测量；这些调用有各自明确的输出成本。单次测量不能推广成所有 Markdown 文档的固定提速倍数。
+
+## 全量路径与流式提交边界
+
+围栏内容只在本次块解析完成时拼接一次；解析区间在 EOF 或复用边界处也会完成尚未关闭的块，
+因此每个已提交的流式快照仍包含当前收到的代码正文。不会为了该优化跨多次提交累积代码。
+`LlmStreaming` 的 16 字符合并阈值、换行提交、结束/取消刷新尾部的策略保持不变。
+
+连续链接/缩写定义在原字符串上推进偏移和行号，只在返回剩余正文时取一次子串，避免逐定义复制后缀和重扫前缀。
+表格探测先验证当前分隔行，再读取段落表头，避免对普通多行段落逐行复制不断增长的前缀。
+这些改动消除了相应输入族的二次方复制成本；不将任意扩展语法、嵌套或自定义处理器都声明为线性复杂度。
+持久化索引、检查点和全局依赖失效规则保持不变。
+
+`FullParsingAllocationScalingTest` 检查长块与连续定义的分配增长，`fullParsingBenchmark` 另测真实物化行内 AST 的成本。
+既有 `streamingAppendBatch` 基准继续使用 16 字符合并阈值，完整增量分配与解析范围回归同时执行。
 
 ## 本机对照记录（2026-10-20）
 
@@ -101,4 +116,19 @@ CommonMark 的稳定前缀从 100 段扩大至 10,000 段时，当前单次追�
 | inlineHeavyParse | 0.330 ms | 0.472 ms | 0.648 MB | 0.904 MB |
 | streamingAppendBatch | 174.495 ms | 7.741 ms | 615.799 MB | 24.427 MB |
 
-流式批次平均耗时降低约 22.5 倍、分配量减少约 96%；两个全量样例平均耗时分别增加约 20% / 43%。这是当前实现的实际取舍，不能表述为所有解析操作都更快。最终 960 项 JVM 测试、JS/Wasm 编译与性能门禁通过。
+该次增量重设计的流式批次平均耗时降低约 22.5 倍、分配量减少约 96%；当时两个全量样例平均耗时分别增加约 20% / 43%，960 项 JVM 测试、JS/Wasm 编译与性能门禁通过。
+
+### 后续全量路径优化
+
+对照基线 `1254e48` 与上述全量路径优化，使用相同门禁和 16 字符流式合并策略；没有调整预算。
+下表记录同机单轮观测，短调用时间会受 JIT、GC 和系统负载影响，不把百分比作为固定收益保证。
+
+| 场景 | 基线平均耗时 | 优化后平均耗时 | 基线单次分配 | 优化后单次分配 |
+|---|---:|---:|---:|---:|
+| fullParse | 1.344 ms | 1.280 ms | 3.785 MB | 3.102 MB |
+| inlineHeavyParse（保留惰性行内） | 0.472 ms | 0.213 ms | 0.904 MB | 0.579 MB |
+| streamingAppendBatch（16 字符合并） | 8.068 ms | 7.294 ms | 24.450 MB | 22.182 MB |
+
+独立的 `fullParsingBenchmark` 使用两个 JVM fork，另测 3,000 行围栏、3,000 条连续定义、
+3,000 行普通段落和完整物化的行内 AST，避免只用多个短块或惰性结果评估全量路径。
+971 项 JVM 测试、JS/Wasm 编译与既有性能门禁通过；真实 Compose 测试验证 16 字符阈值前后的代码可见性。

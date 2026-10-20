@@ -42,6 +42,53 @@ import kotlinx.coroutines.ThreadContextElement
 @OptIn(ExperimentalTestApi::class)
 class MarkdownStreamingLifecycleTest {
     @Test
+    fun should_renderCodeAtExistingBoundaries_when_usingLlmStreamingPreset() = runComposeUiTest {
+        val first = "z123456789abcdef"
+        val page = TestPage("```text\n$first", isStreaming = true, parserConfig = MarkdownParserConfig.LlmStreaming)
+        setContent { page.Content() }
+        waitUntil(timeoutMillis = 10_000) { hasVisibleCode(first) }
+        val committed = page.latest
+
+        runOnIdle { page.markdown += "ghijklmnopqrstu" }
+        waitForIdle()
+        runOnIdle {
+            assertSame(committed.document, page.latest.document)
+            assertEquals(committed.html, page.latest.html)
+            assertTrue(hasVisibleCode(first))
+        }
+
+        runOnIdle { page.markdown += "v" }
+        val second = first + "ghijklmnopqrstuv"
+        waitUntil(timeoutMillis = 10_000) { hasVisibleCode(second) }
+
+        runOnIdle { page.markdown += "tail\n" }
+        waitUntil(timeoutMillis = 10_000) { hasVisibleCode(second + "tail") }
+        val newlineCommit = page.latest
+        runOnIdle { page.markdown += "last" }
+        waitForIdle()
+        runOnIdle {
+            assertSame(newlineCommit.document, page.latest.document)
+            assertEquals(newlineCommit.html, page.latest.html)
+            page.isStreaming = false
+        }
+        waitUntil(timeoutMillis = 10_000) {
+            onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text))
+                .fetchSemanticsNodes()
+                .any { node ->
+                    node.config[SemanticsProperties.Text].any { "last" in it.text }
+                }
+        }
+    }
+
+    private fun ComposeUiTest.hasVisibleCode(code: String): Boolean =
+        onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text))
+            .fetchSemanticsNodes()
+            .any { node ->
+                node.config[SemanticsProperties.Text]
+                    .joinToString("") { it.text }.trimEnd('\n') == code
+            }
+
+    @Test
     fun should_publishOnlyLatestRevision_when_fullParsesFinishOutOfOrder() {
         val jobs = BackgroundJobContext()
         val first = BackgroundBarrier(jobs)

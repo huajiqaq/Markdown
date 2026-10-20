@@ -32,7 +32,7 @@ class HtmlFilterProcessor : PostProcessor {
                 val materialized = node.materializedChildrenSnapshot()
                 val children = when {
                     materialized.isNotEmpty() -> materialized
-                    GFM_DISALLOWED_TAG_REGEX.containsMatchIn(node.rawContent.orEmpty()) ->
+                    '<' in node.rawContent.orEmpty() && GFM_DISALLOWED_TAG_REGEX.containsMatchIn(node.rawContent.orEmpty()) ->
                         node.children.toList()
                     else -> emptyList()
                 }

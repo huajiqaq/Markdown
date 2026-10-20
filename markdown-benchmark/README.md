@@ -1,6 +1,6 @@
 # Performance regression checks
 
-This module has two complementary benchmark layers.
+This module contains complementary benchmarks and regression checks.
 
 ## Parser gate
 
@@ -21,8 +21,22 @@ The gate checks:
 - `gc.alloc.rate.norm` bytes allocated per operation;
 - the additional peak heap observed during an iteration.
 
-The streaming scenario includes `endStream()` exactly once per measured operation. Longer local
+The streaming scenario uses the existing 16-character parser coalescing threshold, flushes on newlines,
+and includes `endStream()` exactly once per measured operation. Longer local
 runs are available through `mainBenchmark`; `ciBenchmark` is a shorter smoke configuration.
+
+## Full-parse shapes
+
+```bash
+./gradlew :markdown-benchmark:fullParsingBenchmark
+```
+
+This separate forked JMH suite covers a 3,000-line code fence, 3,000 consecutive reference definitions,
+a long multiline paragraph, and a document whose inline AST is fully materialized. The existing
+`inlineHeavyParse` scenario intentionally retains lazy inline parsing. Input construction is outside
+the measurements. Allocation and latency results are written to `build/reports/full-parsing/results.json`;
+the existing CI gate and its budgets are unchanged. JVM allocation tests separately reject quadratic
+copying as the large block grows from 100 to 1,000 lines.
 
 ### Updating budgets
 
@@ -35,6 +49,7 @@ optimization in the pull request.
 
 ```bash
 ./gradlew :markdown-benchmark:incrementalScalingBenchmark --args='--warmups 20 --iterations 40'
+./gradlew :markdown-benchmark:incrementalScalingBenchmark --args='--warmups 20 --iterations 40 --coalesce 16'
 ```
 
 This reports complete append and equal-length replacement latency (median/p95) and thread allocation
@@ -42,6 +57,9 @@ at 100, 1,000 and 10,000 paragraphs, for CommonMark and Extended. Parser setup, 
 and full AST traversal are outside the measured call. Compare revisions using the identical harness,
 JDK, machine and arguments. Timing is observational; the parser's JVM tests separately reject linear
 allocation growth for a fixed-size tail update. See [algorithm and complexity](../markdown-parser/INCREMENTAL_PARSING.md).
+
+`--coalesce 16` matches `LlmStreaming`. Each measured append reaches the threshold and actually commits
+a parse; it does not report the cost of accepting a small buffered chunk as parser latency.
 
 ## Compose Macrobenchmark
 

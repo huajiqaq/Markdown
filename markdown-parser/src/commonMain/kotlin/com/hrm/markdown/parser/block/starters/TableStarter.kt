@@ -16,11 +16,12 @@ internal class TableStarter : BlockStarter {
 
     override fun tryStart(cursor: LineCursor, lineIdx: Int, tip: OpenBlock): OpenBlock? {
         if (tip.paragraphContent == null) return null
-        val headerLine = tip.paragraphContent.toString().trim()
-        if (!headerLine.contains('|')) return null
-
+        // Most continuation lines cannot delimit a table. Reject them before copying
+        // the growing paragraph, which would otherwise cost O(N²) for a long paragraph.
         val delimLine = cursor.rest().trim()
         val alignments = TableParser.parseTableDelimiterRow(delimLine) ?: return null
+        val headerLine = tip.paragraphContent.toString().trim()
+        if (!headerLine.contains('|')) return null
         val headerCells = TableParser.parseTableRow(headerLine)
         if (headerCells.isEmpty()) return null
 

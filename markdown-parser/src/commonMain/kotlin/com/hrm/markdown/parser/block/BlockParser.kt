@@ -788,7 +788,6 @@ class BlockParser(
                 // skip the opening fence line itself (content starts on the next line)
                 if (lineIdx > tip.contentStartLine) {
                     tip.contentLines.add(lineContent)
-                    syncOpenFencedCodeLiteral(node, tip)
                 }
             }
             is IndentedCodeBlock -> {
@@ -894,21 +893,6 @@ class BlockParser(
         }
     }
 
-    private fun syncOpenFencedCodeLiteral(
-        node: FencedCodeBlock,
-        tip: OpenBlock,
-    ) {
-        if (!tip.isFenced) return
-        if (tip.contentLines.isEmpty()) {
-            node.literal = ""
-            return
-        }
-        node.literal = tip.contentLines.joinToString("\n")
-        if (!node.literal.endsWith('\n')) {
-            node.literal += "\n"
-        }
-    }
-
     private fun handleBlankLine(tip: OpenBlock, lineIdx: Int) {
         when (tip.node) {
             is IndentedCodeBlock -> {
@@ -916,7 +900,6 @@ class BlockParser(
             }
             is FencedCodeBlock -> {
                 tip.contentLines.add("")
-                syncOpenFencedCodeLiteral(tip.node, tip)
             }
             is Paragraph -> {
                 // 空行结束段落
@@ -1020,6 +1003,8 @@ class BlockParser(
                 node.lineRange = LineRange(ob.contentStartLine, ob.lastLineIndex + 1)
             }
             is FencedCodeBlock -> {
+                // Unclosed fences are finalized at every parse boundary too, before a
+                // streaming snapshot is published. Assemble once, not on each scanned line.
                 val lines = ob.contentLines
                 if (lines.size == 1 && lines[0].isEmpty()) {
                     node.literal = ""
@@ -1239,16 +1224,19 @@ class BlockParser(
      * 返回不属于链接引用定义的剩余内容。
      */
     private fun extractLinkReferenceDefs(content: String, startLine: Int): String {
-        var remaining = content
-        while (true) {
+        var offset = 0
+        var line = startLine
+        while (offset < content.length) {
+            val first = content[offset]
+            if (first in '!'..'~' && first != '[') break
             // 先尝试单行匹配
-            val match = LINK_REF_DEF_REGEX.find(remaining)
+            val match = LINK_REF_DEF_REGEX.matchAt(content, offset)
             // 再尝试多行标题匹配（标题在下一行）
-            val multiMatch = LINK_REF_DEF_MULTILINE_TITLE_REGEX.find(remaining)
+            val multiMatch = LINK_REF_DEF_MULTILINE_TITLE_REGEX.matchAt(content, offset)
 
             val effectiveMatch = when {
-                match != null && match.range.first == 0 -> match
-                multiMatch != null && multiMatch.range.first == 0 -> multiMatch
+                match != null -> match
+                multiMatch != null -> multiMatch
                 else -> break
             }
 
@@ -1269,21 +1257,24 @@ class BlockParser(
             // blank labels are not valid link reference definitions
             if (label.isEmpty()) break
 
-            definitionLines.add(startLine + content.take(content.length - remaining.length).count { it == '\n' })
+            definitionLines.add(line)
             if (!document.linkDefinitions.containsKey(label)) {
                 val def = LinkReferenceDefinition(
                     label = label,
                     destination = destination,
                     title = title
                 )
-                setDefinitionRange(def, startLine, content, remaining, effectiveMatch.value)
+                setDefinitionRange(def, line, effectiveMatch.value)
                 document.linkDefinitions[label] = def
                 document.appendChild(def)
             }
 
-            remaining = remaining.substring(effectiveMatch.range.last + 1).trimStart('\n')
+            var next = effectiveMatch.range.last + 1
+            while (next < content.length && content[next] == '\n') next++
+            for (i in offset until next) if (content[i] == '\n') line++
+            offset = next
         }
-        return remaining
+        return content.substring(offset)
     }
 
     /**
@@ -1291,33 +1282,36 @@ class BlockParser(
      * 返回不属于缩写定义的剩余内容。
      */
     private fun extractAbbreviationDefs(content: String, startLine: Int): String {
-        var remaining = content
-        while (true) {
-            val match = ABBREVIATION_DEF_REGEX.find(remaining) ?: break
-            if (match.range.first != 0) break
+        var offset = 0
+        var line = startLine
+        while (offset < content.length) {
+            if (!content.startsWith("*[", offset)) break
+            val match = ABBREVIATION_DEF_REGEX.matchAt(content, offset) ?: break
 
             val abbr = match.groupValues[1]
             val fullText = match.groupValues[2].trim()
 
             if (abbr.isNotEmpty()) {
-                definitionLines.add(startLine + content.take(content.length - remaining.length).count { it == '\n' })
+                definitionLines.add(line)
             }
             if (abbr.isNotEmpty() && !document.abbreviationDefinitions.containsKey(abbr)) {
                 val def = AbbreviationDefinition(abbreviation = abbr, fullText = fullText)
-                setDefinitionRange(def, startLine, content, remaining, match.value)
+                setDefinitionRange(def, line, match.value)
                 document.abbreviationDefinitions[abbr] = def
                 document.appendChild(def)
             }
 
-            remaining = remaining.substring(match.range.last + 1).trimStart('\n')
+            var next = match.range.last + 1
+            while (next < content.length && content[next] == '\n') next++
+            for (i in offset until next) if (content[i] == '\n') line++
+            offset = next
         }
-        return remaining
+        return content.substring(offset)
     }
 
-    private fun setDefinitionRange(node: Node, startLine: Int, content: String, remaining: String, matched: String) {
-        val definitionStart = startLine + content.take(content.length - remaining.length).count { it == '\n' }
-        val definitionEnd = definitionStart + matched.trimEnd().count { it == '\n' } + 1
-        node.lineRange = LineRange(definitionStart, definitionEnd)
+    private fun setDefinitionRange(node: Node, startLine: Int, matched: String) {
+        val definitionEnd = startLine + matched.trimEnd().count { it == '\n' } + 1
+        node.lineRange = LineRange(startLine, definitionEnd)
         node.contentHash = contentHash(node.lineRange)
     }
 
@@ -1562,20 +1556,22 @@ class BlockParser(
         // link label: no unescaped [ or ], but allow backslash escapes like \] \[ \\
         private val LINK_LABEL_PATTERN = "((?:[^\\[\\]\\\\]|\\\\.)+)"
 
+        // matchAt anchors these patterns to the moving offset. A ^ anchor would instead
+        // require a source line boundary after the previous match consumed indentation.
         private val LINK_REF_DEF_REGEX = Regex(
-            "^\\s{0,3}\\[${LINK_LABEL_PATTERN}\\]:\\s*(?:<([^>]*)>|([^\\s<>][^\\s]*))(?:\\s+(?:\"((?:[^\"]|\\\\\")*)\"|'([^']*)'|\\(([^)]*)\\)))?\\s*$",
+            "\\s{0,3}\\[${LINK_LABEL_PATTERN}\\]:\\s*(?:<([^>]*)>|([^\\s<>][^\\s]*))(?:\\s+(?:\"((?:[^\"]|\\\\\")*)\"|'([^']*)'|\\(([^)]*)\\)))?\\s*$",
             RegexOption.MULTILINE
         )
 
         /** 支持标题跨行的链接引用定义（标题可在下一行） */
         private val LINK_REF_DEF_MULTILINE_TITLE_REGEX = Regex(
-            "^\\s{0,3}\\[${LINK_LABEL_PATTERN}\\]:\\s*(?:<([^>]*)>|([^\\s<>][^\\s]*))\\s*\\n\\s+(?:\"((?:[^\"]|\\\\\")*)\"|'([^']*)'|\\(([^)]*)\\))\\s*$",
+            "\\s{0,3}\\[${LINK_LABEL_PATTERN}\\]:\\s*(?:<([^>]*)>|([^\\s<>][^\\s]*))\\s*\\n\\s+(?:\"((?:[^\"]|\\\\\")*)\"|'([^']*)'|\\(([^)]*)\\))\\s*$",
             RegexOption.MULTILINE
         )
 
         /** 缩写定义：*[abbr]: Full Text */
         private val ABBREVIATION_DEF_REGEX = Regex(
-            "^\\*\\[([^\\]]+)\\]:\\s*(.+)$",
+            "\\*\\[([^\\]]+)\\]:\\s*(.+)$",
             RegexOption.MULTILINE
         )
 

@@ -54,6 +54,9 @@ class BlockAttributeProcessor : PostProcessor {
             if (child !is Paragraph) continue
 
             val raw = child.rawContent ?: continue
+            val last = raw.lastOrNull() ?: continue
+            // Preserve the regex's whitespace rules on every platform; only reject ASCII.
+            if (last in '!'..'~' && last != '}') continue
 
             // Case 1: 整个段落仅包含 {…}
             val trimmed = raw.trim()

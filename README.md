@@ -255,6 +255,10 @@ Markdown(
 )
 ```
 
+`LlmStreaming` retains its 16-character parser buffer: newlines commit early, and stopping or cancelling
+flushes the remaining tail. Code content is assembled once per parse before publication, including
+unclosed fences; full-parse optimizations introduce no additional buffering or wait for a closing fence.
+
 **What happens under the hood:**
 - ✅ Only re-parses the "dirty" tail region — stable blocks are reused
 - ✅ Validates the append-only prefix — retry, clear, or replacement updates restart atomically

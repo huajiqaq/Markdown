@@ -147,3 +147,16 @@ tasks.register<JavaExec>("incrementalScalingBenchmark") {
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.hrm.markdown.benchmark.IncrementalScalingBenchmarkKt")
 }
+
+tasks.register<JavaExec>("fullParsingBenchmark") {
+    group = "benchmark"
+    description = "Runs forked full-parse benchmarks for long code, definitions and materialized inline ASTs."
+    dependsOn("mainBenchmarkCompile", tasks.named("classes"))
+    classpath = sourceSets["main"].runtimeClasspath +
+        files(performanceGateGeneratedClasses, performanceGateGeneratedResources)
+    mainClass.set("org.openjdk.jmh.Main")
+    val results = layout.buildDirectory.file("reports/full-parsing/results.json")
+    args("com.hrm.markdown.benchmark.FullParseMicrobenchmark.*", "-prof", "gc",
+        "-rf", "json", "-rff", results.get().asFile.absolutePath)
+    doFirst { results.get().asFile.parentFile.mkdirs() }
+}
