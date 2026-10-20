@@ -32,7 +32,7 @@ class HeadingIdProcessor : PostProcessor {
                 node.autoId = deduplicateId(slug, usedIds)
             }
             is ContainerNode -> {
-                for (child in node.materializedChildrenSnapshot()) {
+                node.forEachMaterializedChild { child ->
                     processRecursive(child, usedIds)
                 }
             }

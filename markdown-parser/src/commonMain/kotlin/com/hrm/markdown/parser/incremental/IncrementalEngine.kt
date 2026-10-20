@@ -221,9 +221,10 @@ class IncrementalEngine(
         if (lineDelta != 0 || (offsetDelta != 0 && suffix.hasSourceRanges)) suffix.forEachRegion(onlyPositioned = lineDelta == 0) { region ->
             region.nodes.forEach { it.shiftSubtreeCoordinates(lineDelta, offsetDelta) }
         }
-        val replacement = BlockIndex.of(prepared.map { it.first })
-        val combined = prefix + replacement + suffix
-        if (pipeline.hasHeadings && (replaced.headingCount != 0 || replacement.headingCount != 0)) reindexHeadings(combined)
+        if (pipeline.hasHeadings && (replaced.headingCount != 0 || prepared.any { it.first.headings.isNotEmpty() })) {
+            val replacement = BlockIndex.of(prepared.map { it.first })
+            reindexHeadings(prefix + replacement + suffix)
+        }
         prepared.forEach { (_, doc) -> pipeline.processLocal(doc) }
         // Local processors can replace/remove nodes; update only newly parsed leaves.
         val processed = BlockIndex.of(prepared.map { (region, doc) -> region.copy(nodes = doc.children.toList(), hasSourceRanges = doc.children.any(::hasSourceRanges)) })
@@ -275,7 +276,9 @@ class IncrementalEngine(
     private fun regionMetadata(region: ParseRegion, pipeline: Pipeline): ParsedRegion {
         val headings = mutableListOf<HeadingInput>()
         if (pipeline.hasHeadings) region.nodes.forEach { captureHeadings(it, headings) }
-        return ParsedRegion(region.end - region.start, region.nodes.toList(), region.dependsOnFirstLine,
+        // Output membership is captured only after postprocessing, before publication.
+        // Raw nodes are not needed by the temporary heading index.
+        return ParsedRegion(region.end - region.start, emptyList(), region.dependsOnFirstLine,
             region.hasDefinitions, region.hasNumberedReferences, region.startsWithAttribute, headings,
             bibliographyTailGap = region.bibliographyEnd?.let { region.end - it })
     }
@@ -296,8 +299,11 @@ class IncrementalEngine(
         }
     }
 
-    private fun hasSourceRanges(node: Node): Boolean = node.sourceRange != SourceRange.EMPTY ||
-        (node is ContainerNode && node.materializedChildrenSnapshot().any(::hasSourceRanges))
+    private fun hasSourceRanges(node: Node): Boolean {
+        if (node.sourceRange != SourceRange.EMPTY) return true
+        if (node is ContainerNode) node.forEachMaterializedChild { if (hasSourceRanges(it)) return true }
+        return false
+    }
 
     private fun captureHeadings(node: Node, result: MutableList<HeadingInput>) {
         when (node) {

@@ -73,10 +73,13 @@ internal fun parseRegions(
     return regions
 }
 
-internal fun containsDefinition(node: Node): Boolean = when (node) {
-    is LinkReferenceDefinition, is FootnoteDefinition, is AbbreviationDefinition, is BibliographyDefinition -> true
-    is ContainerNode -> node.materializedChildrenSnapshot().any(::containsDefinition)
-    else -> false
+internal fun containsDefinition(node: Node): Boolean {
+    when (node) {
+        is LinkReferenceDefinition, is FootnoteDefinition, is AbbreviationDefinition, is BibliographyDefinition -> return true
+        is ContainerNode -> node.forEachMaterializedChild { if (containsDefinition(it)) return true }
+        else -> Unit
+    }
+    return false
 }
 
 internal fun isAttributeParagraph(node: Node?): Boolean {

@@ -4,6 +4,7 @@ import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.ast.ContainerNode
 import com.hrm.markdown.parser.ast.Node
 import com.hrm.markdown.parser.flavour.CommonMarkFlavour
+import com.hrm.markdown.parser.flavour.GFMFlavour
 import kotlinx.benchmark.Benchmark
 import kotlinx.benchmark.BenchmarkMode
 import kotlinx.benchmark.Measurement
@@ -28,6 +29,7 @@ open class FullParseMicrobenchmark {
     private lateinit var definitions: String
     private lateinit var paragraph: String
     private lateinit var inlineDocument: String
+    private lateinit var table: String
 
     @Setup
     open fun setUp() {
@@ -37,6 +39,8 @@ open class FullParseMicrobenchmark {
         inlineDocument = (0 until 200).joinToString("\n\n") {
             "**Kotlin** _Multiplatform_ `parser` ~~benchmark~~ [link](https://example.com/$it) :smile:"
         }
+        table = "| A | B | C | D |\n|---|---|---|---|\n" +
+            (0 until 1500).joinToString("\n") { "| row $it | value | text | end |" }
     }
 
     @Benchmark
@@ -50,6 +54,9 @@ open class FullParseMicrobenchmark {
 
     @Benchmark
     open fun materializedInlineParse() = MarkdownParser().parse(inlineDocument).also(::materialize)
+
+    @Benchmark
+    open fun tableMetadataParse() = MarkdownParser(GFMFlavour).parse(table)
 
     private fun materialize(node: Node) {
         if (node is ContainerNode) node.children.forEach(::materialize)

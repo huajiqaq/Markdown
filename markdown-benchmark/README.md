@@ -32,7 +32,8 @@ runs are available through `mainBenchmark`; `ciBenchmark` is a shorter smoke con
 ```
 
 This separate forked JMH suite covers a 3,000-line code fence, 3,000 consecutive reference definitions,
-a long multiline paragraph, and a document whose inline AST is fully materialized. The existing
+a long multiline paragraph, a document whose inline AST is fully materialized, and a 1,500-row,
+four-column GFM table that exercises metadata traversal while cell content remains lazy. The existing
 `inlineHeavyParse` scenario intentionally retains lazy inline parsing. Input construction is outside
 the measurements. Allocation and latency results are written to `build/reports/full-parsing/results.json`;
 the existing CI gate and its budgets are unchanged. JVM allocation tests separately reject quadratic
