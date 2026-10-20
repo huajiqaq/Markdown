@@ -44,9 +44,26 @@ class BlockParser(
     internal val registry: BlockStarterRegistry? = null,
     private val inlineParserFactory: ((Document) -> InlineParserInterface)? = null
 ) {
-    private val document = Document()
+    private var document = Document()
     private val openBlocks = mutableListOf<OpenBlock>()
     private var currentLine = 0
+    private val definitionLines = mutableListOf<Int>()
+    private val numberedReferenceLines = mutableListOf<Int>()
+
+    private var parsedStartLine = 0
+    private val parsedLines = ArrayList<String>()
+    private var hashPrefix = LongArray(64)
+    private var hashPowers = LongArray(64)
+
+    private fun lineContent(line: Int): String = parsedLines.getOrNull(line - parsedStartLine)
+        ?: source.lineContent(line)
+
+    private fun contentHash(range: LineRange): Long {
+        val start = range.startLine - parsedStartLine
+        val end = range.endLine - parsedStartLine
+        if (start < 0 || end > parsedLines.size) return source.contentHash(range)
+        return hashPrefix[end] - hashPrefix[start] * hashPowers[end - start]
+    }
 
     private val starters = BlockStarters(source)
 
@@ -60,70 +77,74 @@ class BlockParser(
     /**
      * 解析整个源文本并返回文档 AST。
      */
-    fun parse(): Document {
-        openBlocks.clear()
-        openBlocks.add(OpenBlock(document, contentStartLine = 0))
-        document.clearChildren()
-        document.linkDefinitions.clear()
-        document.footnoteDefinitions.clear()
-        document.abbreviationDefinitions.clear()
-
-        for (lineIdx in 0 until source.lineCount) {
-            currentLine = lineIdx
-            processLine(source.lineContent(lineIdx), lineIdx)
-        }
-
-        // 关闭所有已打开的块
-        while (openBlocks.size > 1) {
-            finalizeBlock(openBlocks.last())
-            openBlocks.removeAt(openBlocks.size - 1)
-        }
-        finalizeBlock(openBlocks[0])
-
-        // 设置文档范围
-        document.lineRange = LineRange(0, source.lineCount)
-        document.sourceRange = SourceRange(
-            SourcePosition(0, 0, 0),
-            SourcePosition(
-                source.lineCount - 1,
-                source.lineContent(source.lineCount - 1).length,
-                source.length
-            )
+    fun parse(): Document = parseWithCheckpoints(0, source.lineCount).document.also {
+        it.lineRange = LineRange(0, source.lineCount)
+        it.sourceRange = SourceRange(
+            SourcePosition.ZERO,
+            SourcePosition(source.lineCount - 1, lineContent(source.lineCount - 1).length, source.length),
         )
-        document.contentHash = source.contentHash(document.lineRange)
-
-        // 解析行内内容
-        parseInlineContent(document)
-
-        return document
+        it.contentHash = contentHash(it.lineRange)
     }
+
+    fun parseLines(startLine: Int, endLine: Int): List<Node> =
+        parseWithCheckpoints(startLine, endLine).document.children.toList()
 
     /**
-     * 解析 [startLine, endLine) 范围内的行并返回解析后的块。
-     * 由增量解析器用于重新解析脏区域。
+     * Checkpoints describe the parser's root state, never inferred AST ranges or delimiters.
+     * A dependent checkpoint closed the preceding block by inspecting this line. If that
+     * line is edited, the preceding region must also be reparsed.
      */
-    fun parseLines(startLine: Int, endLine: Int): List<Node> {
+    internal fun parseWithCheckpoints(
+        startLine: Int,
+        endLine: Int,
+        canReuseSuffixAt: (Int) -> Boolean = { false },
+    ): BlockParseResult {
         openBlocks.clear()
-        val tempDoc = Document()
-        openBlocks.add(OpenBlock(tempDoc, contentStartLine = startLine))
-
-        for (lineIdx in startLine until endLine) {
-            currentLine = lineIdx
-            processLine(source.lineContent(lineIdx), lineIdx)
+        definitionLines.clear()
+        numberedReferenceLines.clear()
+        parsedStartLine = startLine
+        parsedLines.clear()
+        hashPrefix[0] = 0L
+        hashPowers[0] = 1L
+        document = Document()
+        openBlocks.add(OpenBlock(document, contentStartLine = startLine))
+        val checkpoints = mutableListOf(BlockCheckpoint(startLine, 0, false))
+        val observe: (Int, Boolean) -> Boolean = { line, dependent ->
+            val count = document.childCount()
+            if (line > startLine && count != checkpoints.last().childIndex) {
+                checkpoints.add(BlockCheckpoint(line, count, dependent))
+            } else if (line > startLine && checkpoints.size > 1) {
+                checkpoints[checkpoints.lastIndex] = BlockCheckpoint(line, count, dependent)
+            }
+            canReuseSuffixAt(line)
         }
-
+        var parsedEnd = endLine
+        source.forEachLine(startLine, endLine) { line, text, hash ->
+            currentLine = line
+            parsedLines.add(if (text.endsWith('\n')) text.dropLast(1) else text)
+            if (text.contains("[^")) numberedReferenceLines.add(line)
+            val count = parsedLines.size
+            if (count >= hashPrefix.size) {
+                hashPrefix = hashPrefix.copyOf(hashPrefix.size * 2)
+                hashPowers = hashPowers.copyOf(hashPowers.size * 2)
+            }
+            hashPrefix[count] = hashPrefix[count - 1] * -7046029254386353131L + hash
+            hashPowers[count] = hashPowers[count - 1] * -7046029254386353131L
+            val keepGoing = processLine(parsedLines.last(), line, observe)
+            if (!keepGoing) parsedEnd = line
+            keepGoing
+        }
         while (openBlocks.size > 1) {
             finalizeBlock(openBlocks.last())
-            openBlocks.removeAt(openBlocks.size - 1)
+            openBlocks.removeAt(openBlocks.lastIndex)
         }
         finalizeBlock(openBlocks[0])
-
-        parseInlineContent(tempDoc)
-
-        return tempDoc.children.toList()
+        parseInlineContent(document)
+        return BlockParseResult(document, checkpoints, parsedEnd, definitionLines.toList(), numberedReferenceLines.toList())
     }
 
-    private fun processLine(line: String, lineIdx: Int) {
+    private fun processLine(line: String, lineIdx: Int, checkpoint: ((Int, Boolean) -> Boolean)? = null): Boolean {
+        val rootAtLineStart = openBlocks.size == 1
         val cursor = LineCursor(line)
 
         // 第一阶段：尝试延续现有已打开的块
@@ -161,7 +182,7 @@ class BlockParser(
                 if (onlyContainers && !wouldStartNonLazyBlock(cursor.rest())) {
                     deepest.paragraphContent!!.append('\n').append(cursor.rest())
                     deepest.lastLineIndex = lineIdx
-                    return
+                    return true
                 }
             }
         }
@@ -199,7 +220,11 @@ class BlockParser(
             }
         }
 
-        if (closedByFenceOrMath) return
+        if (closedByFenceOrMath) return true
+
+        // Blank lines do not close every container. Reuse is safe only once continuation
+        // checks have closed the previous structure, before this line starts a new block.
+        if (openBlocks.size == 1 && checkpoint?.invoke(lineIdx, !rootAtLineStart) == true) return false
 
         // 第三阶段：尝试开启新块
         var lastMatched = openBlocks.last()
@@ -226,7 +251,7 @@ class BlockParser(
                     }
                 }
                 lastMatched.lastLineIndex = lineIdx
-                return
+                return true
             }
 
             // 仅对容器块和段落尝试开启新块
@@ -315,7 +340,7 @@ class BlockParser(
                         continue
                     } else if (newBlock.node is SetextHeading) {
                         val rawContent = lastMatched.paragraphContent.toString()
-                        val afterLinkDefs = extractLinkReferenceDefs(rawContent)
+                        val afterLinkDefs = extractLinkReferenceDefs(rawContent, lastMatched.contentStartLine)
                         if (afterLinkDefs.isBlank()) {
                             // All paragraph content was link ref defs; setext underline
                             // is not a heading, treat it as paragraph text
@@ -356,7 +381,7 @@ class BlockParser(
                     finalizeBlock(newBlock)
                     openBlocks.removeAt(openBlocks.size - 1)
                     appendTrailingParagraph(parent, newBlock, lineIdx)
-                    return
+                    return true
                 }
                 lastMatched = newBlock
                 blockStarted = true
@@ -365,6 +390,7 @@ class BlockParser(
 
         // 第四阶段：将行添加到当前块
         addLineToTip(lastMatched, cursor, lineIdx)
+        return true
     }
 
     private fun isSelfContainedBlock(block: OpenBlock): Boolean {
@@ -787,19 +813,19 @@ class BlockParser(
                 tip.contentLines.add(content)
             }
             is FrontMatter -> {
-                val trimmed = source.lineContent(lineIdx).trim()
+                val trimmed = lineContent(lineIdx).trim()
                 val endMarker = if (node.format == "yaml") "---" else "+++"
                 if (trimmed == endMarker && lineIdx > tip.contentStartLine) {
                     // 不添加关闭标记
                     finalizeBlock(tip)
                     openBlocks.removeAt(openBlocks.size - 1)
                 } else {
-                    tip.contentLines.add(source.lineContent(lineIdx))
+                    tip.contentLines.add(lineContent(lineIdx))
                 }
             }
             is Table -> {
                 // 跳过分隔行（创建表格时分隔行也会被传入 addLineToTip）
-                val rawLine = source.lineContent(lineIdx)
+                val rawLine = lineContent(lineIdx)
                 if (TableParser.parseTableDelimiterRow(rawLine.trim()) != null) return
 
                 // 作为表格行解析
@@ -968,9 +994,10 @@ class BlockParser(
                 }
 
                 // 尝试从段落中提取链接引用定义
-                var remaining = extractLinkReferenceDefs(content)
+                var remaining = extractLinkReferenceDefs(content, ob.contentStartLine)
                 // 尝试提取缩写定义
-                remaining = extractAbbreviationDefs(remaining)
+                val abbreviationStartLine = ob.contentStartLine + content.take(content.length - remaining.length).count { it == '\n' }
+                remaining = extractAbbreviationDefs(remaining, abbreviationStartLine)
                 if (remaining.isBlank()) {
                     (node.parent as? ContainerNode)?.removeChild(node)
                 } else {
@@ -1033,7 +1060,7 @@ class BlockParser(
                 // 检查是否已被正确关闭（addLineToTip 会在遇到闭合标记时 finalizeBlock）
                 val closingMarker = if (node.format == "yaml") "---" else "+++"
                 val lastContentLine = if (ob.lastLineIndex < source.lineCount) {
-                    source.lineContent(ob.lastLineIndex).trim()
+                    lineContent(ob.lastLineIndex).trim()
                 } else ""
                 val wasClosed = lastContentLine == closingMarker && ob.lastLineIndex > ob.contentStartLine
 
@@ -1060,8 +1087,9 @@ class BlockParser(
             }
             is BlockQuote -> {
                 // 检查是否为警告块
-                checkAdmonition(node)
                 node.lineRange = LineRange(ob.contentStartLine, ob.lastLineIndex + 1)
+                node.contentHash = contentHash(node.lineRange)
+                checkAdmonition(node)
             }
             is ListBlock -> {
                 // compute endLine from children for accurate lineRange
@@ -1106,7 +1134,7 @@ class BlockParser(
 
         // Tree-sitter 风格：为节点计算内容哈希，用于增量复用
         if (node !is Document && node.lineRange.lineCount > 0) {
-            node.contentHash = source.contentHash(node.lineRange)
+            node.contentHash = contentHash(node.lineRange)
         }
     }
 
@@ -1117,7 +1145,7 @@ class BlockParser(
         // 从源文本重建段落首行内容
         val lr = firstChild.lineRange
         if (lr.lineCount <= 0) return
-        val firstLine = source.lineContent(lr.startLine).trimStart()
+        val firstLine = lineContent(lr.startLine).trimStart()
         // 去除 > 前缀
         val content = firstLine.let {
             var s = it
@@ -1137,6 +1165,7 @@ class BlockParser(
         val admonition = Admonition(type = type, title = title)
         admonition.lineRange = blockQuote.lineRange
         admonition.sourceRange = blockQuote.sourceRange
+        admonition.contentHash = blockQuote.contentHash
 
         // 检查首段是否仅含 [!TYPE] 行
         val remainingContent = if (lr.lineCount > 1) {
@@ -1164,8 +1193,8 @@ class BlockParser(
         val lastContentLine = source.lineCount - 1
         fun isBlankContentLine(line: Int): Boolean {
             if (line < 0 || line >= source.lineCount) return false
-            if (line == lastContentLine && source.lineContent(line).isEmpty()) return false
-            return source.lineContent(line).isBlank()
+            if (line == lastContentLine && lineContent(line).isEmpty()) return false
+            return lineContent(line).isBlank()
         }
         for (item in items) {
             if (item.containsBlankLine) return false
@@ -1209,7 +1238,7 @@ class BlockParser(
      * 从段落内容中提取链接引用定义。
      * 返回不属于链接引用定义的剩余内容。
      */
-    private fun extractLinkReferenceDefs(content: String): String {
+    private fun extractLinkReferenceDefs(content: String, startLine: Int): String {
         var remaining = content
         while (true) {
             // 先尝试单行匹配
@@ -1240,12 +1269,14 @@ class BlockParser(
             // blank labels are not valid link reference definitions
             if (label.isEmpty()) break
 
+            definitionLines.add(startLine + content.take(content.length - remaining.length).count { it == '\n' })
             if (!document.linkDefinitions.containsKey(label)) {
                 val def = LinkReferenceDefinition(
                     label = label,
                     destination = destination,
                     title = title
                 )
+                setDefinitionRange(def, startLine, content, remaining, effectiveMatch.value)
                 document.linkDefinitions[label] = def
                 document.appendChild(def)
             }
@@ -1259,7 +1290,7 @@ class BlockParser(
      * 从段落内容中提取缩写定义 `*[abbr]: Full Text`。
      * 返回不属于缩写定义的剩余内容。
      */
-    private fun extractAbbreviationDefs(content: String): String {
+    private fun extractAbbreviationDefs(content: String, startLine: Int): String {
         var remaining = content
         while (true) {
             val match = ABBREVIATION_DEF_REGEX.find(remaining) ?: break
@@ -1268,8 +1299,12 @@ class BlockParser(
             val abbr = match.groupValues[1]
             val fullText = match.groupValues[2].trim()
 
+            if (abbr.isNotEmpty()) {
+                definitionLines.add(startLine + content.take(content.length - remaining.length).count { it == '\n' })
+            }
             if (abbr.isNotEmpty() && !document.abbreviationDefinitions.containsKey(abbr)) {
                 val def = AbbreviationDefinition(abbreviation = abbr, fullText = fullText)
+                setDefinitionRange(def, startLine, content, remaining, match.value)
                 document.abbreviationDefinitions[abbr] = def
                 document.appendChild(def)
             }
@@ -1277,6 +1312,13 @@ class BlockParser(
             remaining = remaining.substring(match.range.last + 1).trimStart('\n')
         }
         return remaining
+    }
+
+    private fun setDefinitionRange(node: Node, startLine: Int, content: String, remaining: String, matched: String) {
+        val definitionStart = startLine + content.take(content.length - remaining.length).count { it == '\n' }
+        val definitionEnd = definitionStart + matched.trimEnd().count { it == '\n' } + 1
+        node.lineRange = LineRange(definitionStart, definitionEnd)
+        node.contentHash = contentHash(node.lineRange)
     }
 
     private fun resolveBackslashEscapes(s: String): String {
@@ -1374,7 +1416,7 @@ class BlockParser(
                 if (node.rawContent != null) {
                     return node.rawContent!!.trim()
                 }
-                val line = source.lineContent(lr.startLine)
+                val line = lineContent(lr.startLine)
                 val stripped = line.trimStart()
                 val hashes = stripped.takeWhile { it == '#' }
                 if (hashes.length in 1..6) {
@@ -1406,7 +1448,7 @@ class BlockParser(
                 buildString {
                     for (i in lr.startLine until lr.endLine - 1) {
                         if (i > lr.startLine) append('\n')
-                        append(source.lineContent(i).trimStart().trimEnd())
+                        append(lineContent(i).trimStart().trimEnd())
                     }
                 }
             }
@@ -1418,7 +1460,7 @@ class BlockParser(
                 buildString {
                     for (i in lr.startLine until lr.endLine) {
                         if (i > lr.startLine) append('\n')
-                        append(source.lineContent(i).trimStart())
+                        append(lineContent(i).trimStart())
                     }
                 }
             }
@@ -1430,7 +1472,7 @@ class BlockParser(
                 buildString {
                     for (i in lr.startLine until lr.endLine) {
                         if (i > lr.startLine) append('\n')
-                        append(source.lineContent(i).trimStart())
+                        append(lineContent(i).trimStart())
                     }
                 }
             }
@@ -1438,7 +1480,7 @@ class BlockParser(
                 buildString {
                     for (i in lr.startLine until lr.endLine) {
                         if (i > lr.startLine) append('\n')
-                        append(source.lineContent(i))
+                        append(lineContent(i))
                     }
                 }
             }
@@ -1541,3 +1583,14 @@ class BlockParser(
         private val ADMONITION_REGEX = Regex("^\\[!([A-Z]+)\\]\\s*(.*)")
     }
 }
+
+/** A root-state boundary before [line], with all preceding root children finalized. */
+internal data class BlockCheckpoint(val line: Int, val childIndex: Int, val dependsOnLine: Boolean)
+
+internal data class BlockParseResult(
+    val document: Document,
+    val checkpoints: List<BlockCheckpoint>,
+    val endLine: Int,
+    val definitionLines: List<Int>,
+    val numberedReferenceLines: List<Int>,
+)

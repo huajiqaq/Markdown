@@ -95,7 +95,7 @@ internal class SelectionModelIndex(
 
     fun clampAnchor(anchor: SelectionAnchor): SelectionAnchor? {
         val entry = entryByStableId[anchor.blockStableId] ?: return null
-        val clamped = anchor.charInBlock.coerceIn(0, entry.totalChars)
+        val clamped = clampToCharBoundary(entry.text, anchor.charInBlock.coerceIn(0, entry.totalChars))
         return if (clamped == anchor.charInBlock) anchor else anchor.copy(charInBlock = clamped)
     }
 

@@ -31,6 +31,18 @@ mode as CI; collect at least three reports; compare profiles/traces; then change
 budget. Keep enough tolerance for shared-runner variance, and explain the intentional regression or
 optimization in the pull request.
 
+## Incremental scaling
+
+```bash
+./gradlew :markdown-benchmark:incrementalScalingBenchmark --args='--warmups 20 --iterations 40'
+```
+
+This reports complete append and equal-length replacement latency (median/p95) and thread allocation
+at 100, 1,000 and 10,000 paragraphs, for CommonMark and Extended. Parser setup, String materialization
+and full AST traversal are outside the measured call. Compare revisions using the identical harness,
+JDK, machine and arguments. Timing is observational; the parser's JVM tests separately reject linear
+allocation growth for a fixed-size tail update. See [algorithm and complexity](../markdown-parser/INCREMENTAL_PARSING.md).
+
 ## Compose Macrobenchmark
 
 The `macrobenchmark` module launches a release-like, profileable benchmark Activity and measures the

@@ -66,7 +66,7 @@ class PostProcessorRegistry {
         }
     }
 
-    private fun sortedSnapshot(): List<PostProcessor> {
+    internal fun sortedSnapshot(): List<PostProcessor> {
         while (true) {
             val current = state.load()
             current.sortedProcessors?.let { return it }

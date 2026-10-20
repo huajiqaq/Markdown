@@ -200,7 +200,7 @@ internal class BlockStarters(
         val tb = ThematicBreak(c)
         tb.lineRange = LineRange(lineIdx, lineIdx + 1)
 
-        val ob = OpenBlock(tb, lastLineIndex = lineIdx)
+        val ob = OpenBlock(tb, contentStartLine = lineIdx, lastLineIndex = lineIdx)
         return ob
     }
 
@@ -419,7 +419,9 @@ internal class BlockStarters(
         table.lineRange = LineRange(tip.contentStartLine, lineIdx + 1)
 
         val head = TableHead()
+        head.lineRange = LineRange(tip.contentStartLine, lineIdx)
         val headerRow = TableRow()
+        headerRow.lineRange = head.lineRange
         // 列数以分隔行为准：多余截断，不足补空
         val colCount = alignments.size
         for (i in 0 until colCount) {
@@ -434,6 +436,7 @@ internal class BlockStarters(
         table.appendChild(head)
 
         val body = TableBody()
+        body.lineRange = LineRange(lineIdx + 1, lineIdx + 1)
         table.appendChild(body)
 
         val ob = OpenBlock(table, contentStartLine = tip.contentStartLine, lastLineIndex = lineIdx)

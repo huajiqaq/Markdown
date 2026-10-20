@@ -29,7 +29,9 @@ internal class TableStarter : BlockStarter {
         table.lineRange = LineRange(tip.contentStartLine, lineIdx + 1)
 
         val head = TableHead()
+        head.lineRange = LineRange(tip.contentStartLine, lineIdx)
         val headerRow = TableRow()
+        headerRow.lineRange = head.lineRange
         val colCount = alignments.size
         for (i in 0 until colCount) {
             val cellContent = headerCells.getOrElse(i) { "" }
@@ -43,6 +45,7 @@ internal class TableStarter : BlockStarter {
         table.appendChild(head)
 
         val body = TableBody()
+        body.lineRange = LineRange(lineIdx + 1, lineIdx + 1)
         table.appendChild(body)
 
         val ob = OpenBlock(table, contentStartLine = tip.contentStartLine, lastLineIndex = lineIdx)

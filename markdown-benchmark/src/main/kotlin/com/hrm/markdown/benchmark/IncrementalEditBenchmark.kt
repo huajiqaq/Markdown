@@ -10,8 +10,8 @@ import kotlin.math.roundToLong
  * 模拟 IDE 实时编辑场景：在一份较大的文档中段反复执行
  * Insert / Delete / Replace 编辑，测量每次 [MarkdownParser.applyEdit] 的耗时。
  *
- * 用于回归比较 IncrementalEngine.applyEdit 优化（StringBuilder 原地操作、
- * SourceText.of 行偏移构建、DirtyRegion 计算等）的实际收益。
+ * 用于回归比较混合编辑、后缀坐标平移及全局后处理的整体成本。
+ * 固定影响区的规模对照另见 IncrementalScalingBenchmark。
  *
  * 使用：
  *   ./gradlew :markdown-benchmark:incrementalEditBenchmark \

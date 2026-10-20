@@ -5,7 +5,6 @@ import com.hrm.markdown.parser.core.SourceText
 import com.hrm.markdown.parser.flavour.ExtendedFlavour
 import com.hrm.markdown.parser.flavour.MarkdownFlavour
 import com.hrm.markdown.parser.incremental.EditOperation
-import com.hrm.markdown.parser.incremental.IncrementalEngine
 import com.hrm.markdown.parser.lint.DiagnosticResult
 import com.hrm.markdown.parser.lint.LintingPostProcessor
 import com.hrm.markdown.parser.log.HLog
@@ -88,14 +87,6 @@ class MarkdownParser(
         appendCoalesceThreshold = appendCoalesceThreshold,
     )
     /**
-     * Edit engine 仅在编辑 API（applyEdit / replace 等）首次被调用时才构造。
-     * 大多数 LLM 流式场景不会触碰编辑路径，可省去一次 IncrementalEngine + FlavourCache 构造。
-     */
-    private val editEngine: IncrementalEngine by lazy {
-        IncrementalEngine(flavour, customEmojiMap, enableAsciiEmoticons, lintingProcessor = lintingProcessor)
-    }
-
-    /**
      * 语法验证诊断结果。
      *
      * 仅在 `enableLinting = true` 时有内容。
@@ -104,20 +95,17 @@ class MarkdownParser(
     val diagnostics: DiagnosticResult
         get() = lintingProcessor?.result ?: DiagnosticResult()
 
-    /** 是否处于编辑模式（通过 edit API 操作过） */
-    private var inEditMode = false
-
     /**
      * 当前文档 AST。每次解析/编辑后更新。
      */
     val document: Document
-        get() = if (inEditMode) editEngine.document else streamingParser.document
+        get() = streamingParser.document
 
     /**
      * 当前源文本。每次解析/编辑后更新。
      */
     val sourceText: SourceText
-        get() = if (inEditMode) editEngine.sourceText else streamingParser.sourceText
+        get() = streamingParser.sourceText
 
     /**
      * 当前是否处于流式接收中。
@@ -130,7 +118,6 @@ class MarkdownParser(
      */
     fun parse(input: String): Document {
         HLog.i(TAG) { "parse input=${input.length} chars" }
-        inEditMode = false
         return streamingParser.fullParse(input)
     }
 
@@ -141,7 +128,6 @@ class MarkdownParser(
      */
     fun beginStream() {
         HLog.i(TAG, "beginStream")
-        inEditMode = false
         streamingParser.beginStream()
     }
 
@@ -178,7 +164,7 @@ class MarkdownParser(
      * 获取当前完整文本。
      */
     fun currentText(): String {
-        return if (inEditMode) editEngine.currentText() else streamingParser.currentText()
+        return streamingParser.currentText()
     }
 
     // ────── 编辑 API（新增） ──────
@@ -192,8 +178,7 @@ class MarkdownParser(
      * @return 更新后的 Document
      */
     fun insert(offset: Int, text: String): Document {
-        ensureEditMode()
-        return editEngine.applyEdit(EditOperation.Insert(offset, text))
+        return streamingParser.applyEdit(EditOperation.Insert(offset, text))
     }
 
     /**
@@ -204,8 +189,7 @@ class MarkdownParser(
      * @return 更新后的 Document
      */
     fun delete(offset: Int, length: Int): Document {
-        ensureEditMode()
-        return editEngine.applyEdit(EditOperation.Delete(offset, length))
+        return streamingParser.applyEdit(EditOperation.Delete(offset, length))
     }
 
     /**
@@ -217,8 +201,7 @@ class MarkdownParser(
      * @return 更新后的 Document
      */
     fun replace(offset: Int, length: Int, newText: String): Document {
-        ensureEditMode()
-        return editEngine.applyEdit(EditOperation.Replace(offset, length, newText))
+        return streamingParser.applyEdit(EditOperation.Replace(offset, length, newText))
     }
 
     /**
@@ -228,20 +211,7 @@ class MarkdownParser(
      * @return 更新后的 Document
      */
     fun applyEdit(edit: EditOperation): Document {
-        ensureEditMode()
-        return editEngine.applyEdit(edit)
-    }
-
-    /**
-     * 确保处于编辑模式。
-     * 如果之前是解析模式，将当前文本同步到编辑引擎。
-     */
-    private fun ensureEditMode() {
-        if (!inEditMode) {
-            val currentText = streamingParser.currentText()
-            editEngine.fullParse(currentText)
-            inEditMode = true
-        }
+        return streamingParser.applyEdit(edit)
     }
 
     companion object {

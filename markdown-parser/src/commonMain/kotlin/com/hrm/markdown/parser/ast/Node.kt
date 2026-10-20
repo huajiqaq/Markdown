@@ -15,7 +15,18 @@ import com.hrm.markdown.parser.LineRange
 sealed class Node {
     var sourceRange: SourceRange = SourceRange.EMPTY
     var lineRange: LineRange = LineRange(0, 0)
-    var parent: Node? = null
+    private var directParent: Node? = null
+    private var documentOwner: DocumentOwner? = null
+    var parent: Node?
+        get() = documentOwner?.document ?: directParent
+        set(value) { documentOwner = null; directParent = value }
+
+    // Reused root children already shared mutable coordinates across revisions. Share the
+    // current root reference too, so publishing a new root does not walk the stable prefix.
+    internal fun attachToDocument(owner: DocumentOwner) {
+        directParent = null
+        documentOwner = owner
+    }
 
     /**
      * 内容哈希：基于该节点所覆盖的源文本行内容计算。
@@ -51,7 +62,23 @@ sealed class Node {
  * 通过 [setLazyInlineContent] 设置延迟解析内容，首次访问 [children] 时自动触发。
  */
 sealed class ContainerNode : Node() {
-    private val _children: MutableList<Node> = mutableListOf()
+    private var _children: MutableList<Node> = mutableListOf()
+    private var indexedChildren: List<Node>? = null
+    private val childList: List<Node> get() = indexedChildren ?: _children
+
+    /** Publish a persistent block index without copying every root child. */
+    internal fun installIndexedChildren(children: List<Node>) {
+        _children = mutableListOf()
+        indexedChildren = children
+    }
+
+    private fun writableChildren(): MutableList<Node> {
+        indexedChildren?.let {
+            _children = it.toMutableList()
+            indexedChildren = null
+        }
+        return _children
+    }
 
     /**
      * 延迟行内解析的原始内容。设置后，首次访问 [children] 时自动触发行内解析。
@@ -77,7 +104,7 @@ sealed class ContainerNode : Node() {
     val children: List<Node>
         get() {
             ensureInlineParsed()
-            return _children
+            return childList
         }
 
     /**
@@ -119,51 +146,46 @@ sealed class ContainerNode : Node() {
 
     fun appendChild(child: Node) {
         child.parent = this
-        _children.add(child)
+        writableChildren().add(child)
     }
 
     fun insertChild(index: Int, child: Node) {
         child.parent = this
-        _children.add(index, child)
+        writableChildren().add(index, child)
     }
 
     fun removeChild(child: Node): Boolean {
         child.parent = null
-        return _children.remove(child)
+        return writableChildren().remove(child)
     }
 
     fun removeChildAt(index: Int): Node {
-        val child = _children.removeAt(index)
+        val child = writableChildren().removeAt(index)
         child.parent = null
         return child
     }
 
     fun replaceChild(old: Node, new: Node) {
-        val index = _children.indexOf(old)
+        val index = childList.indexOf(old)
         if (index >= 0) {
             old.parent = null
             new.parent = this
-            _children[index] = new
+            writableChildren()[index] = new
         }
     }
 
     fun replaceChildren(startIndex: Int, endIndex: Int, newChildren: List<Node>) {
-        for (i in startIndex until endIndex) {
-            _children[i].parent = null
-        }
-        val removed = endIndex - startIndex
-        for (i in 0 until removed) {
-            _children.removeAt(startIndex)
-        }
-        newChildren.forEachIndexed { i, child ->
-            child.parent = this
-            _children.add(startIndex + i, child)
-        }
+        val children = writableChildren()
+        for (i in startIndex until endIndex) children[i].parent = null
+        children.subList(startIndex, endIndex).clear()
+        newChildren.forEach { it.parent = this }
+        children.addAll(startIndex, newChildren)
     }
 
     fun clearChildren() {
-        _children.forEach { it.parent = null }
-        _children.clear()
+        childList.forEach { it.parent = null }
+        _children = mutableListOf()
+        indexedChildren = null
         // 同时清除 lazy 状态，避免 clear 后重新触发旧的 lazy 解析
         _lazyInlineContent = null
         _lazyInlineParser = null
@@ -172,7 +194,7 @@ sealed class ContainerNode : Node() {
 
     fun childCount(): Int {
         ensureInlineParsed()
-        return _children.size
+        return childList.size
     }
 
     /**
@@ -182,11 +204,11 @@ sealed class ContainerNode : Node() {
      * [children]，会意外把整个复用子树的行内节点提前解析出来。
      */
     internal inline fun forEachMaterializedChild(action: (Node) -> Unit) {
-        _children.forEach(action)
+        childList.forEach(action)
     }
 
     /** Returns a mutation-safe snapshot without triggering delayed inline parsing. */
-    internal fun materializedChildrenSnapshot(): List<Node> = _children.toList()
+    internal fun materializedChildrenSnapshot(): List<Node> = childList.toList()
 }
 
 /**
@@ -195,3 +217,6 @@ sealed class ContainerNode : Node() {
 sealed class LeafNode : Node() {
     abstract val literal: String
 }
+
+/** One mutable owner per incremental engine; top-level nodes resolve their current root lazily. */
+internal class DocumentOwner(var document: Document)

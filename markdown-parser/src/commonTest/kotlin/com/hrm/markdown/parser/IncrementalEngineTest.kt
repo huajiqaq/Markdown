@@ -50,8 +50,7 @@ class IncrementalEngineTest {
 
         // 在 "World" 后插入更多文本
         val doc = parser.insert(offset = 14, text = " of Markdown")
-        val para = doc.children.last()
-        assertTrue(para is Paragraph)
+        assertEditedDocument(parser, "# Hello\n\nWorld of Markdown", doc)
     }
 
     @Test
@@ -61,7 +60,7 @@ class IncrementalEngineTest {
 
         // 删除 "World\n\n" 部分
         val doc = parser.delete(offset = 9, length = 7)
-        assertTrue(doc.children.isNotEmpty())
+        assertEditedDocument(parser, "# Hello\n\nExtra", doc)
     }
 
     @Test
@@ -74,16 +73,17 @@ class IncrementalEngineTest {
         val heading = doc.children.first()
         assertTrue(heading is Heading)
         assertEquals(2, heading.level)
+        assertEditedDocument(parser, "## Goodbye\n\nWorld", doc)
     }
 
     @Test
     fun should_handle_edit_after_stream_parse() {
         val parser = MarkdownParser()
-        // 先做全量解析
-        parser.parse("# Title\n\nParagraph one")
-        // 然后用编辑 API 添加内容
-        val doc = parser.insert(offset = 21, text = "\n\nParagraph two")
-        assertTrue(doc.children.size >= 2)
+        parser.beginStream()
+        parser.append("# Title\n\nParagraph one")
+        parser.endStream()
+        val doc = parser.insert(offset = parser.currentText().length, text = "\n\nParagraph two")
+        assertEditedDocument(parser, "# Title\n\nParagraph one\n\nParagraph two", doc)
     }
 
     @Test
@@ -91,7 +91,7 @@ class IncrementalEngineTest {
         val parser = MarkdownParser()
         parser.parse("Hello")
         val doc = parser.delete(offset = 0, length = 5)
-        assertTrue(doc.children.isEmpty() || doc.children.all { it is BlankLine })
+        assertEditedDocument(parser, "", doc)
     }
 
     @Test
@@ -99,7 +99,7 @@ class IncrementalEngineTest {
         val parser = MarkdownParser()
         parser.parse("# Hello\n\nWorld")
         val doc = parser.applyEdit(EditOperation.Insert(14, "\n\n## New Section"))
-        assertTrue(doc.children.any { it is Heading && it.level == 2 })
+        assertEditedDocument(parser, "# Hello\n\nWorld\n\n## New Section", doc)
     }
 
     @Test
@@ -286,11 +286,12 @@ class IncrementalEngineTest {
         // 第一次编辑：在末尾追加
         val len1 = parser.currentText().length
         parser.insert(offset = len1, text = "\n\nLine two")
+        assertEditedDocument(parser, "# Title\n\nLine one\n\nLine two")
 
         // 第二次编辑：再追加
         val len2 = parser.currentText().length
         val doc = parser.insert(offset = len2, text = "\n\nLine three")
-        assertTrue(doc.children.size >= 3)
+        assertEditedDocument(parser, "# Title\n\nLine one\n\nLine two\n\nLine three", doc)
     }
 
     @Test
@@ -300,7 +301,7 @@ class IncrementalEngineTest {
 
         // 在段落之间插入新块
         val doc = parser.insert(offset = 9, text = "Middle\n\n")
-        assertTrue(doc.children.size >= 2)
+        assertEditedDocument(parser, "# Hello\n\nMiddle\n\nEnd", doc)
     }
 
     // ────── 编辑 + 块级结构 ──────
@@ -313,7 +314,8 @@ class IncrementalEngineTest {
         val doc = parser.insert(offset = 4, text = "more ")
         val codeBlock = doc.children.filterIsInstance<FencedCodeBlock>().firstOrNull()
         assertTrue(codeBlock != null)
-        assertTrue(codeBlock.literal.contains("more "))
+        assertEquals("more code\n", codeBlock.literal)
+        assertEditedDocument(parser, "```\nmore code\n```\n\nText", doc)
     }
 
     @Test
@@ -325,6 +327,7 @@ class IncrementalEngineTest {
         val heading = doc.children.first()
         assertTrue(heading is Heading)
         assertEquals(3, heading.level)
+        assertEditedDocument(parser, "### Title\n\nText", doc)
     }
 
     private fun containsSetextHeading(node: Node): Boolean {
@@ -354,17 +357,5 @@ class IncrementalEngineTest {
         is HardLineBreak -> "\n"
         is ContainerNode -> node.children.joinToString(separator = "") { child -> extractPlainText(child) }
         else -> ""
-    }
-}
-
-private fun assertNodeCoordinatesEqual(expected: Node, actual: Node) {
-    assertEquals(expected::class, actual::class)
-    assertEquals(expected.lineRange, actual.lineRange, "line range for ${expected::class.simpleName}")
-    assertEquals(expected.sourceRange, actual.sourceRange, "source range for ${expected::class.simpleName}")
-    if (expected is ContainerNode && actual is ContainerNode) {
-        assertEquals(expected.children.size, actual.children.size)
-        expected.children.zip(actual.children).forEach { (expectedChild, actualChild) ->
-            assertNodeCoordinatesEqual(expectedChild, actualChild)
-        }
     }
 }

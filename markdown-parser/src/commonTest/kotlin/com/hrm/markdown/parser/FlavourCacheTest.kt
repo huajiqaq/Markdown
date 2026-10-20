@@ -108,22 +108,40 @@ class FlavourCacheTest {
 
     @Test
     fun should_cache_block_starters_as_immutable_snapshot() {
-        FlavourCache.clearAll()
-        val cache = FlavourCache.of(ExtendedFlavour)
-        val starters1 = cache.blockStarters
-        val starters2 = cache.blockStarters
-        assertEquals(starters1, starters2)
-        assertEquals(ExtendedFlavour.blockStarters.size, starters1.size)
+        val starters = CommonMarkFlavour.blockStarters.toMutableList()
+        val original = starters.toList()
+        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
+            override val blockStarters: List<BlockStarter> = starters
+        }
+        val cache = FlavourCache(flavour)
+
+        starters.clear()
+
+        assertEquals(original, cache.blockStarters)
+        assertEquals(original.sortedBy { it.priority }, cache.blockStarterRegistry.allStarters())
+        assertEquals(original.sortedBy { it.priority }, cache.newBlockStarterRegistry().allStarters())
     }
 
     @Test
     fun should_cache_post_processors_as_immutable_snapshot() {
-        FlavourCache.clearAll()
-        val cache = FlavourCache.of(ExtendedFlavour)
-        val procs1 = cache.postProcessors
-        val procs2 = cache.postProcessors
-        assertEquals(procs1, procs2)
-        assertEquals(ExtendedFlavour.postProcessors.size, procs1.size)
+        val executed = mutableListOf<String>()
+        fun processor(name: String) = object : PostProcessor {
+            override val priority = 0
+            override fun process(document: com.hrm.markdown.parser.ast.Document) { executed += name }
+        }
+        val original = processor("original")
+        val processors = mutableListOf(original)
+        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
+            override val postProcessors: List<PostProcessor> = processors
+        }
+        val cache = FlavourCache(flavour)
+
+        processors.clear()
+        processors += processor("replacement")
+        cache.newPostProcessorRegistry().processAll(com.hrm.markdown.parser.ast.Document())
+
+        assertEquals(listOf(original), cache.postProcessors)
+        assertEquals(listOf("original"), executed)
     }
 
     @Test
@@ -181,16 +199,6 @@ class FlavourCacheTest {
         assertEquals(1, (doc1.children.first() as com.hrm.markdown.parser.ast.Heading).level)
         assertEquals(2, (doc2.children.first() as com.hrm.markdown.parser.ast.Heading).level)
         assertEquals(3, (doc3.children.first() as com.hrm.markdown.parser.ast.Heading).level)
-    }
-
-    @Test
-    fun should_use_cache_in_incremental_parse() {
-        FlavourCache.clearAll()
-        val parser = MarkdownParser(ExtendedFlavour)
-        parser.parse("# Hello\n\nWorld")
-        parser.insert(offset = 7, text = " Everyone")
-        val doc = parser.document
-        assertTrue(doc.children.isNotEmpty())
     }
 
     @Test

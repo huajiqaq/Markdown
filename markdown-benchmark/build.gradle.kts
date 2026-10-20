@@ -140,3 +140,10 @@ tasks.register<JavaExec>("performanceGate") {
     inputs.file(performanceGateBaseline)
     inputs.file(performanceGateResults)
 }
+
+tasks.register<JavaExec>("incrementalScalingBenchmark") {
+    group = "benchmark"
+    description = "Measures complete append/replace latency and allocation at 100/1000/10000 paragraphs."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.hrm.markdown.benchmark.IncrementalScalingBenchmarkKt")
+}

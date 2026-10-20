@@ -2,22 +2,36 @@ package com.hrm.markdown.runtime
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class MarkdownDirectivePipelineTest {
     @Test
-    fun transformer_should_normalize_custom_syntax() {
-        val registry = MarkdownDirectiveRegistry(listOf(VideoDirectivePlugin))
-        val result = MarkdownDirectivePipeline(registry).transform(
-            "!VIDEO[Demo](https://cdn.example.com/a.mp4){poster=https://cdn.example.com/a.jpg}"
-        )
+    fun should_transformInPriorityOrderAndComposeMappings_when_pipelineHasMultipleStages() {
+        val calls = mutableListOf<String>()
+        val strip = transformerPlugin("strip", priority = 0) { input ->
+            calls += "strip:$input"
+            val output = input.removePrefix("raw:")
+            MarkdownTransformResult(output, MarkdownSourceMap.Segmented(listOf(
+                MarkdownSourceMap.Segmented.Segment(0, output.length, 4, input.length),
+            )))
+        }
+        val trim = transformerPlugin("trim", priority = 10) { input ->
+            calls += "trim:$input"
+            val output = input.trim()
+            MarkdownTransformResult(output, MarkdownSourceMap.Segmented(listOf(
+                MarkdownSourceMap.Segmented.Segment(0, output.length, 2, input.length - 2),
+            )))
+        }
+        val result = MarkdownDirectivePipeline(MarkdownDirectiveRegistry(listOf(trim, strip)))
+            .transform("raw:  **go**  ")
 
-        assertEquals(
-            """{% video title="Demo" url="https://cdn.example.com/a.mp4" poster="https://cdn.example.com/a.jpg" %}""",
-            result.markdown,
-        )
+        assertEquals(listOf("strip:raw:  **go**  ", "trim:  **go**  "), calls)
+        assertEquals("**go**", result.markdown)
+        for (offset in 0..result.markdown.length) {
+            assertEquals(offset + 6, result.sourceMap.mapOutputOffset(offset), "output offset $offset")
+        }
     }
 
     @Test
@@ -39,69 +53,30 @@ class MarkdownDirectivePipelineTest {
     }
 
     @Test
-    fun registry_should_select_strongestSafePipelineStreamingMode() {
-        val restartOnRewrite = MarkdownDirectiveRegistry(listOf(VideoDirectivePlugin))
-        val safe = MarkdownDirectiveRegistry(
-            listOf(
-                object : MarkdownDirectivePlugin {
-                    override val id: String = "append-safe"
-                    override val inputTransformers = listOf(
-                        object : MarkdownInputTransformer {
-                            override val id: String = "identity"
-                            override val streamingSupport =
-                                MarkdownTransformerStreamingSupport.AppendSafe
-
-                            override fun transform(input: String) = MarkdownTransformResult(input)
-                        }
-                    )
+    fun should_selectStrongestRestriction_when_transformerStreamingModesAreMixed() {
+        val safe = MarkdownTransformerStreamingSupport.AppendSafe
+        val restart = MarkdownTransformerStreamingSupport.RestartOnRewrite
+        val unsupported = MarkdownTransformerStreamingSupport.Unsupported
+        for (first in listOf(safe, restart, unsupported)) {
+            for (second in listOf(safe, restart, unsupported)) {
+                val registry = MarkdownDirectiveRegistry(listOf(
+                    transformerPlugin("first", support = first),
+                    transformerPlugin("second", support = second),
+                ))
+                val expected = when {
+                    first == unsupported || second == unsupported -> unsupported
+                    first == restart || second == restart -> restart
+                    else -> safe
                 }
-            )
-        )
-        val unsupported = MarkdownDirectiveRegistry(
-            listOf(
-                object : MarkdownDirectivePlugin {
-                    override val id: String = "unsupported"
-                    override val inputTransformers = listOf(
-                        object : MarkdownInputTransformer {
-                            override val id: String = "unsupported"
-                            override val streamingSupport =
-                                MarkdownTransformerStreamingSupport.Unsupported
-
-                            override fun transform(input: String) = MarkdownTransformResult(input)
-                        }
-                    )
-                }
-            )
-        )
-
-        assertEquals(
-            MarkdownTransformerStreamingSupport.RestartOnRewrite,
-            restartOnRewrite.streamingSupport,
-        )
-        assertTrue(restartOnRewrite.supportsStreaming)
-        assertFalse(restartOnRewrite.supportsStreamingFastPath)
-        assertEquals(MarkdownTransformerStreamingSupport.AppendSafe, safe.streamingSupport)
-        assertTrue(safe.supportsStreaming)
-        assertTrue(safe.supportsStreamingFastPath)
-        assertEquals(MarkdownTransformerStreamingSupport.Unsupported, unsupported.streamingSupport)
-        assertFalse(unsupported.supportsStreaming)
-        assertFalse(unsupported.supportsStreamingFastPath)
+                val context = "$first + $second"
+                assertEquals(expected, registry.streamingSupport, context)
+                assertEquals(expected != unsupported, registry.supportsStreaming, context)
+                assertEquals(expected == safe, registry.supportsStreamingFastPath, context)
+            }
+        }
+        assertEquals(safe, MarkdownDirectiveRegistry.Empty.streamingSupport)
         assertTrue(MarkdownDirectiveRegistry.Empty.supportsStreaming)
         assertTrue(MarkdownDirectiveRegistry.Empty.supportsStreamingFastPath)
-    }
-
-    @Test
-    fun composed_source_map_should_map_through_every_transform_stage() {
-        val previous = MarkdownSourceMap.Segmented(
-            listOf(MarkdownSourceMap.Segmented.Segment(0, 20, 100, 120))
-        )
-        val current = MarkdownSourceMap.Segmented(
-            listOf(MarkdownSourceMap.Segmented.Segment(0, 10, 0, 20))
-        )
-
-        val composed = composeSourceMap(previous, current)
-
-        assertEquals(110, composed.mapOutputOffset(5))
     }
 
     @Test
@@ -117,24 +92,56 @@ class MarkdownDirectivePipelineTest {
         assertEquals(30, sourceMap.mapOutputOffset(10))
     }
 
-    private object VideoDirectivePlugin : MarkdownDirectivePlugin {
-        override val id: String = "video"
-        override val inputTransformers: List<MarkdownInputTransformer> = listOf(VideoSyntaxTransformer())
+    @Test
+    fun should_mapGapsAndCollapsedRanges_when_segmentsDoNotCoverEveryOffset() {
+        val sourceMap = MarkdownSourceMap.Segmented(listOf(
+            MarkdownSourceMap.Segmented.Segment(0, 2, 10, 14),
+            MarkdownSourceMap.Segmented.Segment(5, 7, 20, 20),
+        ))
+        val expected = listOf(10, 12, 2, 3, 4, 20, 20, 20, 8)
+        expected.forEachIndexed { offset, input -> assertEquals(input, sourceMap.mapOutputOffset(offset)) }
+        assertFailsWith<IllegalArgumentException> { sourceMap.mapOutputOffset(-1) }
     }
 
-    private class VideoSyntaxTransformer : MarkdownInputTransformer {
-        override val id: String = "video-transformer"
-
-        override fun transform(input: String): MarkdownTransformResult {
-            val regex = Regex("""!VIDEO\[(.*?)\]\((.*?)\)\{poster=(.*?)\}""")
-            val output = regex.replace(input) { match ->
-                val title = match.groupValues[1]
-                val url = match.groupValues[2]
-                val poster = match.groupValues[3]
-                """{% video title="$title" url="$url" poster="$poster" %}"""
-            }
-            return MarkdownTransformResult(output)
+    @Test
+    fun should_rejectInvalidSegments_when_offsetsAreNegativeReversedOrOverlapping() {
+        val valid = MarkdownSourceMap.Segmented.Segment(0, 5, 0, 5)
+        val invalid = listOf(
+            listOf(valid.copy(outputStart = -1)),
+            listOf(valid.copy(inputStart = -1)),
+            listOf(valid.copy(outputEnd = -1)),
+            listOf(valid.copy(inputEnd = -1)),
+            listOf(valid, valid.copy(outputStart = 4, outputEnd = 8)),
+            listOf(valid.copy(outputStart = 5, outputEnd = 8), valid),
+        )
+        for (segments in invalid) {
+            assertFailsWith<IllegalArgumentException>(segments.toString()) { MarkdownSourceMap.Segmented(segments) }
         }
+    }
+
+    @Test
+    fun should_preserveMappingSnapshot_when_originalSegmentListIsChanged() {
+        val segments = mutableListOf(MarkdownSourceMap.Segmented.Segment(0, 5, 10, 15))
+        val sourceMap = MarkdownSourceMap.Segmented(segments)
+        segments.clear()
+        segments += MarkdownSourceMap.Segmented.Segment(0, 5, 100, 105)
+        assertEquals(12, sourceMap.mapOutputOffset(2))
+        assertEquals(15, sourceMap.mapOutputOffset(5))
+    }
+
+    private fun transformerPlugin(
+        id: String,
+        priority: Int = 0,
+        support: MarkdownTransformerStreamingSupport = MarkdownTransformerStreamingSupport.RestartOnRewrite,
+        transform: (String) -> MarkdownTransformResult = { MarkdownTransformResult(it) },
+    ) = object : MarkdownDirectivePlugin {
+        override val id = id
+        override val priority = priority
+        override val inputTransformers = listOf(object : MarkdownInputTransformer {
+            override val id = "$id-transformer"
+            override val streamingSupport = support
+            override fun transform(input: String) = transform(input)
+        })
     }
 
     private class RecordingDirectivePlugin(

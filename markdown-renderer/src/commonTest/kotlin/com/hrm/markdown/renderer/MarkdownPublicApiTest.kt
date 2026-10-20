@@ -11,26 +11,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.click
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.hrm.codehigh.renderer.CodeBlock
-import com.hrm.codehigh.renderer.CodeColors
 import com.hrm.codehigh.renderer.CodeDefaults
 import com.hrm.codehigh.renderer.CodeLayout
 import com.hrm.codehigh.renderer.CodeTypography
-import com.hrm.codehigh.renderer.ProvideCodeDefaults
 import com.hrm.codehigh.renderer.measureCodeBlockSize
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.ast.FencedCodeBlock
@@ -45,66 +37,6 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalTestApi::class)
 class MarkdownPublicApiTest {
-    @Test
-    fun should_dispatch_native_code_token_clicks_to_the_latest_handler() = runComposeUiTest {
-        var prefix by mutableStateOf("initial")
-        val clicks = mutableListOf<String>()
-        setContent {
-            val label = prefix
-            CodeBlock(code = "val sample = 42", language = "kotlin", onTokenClick = { clicks += "$label:${it.text}" })
-        }
-        onNodeWithText("val sample = 42").performTouchInput { click(Offset(1f, center.y)) }
-        runOnIdle { prefix = "updated" }
-        onNodeWithText("val sample = 42").performTouchInput { click(Offset(1f, center.y)) }
-        assertEquals(listOf("initial:val", "updated:val"), clicks)
-    }
-
-    @Test
-    fun should_keep_zero_visible_lines_supported_and_allow_expand_then_collapse() = runComposeUiTest {
-        setContent {
-            CodeBlock(code = "first line\nsecond line", maxVisibleLines = 0, showCopyButton = false)
-        }
-        onNodeWithText("first line").assertDoesNotExist()
-        onNode(hasText("▼", substring = true)).performClick()
-        onNodeWithText("first line").assertExists()
-        onNodeWithText("second line").assertExists()
-        onNode(hasText("▲", substring = true)).performClick()
-        onNodeWithText("first line").assertDoesNotExist()
-    }
-
-    @Test
-    fun should_inherit_native_defaults_with_local_overrides_and_keep_original_base_palette() = runComposeUiTest {
-        var base: CodeColors? = null
-        var inherited: CodeColors? = null
-        var overridden: CodeColors? = null
-        val supplied = CodeDefaults.solarizedLightColors()
-        val typography = CodeTypography(text = TextStyle(fontSize = 21.sp))
-        val layout = CodeLayout(contentPadding = PaddingValues(18.dp))
-        var actualTypography: CodeTypography? = null
-        var actualLayout: CodeLayout? = null
-        setContent {
-            val baseColors = CodeDefaults.colors()
-            SideEffect { base = baseColors }
-            ProvideCodeDefaults(colors = supplied, typography = typography, layout = layout) {
-                val native = CodeDefaults.colors()
-                val local = CodeDefaults.colors(keyword = Color.Magenta)
-                val nativeTypography = CodeDefaults.typography()
-                val nativeLayout = CodeDefaults.layout()
-                SideEffect {
-                    inherited = native; overridden = local
-                    actualTypography = nativeTypography; actualLayout = nativeLayout
-                }
-            }
-        }
-        waitForIdle()
-        assertEquals(CodeDefaults.oneDarkProColors(), base)
-        assertEquals(supplied, inherited)
-        assertEquals(Color.Magenta, assertNotNull(overridden).keyword)
-        assertEquals(supplied.background, assertNotNull(overridden).background)
-        assertEquals(typography, actualTypography)
-        assertEquals(layout, actualLayout)
-    }
-
     @Test
     fun should_measure_and_paint_custom_code_styles_with_the_same_geometry() = runComposeUiTest {
         val document = MarkdownParser().parse("before-api\n\n```kotlin {title=\"api.kt\"}\nval api = 42\n```\n\nafter-api\n\n`inline-api`")

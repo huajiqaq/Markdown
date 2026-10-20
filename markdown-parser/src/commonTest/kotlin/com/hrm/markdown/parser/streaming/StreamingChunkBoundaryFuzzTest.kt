@@ -1,6 +1,7 @@
 package com.hrm.markdown.parser.streaming
 
 import com.hrm.markdown.parser.MarkdownParser
+import com.hrm.markdown.parser.normalizedTestInput
 import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.parser.ast.ContainerNode
 import com.hrm.markdown.parser.ast.Node
@@ -99,41 +100,10 @@ class StreamingChunkBoundaryFuzzTest {
     fun should_match_one_shot_parse_for_random_chunkings() {
         val rng = Random(0x5EED_CAFE)
         for ((label, src) in seeds) {
-            val expected = MarkdownParser().parse(src).semanticSnapshot()
-            // Try several random chunkings per seed.
             repeat(8) { trial ->
-                val chunks = randomChunking(src, rng)
-                val parser = MarkdownParser(appendCoalesceThreshold = if (trial % 2 == 0) 0 else 16)
-                parser.beginStream()
-                val prefix = StringBuilder()
-                for ((idx, chunk) in chunks.withIndex()) {
-                    prefix.append(chunk)
-                    try {
-                        parser.append(chunk)
-                    } catch (t: Throwable) {
-                        fail(
-                            "[$label trial=$trial] parser.append crashed at chunk #$idx " +
-                                    "(chunkLen=${chunk.length}, offset=${chunks.take(idx).sumOf { it.length }}): $t"
-                        )
-                    }
-                    // Intermediate snapshot must be readable.
-                    try {
-                        if (trial % 2 == 0) {
-                            val reference = MarkdownParser().apply { beginStream(); append(prefix.toString()) }
-                            assertEquals(reference.document.semanticSnapshot(), parser.document.semanticSnapshot(),
-                                "[$label trial=$trial chunk=$idx] incremental prefix semantics differ")
-                        }
-                    } catch (t: Throwable) {
-                        fail("[$label trial=$trial] snapshot traversal crashed at chunk #$idx: $t")
-                    }
-                }
-                val finalDoc = parser.endStream()
-                val actual = finalDoc.semanticSnapshot()
-                assertEquals(
-                    expected,
-                    actual,
-                    "[$label trial=$trial] streamed AST semantics != one-shot " +
-                            "(chunkSizes=${chunks.map { it.length }})"
+                assertEveryCommittedPrefix(
+                    "$label trial=$trial", src, randomChunking(src, rng),
+                    threshold = if (trial % 2 == 0) 0 else 16,
                 )
             }
         }
@@ -142,23 +112,41 @@ class StreamingChunkBoundaryFuzzTest {
     @Test
     fun should_survive_one_character_at_a_time_streaming() {
         for ((label, src) in seeds) {
-            val expected = MarkdownParser().parse(src).semanticSnapshot()
-            val parser = MarkdownParser()
-            parser.beginStream()
-            for (i in src.indices) {
-                try {
-                    parser.append(src[i].toString())
-                } catch (t: Throwable) {
-                    fail("[$label] parser.append crashed at single-character offset $i: $t")
-                }
-            }
-            val finalDoc = parser.endStream()
-            assertEquals(
-                expected,
-                finalDoc.semanticSnapshot(),
-                "[$label] single-character streamed AST semantics != one-shot"
-            )
+            assertEveryCommittedPrefix(label, src, src.map { it.toString() }, threshold = 0)
         }
+    }
+
+    private fun assertEveryCommittedPrefix(label: String, source: String, chunks: List<String>, threshold: Int) {
+        val parser = MarkdownParser(appendCoalesceThreshold = threshold)
+        parser.beginStream()
+        val prefix = StringBuilder()
+        var normalized = ""
+        var pendingCharacters = 0
+        var expectedLive = parser.document.semanticSnapshot()
+        for ((index, chunk) in chunks.withIndex()) {
+            prefix.append(chunk)
+            val next = normalizedTestInput(prefix.toString())
+            val added = next.substring(normalized.length)
+            normalized = next
+            pendingCharacters += added.length
+            // The public coalescing contract commits on a newline or when the threshold is reached.
+            if (added.isNotEmpty() && (threshold == 0 || '\n' in added || pendingCharacters >= threshold)) {
+                expectedLive = MarkdownParser().apply { beginStream(); append(normalized) }.document.semanticSnapshot()
+                pendingCharacters = 0
+            }
+            val context = "[$label threshold=$threshold chunk=$index sizes=${chunks.map { it.length }}]"
+            parser.append(chunk)
+            // Always materialize the snapshot, including buffered revisions, before endStream can
+            // repair an incorrect intermediate tree with a fresh full parse.
+            assertEquals(expectedLive, parser.document.semanticSnapshot(), "$context live semantics")
+            assertEquals(normalized, parser.currentText(), "$context current text")
+            assertEquals(normalized, parser.sourceText.content, "$context source text")
+        }
+        assertEquals(
+            MarkdownParser().parse(source).semanticSnapshot(),
+            parser.endStream().semanticSnapshot(),
+            "[$label threshold=$threshold] final semantics",
+        )
     }
 
     @Test

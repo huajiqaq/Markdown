@@ -158,7 +158,18 @@ internal class MarkdownSelectionController(
         val current = state.range ?: return
         val start = index.clampAnchor(current.start)
         val end = index.clampAnchor(current.end)
-        state.range = if (start != null && end != null) index.normalize(start, end) else null
+        if (start == null || end == null) {
+            clearSelection()
+            return
+        }
+        startAnchor = startAnchor?.let(index::clampAnchor)
+        draggedHandleAnchor = draggedHandleAnchor?.let(index::clampAnchor)
+        fixedHandleAnchor = fixedHandleAnchor?.let(index::clampAnchor)
+        if (state.isHandleDrag && (draggedHandleAnchor == null || fixedHandleAnchor == null)) {
+            clearSelection()
+            return
+        }
+        state.range = index.normalize(start, end)
     }
 
     private fun rebuildGeometry(stableId: Long) {

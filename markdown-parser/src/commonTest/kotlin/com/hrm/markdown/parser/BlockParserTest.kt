@@ -1161,13 +1161,6 @@ class FootnoteDefinitionTest {
     private val parser = MarkdownParser()
 
     @Test
-    fun should_parse_footnote_definition() {
-        val input = "[^note]: This is the footnote content.\n\nText with [^note]."
-        val doc = parser.parse(input)
-        assertTrue(doc.children.isNotEmpty())
-    }
-
-    @Test
     fun should_parse_footnote_definition_children_as_blocks() {
         val doc = parser.parse("[^note]: This is the footnote content.\n\nText with [^note].")
 

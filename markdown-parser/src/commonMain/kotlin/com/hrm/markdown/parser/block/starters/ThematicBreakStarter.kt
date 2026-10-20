@@ -34,7 +34,7 @@ internal class ThematicBreakStarter : BlockStarter {
         val tb = ThematicBreak(c)
         tb.lineRange = LineRange(lineIdx, lineIdx + 1)
 
-        val ob = OpenBlock(tb, lastLineIndex = lineIdx)
+        val ob = OpenBlock(tb, contentStartLine = lineIdx, lastLineIndex = lineIdx)
         ob.starterTag = this::class.simpleName
         return ob
     }

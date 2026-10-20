@@ -148,14 +148,6 @@ class IntegrationTest {
     }
 
     @Test
-    fun should_parse_footnote() {
-        val input = "Text with footnote[^1].\n\n[^1]: This is the footnote."
-        val doc = parser.parse(input)
-        // Should have footnote definition
-        assertTrue(doc.children.isNotEmpty())
-    }
-
-    @Test
     fun should_parse_task_list_in_context() {
         val input = """
             ## TODO
@@ -198,13 +190,6 @@ class IntegrationTest {
         val doc = parser.parse("> [!NOTE]\n> This is a note.")
         val admonition = doc.children.first()
         assertIs<Admonition>(admonition)
-    }
-
-    @Test
-    fun should_parse_definition_list_marker() {
-        // Definition lists are extension syntax
-        val doc = parser.parse("Term\n: Definition")
-        assertTrue(doc.children.isNotEmpty())
     }
 
     @Test

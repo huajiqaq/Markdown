@@ -5,6 +5,7 @@ import com.hrm.markdown.parser.core.SourceText
 import com.hrm.markdown.parser.flavour.ExtendedFlavour
 import com.hrm.markdown.parser.flavour.MarkdownFlavour
 import com.hrm.markdown.parser.incremental.IncrementalEngine
+import com.hrm.markdown.parser.incremental.EditOperation
 import com.hrm.markdown.parser.lint.LintingPostProcessor
 import com.hrm.markdown.parser.log.HLog
 
@@ -13,11 +14,11 @@ import com.hrm.markdown.parser.log.HLog
  *
  * 核心设计：
  * - **append-only** 输入模型，无需调用方维护偏移量。
- * - 只重新解析 **尾部脏区域**（从最后一个未关闭块的起始行到文本末尾），
- *   前面已稳定的块直接复用，每次 append 的解析代价为 O(尾部块大小)。
+ * - 从解析器确认的根检查点重解析受影响尾部，稳定前缀共享持久化索引。
+ *   增量维护为 O(log N + 受影响区大小)，语法、坐标平移和全局失效成本另计。
  * - 自动修复未关闭的语法结构（围栏代码块缺少 ` ``` `、强调缺少 `**` 等），
  *   保障即使大模型遗漏结束符也能正常展示。
- * - 通过 [contentHash] 实现细粒度的 Compose 重组优化：
+ * - 通过节点 contentHash 实现细粒度的 Compose 重组优化：
  *   只有内容变化的块会触发重新渲染。
  *
  * 内部委托给 [IncrementalEngine] 实现所有解析逻辑。
@@ -42,7 +43,7 @@ class StreamingParser(
     customEmojiMap: Map<String, String> = emptyMap(),
     enableAsciiEmoticons: Boolean = false,
     lintingProcessor: LintingPostProcessor? = null,
-    /** 流式 append 合并阈值。详见 [IncrementalEngine.appendCoalesceThreshold]。 */
+    /** 流式 append 合并阈值；0 表示逐次提交，遇换行或达到阈值时提交缓冲。 */
     appendCoalesceThreshold: Int = 0,
 ) {
     companion object {
@@ -110,6 +111,9 @@ class StreamingParser(
      * 获取当前完整文本。
      */
     fun currentText(): String = engine.currentText()
+
+    /** MarkdownParser edits share this engine; no second parse or divergent text buffer. */
+    internal fun applyEdit(edit: EditOperation): Document = engine.applyEdit(edit)
 
     /**
      * 对给定输入执行完整解析（非流式模式）。

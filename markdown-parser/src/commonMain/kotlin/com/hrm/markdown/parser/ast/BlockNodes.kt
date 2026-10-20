@@ -6,15 +6,16 @@ import com.hrm.markdown.parser.lint.DiagnosticResult
 /**
  * 文档的根节点。
  */
-class Document : ContainerNode() {
+class Document internal constructor(internal val definitionContext: DefinitionContext) : ContainerNode() {
+    constructor() : this(DefinitionContext())
     /** 解析过程中收集的链接引用定义。 */
-    val linkDefinitions: MutableMap<String, LinkReferenceDefinition> = mutableMapOf()
+    val linkDefinitions: MutableMap<String, LinkReferenceDefinition> get() = definitionContext.links
 
     /** 解析过程中收集的脚注定义。 */
-    val footnoteDefinitions: MutableMap<String, FootnoteDefinition> = mutableMapOf()
+    val footnoteDefinitions: MutableMap<String, FootnoteDefinition> get() = definitionContext.footnotes
 
     /** 解析过程中收集的缩写定义。 */
-    val abbreviationDefinitions: MutableMap<String, AbbreviationDefinition> = mutableMapOf()
+    val abbreviationDefinitions: MutableMap<String, AbbreviationDefinition> get() = definitionContext.abbreviations
 
     /**
      * 语法验证/Linting 诊断结果。
@@ -506,4 +507,21 @@ class Figure(
 ) : LeafNode() {
     override val literal: String get() = caption
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitFigure(this)
+}
+
+/** Shared by range-parser inline closures and the published root of the same revision. */
+internal class DefinitionContext {
+    var links: MutableMap<String, LinkReferenceDefinition> = mutableMapOf()
+        private set
+    var footnotes: MutableMap<String, FootnoteDefinition> = mutableMapOf()
+        private set
+    var abbreviations: MutableMap<String, AbbreviationDefinition> = mutableMapOf()
+        private set
+
+    // Called only after proving no definitions changed. Definition edits build a fresh context.
+    fun inherit(unchanged: DefinitionContext) {
+        links = unchanged.links
+        footnotes = unchanged.footnotes
+        abbreviations = unchanged.abbreviations
+    }
 }

@@ -261,14 +261,24 @@ Markdown(
 - ✅ Normalizes CRLF across token/chunk boundaries and flushes buffered tails on cancellation
 - ✅ Auto-closes unclosed fences, math blocks, emphasis during streaming
 - ✅ Parser-level lazy inline parsing — block-only consumers can defer inline materialization
-- ✅ Precomputed per-line FNV-1a hashes with O(1) range aggregation for block stability detection
+- ✅ Persistent AVL source/block indexes share unchanged text and blocks; hashes do not decide parse safety
 - ✅ Display-frame coalescing — multiple token updates in one frame commit only the latest document, without an artificial low-fps cap
 
-Streaming stability boundaries require completed blank lines, preventing HTML blocks from being split prematurely when chunks cross a newline.
+Edits and streaming appends share parser-recorded root checkpoints and reuse complete unchanged suffixes.
+Attribute and bibliography dependencies stay within atomic source regions. Definition changes refresh
+references globally; unknown custom postprocessors safely use the full pipeline. Stable-prefix updates
+avoid whole-text/index/list copies. For a fixed-size dirty tail without global invalidation, maintenance
+is O(log N), plus local syntax work. Middle edits may shift materialized suffix coordinates, and lint,
+heading changes or global dependencies add their own work. Full String reads still cost O(N).
+See [algorithm, complexity and verification](markdown-parser/INCREMENTAL_PARSING.md).
 
 The `Markdown(document = ...)` overload also supports mutable custom ASTs: nodes without source
 ranges receive deterministic tree-path identities, and rendered semantic fields participate in
 cache invalidation.
+
+When the document changes during text selection, selection endpoints and active drag handles are
+clamped to valid UTF-16 character boundaries. Removing a selected block clears the selection and
+drag state, so copying cannot use stale endpoints.
 
 ---
 

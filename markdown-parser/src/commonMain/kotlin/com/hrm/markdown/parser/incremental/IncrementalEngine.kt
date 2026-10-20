@@ -5,33 +5,26 @@ import com.hrm.markdown.parser.SourcePosition
 import com.hrm.markdown.parser.SourceRange
 import com.hrm.markdown.parser.ast.*
 import com.hrm.markdown.parser.block.BlockParser
-import com.hrm.markdown.parser.block.postprocessors.PostProcessorRegistry
-import com.hrm.markdown.parser.block.starters.BlockStarterRegistry
+import com.hrm.markdown.parser.block.postprocessors.*
 import com.hrm.markdown.parser.core.SourceText
 import com.hrm.markdown.parser.flavour.ExtendedFlavour
 import com.hrm.markdown.parser.flavour.FlavourCache
 import com.hrm.markdown.parser.flavour.MarkdownFlavour
 import com.hrm.markdown.parser.inline.InlineParser
 import com.hrm.markdown.parser.lint.LintingPostProcessor
-import com.hrm.markdown.parser.log.HLog
 import com.hrm.markdown.parser.streaming.InlineAutoCloser
 
 /**
- * 核心增量解析引擎。
+ * One checkpoint-based update algorithm for edits and streaming appends.
  *
- * 统一处理全量解析、流式追加和编辑三种场景：
- * - **全量解析**：直接调用 BlockParser 解析全部文本
- * - **流式追加**：利用脏区域追踪，只重解析尾部变化区域
- * - **编辑**：利用脏区域追踪和节点复用，精准重解析编辑影响区域
+ * A reusable suffix is an entire sequence of source regions whose first line is unchanged
+ * and whose old AND new parser states are at the root. The edit itself proves exact suffix
+ * equality; node hashes, transformed AST ranges and delimiter guesses are not correctness
+ * evidence. Definitions invalidate global semantics; unknown postprocessors use full parsing.
  *
- * ## 关键组件
- * - [DirtyRegionTracker]：计算脏区域
- * - [NodeReuser]：判断和复用未变化的旧节点
- * - [PostProcessorRegistry]：后处理管线
- * - [MarkdownFlavour]：方言配置，控制支持的语法特性
- *
- * @param flavour Markdown 方言，控制支持的语法特性
- * @param postProcessors 后处理器注册表，若为 null 则从 flavour 获取
+ * Text/index updates share persistent trees. Maintenance costs O(I + A + R + log L + log B),
+ * plus S materialized suffix nodes needing coordinate shifts and G
+ * invalidated global work (heading IDs/lint/plugins). R may extend to EOF for open containers.
  */
 class IncrementalEngine(
     private val flavour: MarkdownFlavour = ExtendedFlavour,
@@ -39,433 +32,338 @@ class IncrementalEngine(
     private val enableAsciiEmoticons: Boolean = false,
     postProcessors: PostProcessorRegistry? = null,
     private val lintingProcessor: LintingPostProcessor? = null,
-    /**
-     * 流式 append 的合并阈值（字符数）。0 表示关闭（默认行为：每次 append 立即增量解析）。
-     *
-     * 启用后，[append] 会把不含换行符的小 chunk 缓冲到 [fullText] 中但不立即触发块解析，
-     * 直到出现以下任一情况才真正调用 [doIncrementalAppend]：
-     *   - 本次 chunk 含 `\n`
-     *   - 自上次解析以来累积未解析字符数 >= 该阈值
-     *   - [endStream] / [currentText] 等需要"实时一致"的访问点
-     *
-     * 收益：把 LLM token 级 chunk（avg ~8 字符）压成行级 chunk，可减少 60-80% 的流式总耗时（streaming tax）。
-     * 代价：未跨 `\n` 时，AST 上"正在写的最后一行"会延迟更新，最大延迟 = `appendCoalesceThreshold` 字符。
-     *
-     * 推荐值：32-64（基本无可见延迟，且消除大部分 dirty region 重复启动开销）。
-     */
     private val appendCoalesceThreshold: Int = 0,
 ) {
-    companion object {
-        private const val TAG = "IncrementalEngine"
-    }
-
-    /** 使用 FlavourCache 缓存方言配置，避免重复初始化。 */
     private val flavourCache = FlavourCache.of(flavour)
-
-    private val postProcessors: PostProcessorRegistry = postProcessors 
-        ?: flavourCache.newPostProcessorRegistry().apply {
-            lintingProcessor?.let { register(it) }
-        }
-    
-    /**
-     * 获取缓存的 BlockStarter 注册表。
-     * 利用 [FlavourCache] 避免每次解析都重新创建和排序。
-     */
-    private fun buildRegistry(source: SourceText): BlockStarterRegistry {
-        return flavourCache.blockStarterRegistry
+    private val postProcessors = postProcessors ?: flavourCache.newPostProcessorRegistry().apply {
+        lintingProcessor?.let(::register)
     }
-    // ────── 状态 ──────
-    private val fullText = StringBuilder()
-    private var _document: Document = Document()
-    private var _sourceText: SourceText = SourceText.of("")
-    private var stableBlockCount: Int = 0
-    private var stableEndLine: Int = 0
-    private var lastParsedLength: Int = 0
-    private var _isStreaming: Boolean = false
-    /** 自上次 doIncrementalAppend 以来积压的、尚未触发解析的字符数。 */
-    private var pendingAppendChars: Int = 0
-    /** fullText 已前进、但 _sourceText 尚未按需同步。 */
-    private var sourceTextDirty: Boolean = false
-    /** 跨 chunk 识别 CRLF，避免 `\r` / `\n` 分包后被规范化成两个换行。 */
-    private var previousRawChunkEndedWithCarriageReturn: Boolean = false
+    private var _document = Document()
+    private var owner = DocumentOwner(_document)
+    private var source = SourceText.of("")
+    private var parsedSource = source
+    private var blocks = BlockIndex.empty()
+    private var _isStreaming = false
+    private var hasDisplayRepairs = false
+    private var previousRawChunkEndedWithCarriageReturn = false
+    private var processedWith: List<PostProcessor>? = null
 
-    private val dirtyTracker = DirtyRegionTracker()
-    private val nodeReuser = NodeReuser()
+    internal data class UpdateStats(
+        val parsedLines: Int,
+        val reusedPrefixRegions: Int = 0,
+        val reusedSuffixRegions: Int = 0,
+        val fullParseReason: String? = null,
+    )
+    internal var lastUpdate = UpdateStats(0)
+        private set
 
-    // ────── 公开属性 ──────
     val document: Document get() = _document
-    val sourceText: SourceText
-        get() {
-            if (sourceTextDirty) {
-                _sourceText = SourceText.of(fullText.toString())
-                sourceTextDirty = false
-            }
-            return _sourceText
-        }
+    val sourceText: SourceText get() = source
     val isStreaming: Boolean get() = _isStreaming
+    fun currentText(): String = source.content
 
-    // ────── 全量解析 ──────
-
-    /**
-     * 对给定输入执行完整解析。
-     */
     fun fullParse(input: String): Document {
-        HLog.d(TAG) { "fullParse input=${input.length} chars" }
-        fullText.clear()
-        fullText.append(SourceText.normalize(input))
+        source = SourceText.of(input)
         _isStreaming = false
-        stableBlockCount = 0
-        stableEndLine = 0
-        lastParsedLength = 0
-        pendingAppendChars = 0
-        sourceTextDirty = true
         previousRawChunkEndedWithCarriageReturn = false
-        return doFullParse()
+        return rebuild("full input")
     }
-
-    // ────── 流式 API ──────
 
     fun beginStream() {
-        HLog.d(TAG, "beginStream")
-        fullText.clear()
+        source = SourceText.of("")
+        parsedSource = source
+        blocks = BlockIndex.empty()
         _document = Document()
-        _sourceText = SourceText.of("")
-        stableBlockCount = 0
-        stableEndLine = 0
-        lastParsedLength = 0
-        pendingAppendChars = 0
-        sourceTextDirty = false
-        previousRawChunkEndedWithCarriageReturn = false
+        owner = DocumentOwner(_document)
+        processedWith = null
         _isStreaming = true
+        hasDisplayRepairs = false
+        previousRawChunkEndedWithCarriageReturn = false
+        lastUpdate = UpdateStats(0)
     }
 
     fun append(chunk: String): Document {
         if (chunk.isEmpty()) return _document
         val normalized = normalizeStreamingChunk(chunk)
         if (normalized.isEmpty()) return _document
-        fullText.append(normalized)
-        sourceTextDirty = true
-        if (appendCoalesceThreshold > 0) {
-            pendingAppendChars += normalized.length
-            val containsNewline = normalized.indexOf('\n') >= 0
-            if (!containsNewline && pendingAppendChars < appendCoalesceThreshold) {
-                // Skip AST parsing. currentText() reads fullText and sourceText is synchronized lazily.
-                return _document
-            }
-        }
-        pendingAppendChars = 0
-        return doIncrementalAppend()
+        source = SourceText.applyEditFast(source, source.length, 0, normalized)
+        if (appendCoalesceThreshold > 0 && '\n' !in normalized &&
+            source.length - parsedSource.length < appendCoalesceThreshold) return _document
+        return update(parsedSource.length, 0, source.length - parsedSource.length)
     }
 
     fun endStream(): Document {
-        HLog.d(TAG) { "endStream, totalLength=${fullText.length}" }
         _isStreaming = false
-        pendingAppendChars = 0
         previousRawChunkEndedWithCarriageReturn = false
-        return doFullParse()
+        // Remove display-only repairs by reparsing the same unstable interval, not the prefix.
+        return update(parsedSource.length, 0, source.length - parsedSource.length, forceTail = true)
     }
 
     fun abort(): Document {
-        HLog.w(TAG, "abort")
-        // abort 是“当前输入的最终可显示快照”，不能丢掉 coalesce 缓冲中的尾部。
-        if (fullText.length != lastParsedLength) {
-            doIncrementalAppend()
-        }
+        if (source !== parsedSource) update(parsedSource.length, 0, source.length - parsedSource.length)
         _isStreaming = false
-        pendingAppendChars = 0
         previousRawChunkEndedWithCarriageReturn = false
         return _document
     }
 
-    fun currentText(): String {
-        return fullText.toString()
+    fun applyEdit(edit: EditOperation): Document {
+        // Validate against live source before any flush or display-state transition.
+        val offset: Int
+        val deleted: Int
+        val inserted: String
+        when (edit) {
+            is EditOperation.Insert -> { offset = edit.offset; deleted = 0; inserted = SourceText.normalize(edit.text) }
+            is EditOperation.Delete -> { offset = edit.offset; deleted = edit.length; inserted = "" }
+            is EditOperation.Replace -> { offset = edit.offset; deleted = edit.length; inserted = SourceText.normalize(edit.newText) }
+            is EditOperation.Append -> { offset = source.length; deleted = 0; inserted = SourceText.normalize(edit.text) }
+        }
+        val edited = SourceText.applyEditFast(source, offset, deleted, inserted)
+        if (!_isStreaming && hasDisplayRepairs) update(parsedSource.length, 0, 0, forceTail = true)
+        if (source !== parsedSource) update(parsedSource.length, 0, source.length - parsedSource.length)
+        if (edited === source) { lastUpdate = UpdateStats(0); return _document }
+        source = edited
+        if (!_isStreaming) previousRawChunkEndedWithCarriageReturn = false
+        return update(offset, deleted, inserted.length)
     }
 
     private fun normalizeStreamingChunk(chunk: String): String {
-        val removeLeadingLineFeed =
-            previousRawChunkEndedWithCarriageReturn && chunk.firstOrNull() == '\n'
-        previousRawChunkEndedWithCarriageReturn = chunk.lastOrNull() == '\r'
+        val skipLf = previousRawChunkEndedWithCarriageReturn && chunk.first() == '\n'
+        previousRawChunkEndedWithCarriageReturn = chunk.last() == '\r'
         val normalized = SourceText.normalize(chunk)
-        return if (removeLeadingLineFeed && normalized.firstOrNull() == '\n') {
-            normalized.substring(1)
-        } else {
-            normalized
+        return if (skipLf) normalized.drop(1) else normalized
+    }
+
+    private fun newBlockParser() = BlockParser(
+        source, flavourCache.blockStarterRegistry,
+        // Lazy inline closures retain only definitions, never an obsolete root's full child list.
+        inlineParserFactory = { doc -> inlineParser(Document(doc.definitionContext)) },
+    )
+
+    private fun inlineParser(doc: Document) = InlineParser(
+        doc, customEmojiMap, enableAsciiEmoticons, flavour.enableGfmAutolinks,
+        flavour.enableExtendedInline, flavour.enableEmphasisCoalescing, flavour.enableStrikethrough,
+    )
+
+    private data class Pipeline(val processors: List<PostProcessor>) {
+        val hasAttributes = processors.any { it is BlockAttributeProcessor }
+        val hasBibliography = processors.any { it is BibliographyProcessor }
+        val hasHeadings = processors.any { it is HeadingIdProcessor }
+        val supportsIncremental = processors.all {
+            it is HeadingIdProcessor || it is BlockAttributeProcessor || it is BibliographyProcessor ||
+                it is AbbreviationProcessor || it is DiagramProcessor || it is ColumnsLayoutProcessor ||
+                it is HtmlFilterProcessor || it is FigureProcessor || it is LintingPostProcessor
+        }
+        fun processLocal(document: Document) {
+            processors.forEach {
+                if (it !is HeadingIdProcessor && it !is LintingPostProcessor) it.process(document)
+            }
         }
     }
 
-    // ────── 编辑 API ──────
+    private fun update(offset: Int, deleted: Int, inserted: Int, forceTail: Boolean = false): Document {
+        val pipeline = Pipeline(postProcessors.sortedSnapshot())
+        if (blocks.size == 0) return rebuild("initial parse", pipeline)
+        if (processedWith !== pipeline.processors) return rebuild("pipeline changed", pipeline)
+        if (!pipeline.supportsIncremental) return rebuild("document postprocessor", pipeline)
+        val old = parsedSource
+        val editLine = old.lineAtOffset(offset)
+        var first = blocks.indexAtLine(editLine)
+        if (first > 0 && editLine == blocks.startLine(first) && blocks[first].dependsOnFirstLine) first--
+        // Bibliography continuation paragraphs can attach backwards across a root checkpoint.
+        if (pipeline.hasBibliography && first > 0 && blocks[first - 1].bibliographyTailGap?.let { it <= 1 } == true) first--
+        val lineDelta = source.lineCount - old.lineCount
+        val oldEnd = offset + deleted
+        val newEnd = offset + inserted
+        val oldEndLine = old.lineAtOffset(oldEnd)
+        val newEndLine = source.lineAtOffset(newEnd)
+        val suffixLine = if (oldEnd == old.lineStart(oldEndLine) && newEnd == source.lineStart(newEndLine))
+            oldEndLine else oldEndLine + 1
 
-    /**
-     * 应用编辑操作并增量更新 AST。
-     *
-     * @param edit 编辑操作
-     * @return 更新后的 Document
-     */
-    fun applyEdit(edit: EditOperation): Document {
-        HLog.d(TAG) { "applyEdit: $edit" }
-        val oldSource = _sourceText
-        val oldText = fullText.toString()
-
-        // 应用编辑到文本（统一规范化插入文本，使 fullText 与 _sourceText.content 始终一致）
-        val newSource: SourceText = when (edit) {
-            is EditOperation.Insert -> {
-                val ins = SourceText.normalize(edit.text)
-                fullText.insert(edit.offset, ins)
-                SourceText.applyEditFast(oldSource, edit.offset, 0, ins)
+        var suffixIndex = blocks.size
+        fun parseReplacement() = run {
+            val checkpoints = if (forceTail) emptyList<BlockIndex.Checkpoint>().iterator()
+                else blocks.checkpointsFrom(suffixLine, first + 1)
+            var candidate = if (checkpoints.hasNext()) checkpoints.next() else null
+            newBlockParser().parseWithCheckpoints(blocks.startLine(first), source.lineCount) { line ->
+                val oldLine = line - lineDelta
+                while (candidate != null && candidate!!.line < oldLine) {
+                    candidate = if (checkpoints.hasNext()) checkpoints.next() else null
+                }
+                if (candidate?.line == oldLine && !candidate!!.region.startsWithAttribute) {
+                    suffixIndex = candidate!!.index
+                    true
+                } else false
             }
-            is EditOperation.Delete -> {
-                fullText.deleteRange(edit.offset, edit.offset + edit.length)
-                SourceText.applyEditFast(oldSource, edit.offset, edit.length, "")
-            }
-            is EditOperation.Replace -> {
-                val ins = SourceText.normalize(edit.newText)
-                fullText.replaceRange(edit.offset, edit.offset + edit.length, ins)
-                SourceText.applyEditFast(oldSource, edit.offset, edit.length, ins)
-            }
-            is EditOperation.Append -> {
-                fullText.append(SourceText.normalize(edit.text))
-                // 对于 Append，委托给流式增量逻辑
-                return doIncrementalAppend()
-            }
         }
-        _sourceText = newSource
-        sourceTextDirty = false
-
-        if (newSource.lineCount == 0) {
-            _document = Document()
-            return _document
+        var parsed = parseReplacement()
+        var regions = parseRegions(parsed, pipeline.hasAttributes, pipeline.hasBibliography)
+        // A paragraph changed into an attribute block can newly depend on the previous region.
+        if (pipeline.hasAttributes && first > 0 && regions.firstOrNull()?.startsWithAttribute == true) {
+            first--
+            suffixIndex = blocks.size
+            parsed = parseReplacement()
+            regions = parseRegions(parsed, pipeline.hasAttributes, pipeline.hasBibliography)
         }
+        val parsedStart = blocks.startLine(first)
+        val (prefix, fromFirst) = blocks.splitAt(first)
+        val (replaced, suffix) = fromFirst.splitAt(suffixIndex - first)
+        if (replaced.hasDefinitions || regions.any { it.hasDefinitions }) return rebuild("definitions changed", pipeline)
+        if (_document.footnoteDefinitions.isNotEmpty() &&
+            (replaced.hasNumberedReferences || regions.any { it.hasNumberedReferences })) return rebuild("footnote order changed", pipeline)
 
-        // 计算脏区域
-        val oldChildren = _document.children.toList()
-        val dirtyRange = dirtyTracker.computeDirtyRange(edit, oldSource, newSource, oldChildren)
-
-        // 找出脏区域之前可复用的节点
-        val reusablePrefixCount = nodeReuser.findReusablePrefixCount(oldChildren, dirtyRange)
-
-        // 解析脏区域（BlockParser 只做块结构 + 行内解析，后处理由 Engine 统一控制）
-        val parser = BlockParser(
-            source = newSource,
-            registry = buildRegistry(newSource),
-            inlineParserFactory = { doc ->
-                doc.linkDefinitions.putAll(_document.linkDefinitions)
-                InlineParser(doc, customEmojiMap, enableAsciiEmoticons, flavour.enableGfmAutolinks, flavour.enableExtendedInline, flavour.enableEmphasisCoalescing, flavour.enableStrikethrough)
-            }
-        )
-
-        val newBlocks = if (dirtyRange.startLine < dirtyRange.endLine.coerceAtMost(newSource.lineCount)) {
-            parser.parseLines(dirtyRange.startLine, dirtyRange.endLine.coerceAtMost(newSource.lineCount))
-        } else {
-            emptyList()
+        val context = parsed.document
+        context.definitionContext.inherit(_document.definitionContext)
+        if (_isStreaming && suffix.size == 0) repairTail(regions, context)
+        val oldTail = if (_isStreaming) replaced.asNodeList() else emptyList()
+        val prepared = prepareRegions(regions, context, pipeline, oldTail)
+        // The entire suffix is retained. There is no second filtering pass that can drop nodes.
+        val offsetDelta = source.length - old.length
+        if (lineDelta != 0 || (offsetDelta != 0 && suffix.hasSourceRanges)) suffix.forEachRegion(onlyPositioned = lineDelta == 0) { region ->
+            region.nodes.forEach { it.shiftSubtreeCoordinates(lineDelta, offsetDelta) }
         }
-
-        // 计算行数偏移
-        val oldLineCount = oldSource.lineCount
-        val newLineCount = newSource.lineCount
-        val linesDelta = newLineCount - oldLineCount
-
-        // 找出脏区域之后可复用的节点（需要根据旧坐标计算）
-        val oldDirtyEndLine = dirtyRange.endLine - linesDelta
-        val dirtyRangeOld = LineRange(dirtyRange.startLine, oldDirtyEndLine.coerceAtLeast(dirtyRange.startLine))
-        val reusableSuffix = nodeReuser.findReusableSuffix(
-            oldChildren = oldChildren,
-            dirtyRangeOld = dirtyRangeOld,
-            linesDelta = linesDelta,
-            offsetDelta = newSource.length - oldSource.length,
-            newSource = newSource,
-        )
-
-        // 构建新文档
-        val newDoc = Document()
-        newDoc.linkDefinitions.putAll(_document.linkDefinitions)
-        newDoc.footnoteDefinitions.putAll(_document.footnoteDefinitions)
-        newDoc.abbreviationDefinitions.putAll(_document.abbreviationDefinitions)
-
-        // 添加可复用的前缀
-        for (i in 0 until reusablePrefixCount) {
-            val child = oldChildren[i]
-            child.parent = null
-            newDoc.appendChild(child)
-        }
-
-        // 添加新解析的块
-        for (block in newBlocks) {
-            newDoc.appendChild(block)
-        }
-
-        // 添加可复用的后缀
-        for (block in reusableSuffix) {
-            block.parent = null
-            newDoc.appendChild(block)
-        }
-
-        // 更新文档元数据
-        setDocumentRanges(newDoc, newSource)
-
-        // 后处理
-        postProcessors.processAll(newDoc)
-
-        // 将 Linting 诊断结果附加到 Document
-        lintingProcessor?.let { newDoc.diagnostics = it.result }
-
-        _document = newDoc
-        lastParsedLength = newSource.length
+        val replacement = BlockIndex.of(prepared.map { it.first })
+        val combined = prefix + replacement + suffix
+        if (pipeline.hasHeadings && (replaced.headingCount != 0 || replacement.headingCount != 0)) reindexHeadings(combined)
+        prepared.forEach { (_, doc) -> pipeline.processLocal(doc) }
+        // Local processors can replace/remove nodes; update only newly parsed leaves.
+        val processed = BlockIndex.of(prepared.map { (region, doc) -> region.copy(nodes = doc.children.toList(), hasSourceRanges = doc.children.any(::hasSourceRanges)) })
+        blocks = prefix + processed + suffix
+        // Removed nodes belong to the old root, not to the owner's next published root.
+        // Reused nodes in the replacement are rebound by publish below.
+        replaced.forEachRegion { it.nodes.forEach { node -> node.parent = _document } }
+        publish(context, pipeline, processed)
+        lastUpdate = UpdateStats(parsed.endLine - parsedStart, prefix.size, suffix.size)
         return _document
     }
 
-    // ────── 内部实现 ──────
-
-    /**
-     * 全量解析（流结束或非流式模式）。
-     */
-    private fun doFullParse(): Document {
-        val text = fullText.toString()
-        _sourceText = SourceText.of(text)
-        sourceTextDirty = false
-        val parser = BlockParser(
-            source = _sourceText,
-            registry = buildRegistry(_sourceText),
-            inlineParserFactory = { doc -> InlineParser(doc, customEmojiMap, enableAsciiEmoticons, flavour.enableGfmAutolinks, flavour.enableExtendedInline, flavour.enableEmphasisCoalescing, flavour.enableStrikethrough) }
-        )
-        _document = parser.parse()
-
-        // 后处理统一由 Engine 控制
-        postProcessors.processAll(_document)
-
-        // 将 Linting 诊断结果附加到 Document
-        lintingProcessor?.let { _document.diagnostics = it.result }
-
-        stableBlockCount = _document.children.size
-        stableEndLine = _sourceText.lineCount
-        lastParsedLength = text.length
-        HLog.d(TAG) { "doFullParse done: ${_document.children.size} blocks, ${_sourceText.lineCount} lines" }
-        return _document
-    }
-
-    /**
-     * append-only 增量解析（流式场景）。
-     */
-    private fun doIncrementalAppend(): Document {
-        val text = fullText.toString()
-        val newSource = SourceText.of(text)
-        _sourceText = newSource
-        sourceTextDirty = false
-
-        if (newSource.lineCount == 0) {
-            _document = Document()
-            return _document
-        }
-
-        if (text.length == lastParsedLength) {
-            return _document
-        }
-        lastParsedLength = text.length
-
-        val oldChildren = _document.children
-        // 使用脏区域追踪器计算安全重解析起点
-        val lastStableBlock = if (stableBlockCount > 0) oldChildren.getOrNull(stableBlockCount - 1) else null
-        val safeStableEndLine = if (lastStableBlock != null && !isSelfDelimitedBlock(lastStableBlock)) {
-            lastStableBlock.lineRange.startLine
+    private fun rebuild(reason: String, pipeline: Pipeline = Pipeline(postProcessors.sortedSnapshot())): Document {
+        val result = newBlockParser().parseWithCheckpoints(0, source.lineCount)
+        val context = result.document
+        val regions = parseRegions(result, pipeline.hasAttributes, pipeline.hasBibliography)
+        if (_isStreaming) repairTail(regions, context)
+        // Full parsing runs the original whole-document pipeline once. Region dependencies
+        // were grouped on raw syntax first; built-in transformations preserve group order.
+        val doc = Document(context.definitionContext)
+        regions.forEach { region -> region.nodes.forEach(doc::appendChild) }
+        val metadata = regions.map { regionMetadata(it, pipeline) }
+        setDocumentRanges(doc, source)
+        pipeline.processors.forEach { it.process(doc) }
+        if (!pipeline.supportsIncremental) {
+            blocks = BlockIndex.of(listOf(ParsedRegion(source.lineCount, doc.children.toList(), false,
+                regions.any { it.hasDefinitions }, regions.any { it.hasNumberedReferences }, false)))
         } else {
-            stableEndLine
-        }
-        val reparseStart = if (lastStableBlock != null && isSelfDelimitedBlock(lastStableBlock)) {
-            safeStableEndLine.coerceAtMost(newSource.lineCount)
-        } else {
-            dirtyTracker.computeAppendDirtyRange(safeStableEndLine, newSource).startLine
-        }
-        HLog.v(TAG) {
-            "doIncrementalAppend: reparseStart=$reparseStart, lines=${newSource.lineCount}, " +
-                "stableEndLine=$stableEndLine, safeStableEndLine=$safeStableEndLine"
-        }
-
-        // 解析脏区域（BlockParser 只做块结构 + 行内解析，后处理由 Engine 统一控制）
-        val parser = BlockParser(
-            source = newSource,
-            registry = buildRegistry(newSource),
-            inlineParserFactory = { doc ->
-                doc.linkDefinitions.putAll(_document.linkDefinitions)
-                InlineParser(doc, customEmojiMap, enableAsciiEmoticons, flavour.enableGfmAutolinks, flavour.enableExtendedInline, flavour.enableEmphasisCoalescing, flavour.enableStrikethrough)
+            val outputs = List(regions.size) { mutableListOf<Node>() }
+            var regionIndex = 0
+            for (node in doc.children) {
+                while (regionIndex + 1 < regions.size && regions[regionIndex + 1].start <= node.lineRange.startLine) regionIndex++
+                check(node.lineRange.startLine >= regions[regionIndex].start && node.lineRange.startLine < regions[regionIndex].end) {
+                    "Built-in postprocessor moved a block outside its source region"
+                }
+                outputs[regionIndex].add(node)
             }
-        )
-
-        val tailBlocks = if (reparseStart < newSource.lineCount) {
-            parser.parseLines(reparseStart, newSource.lineCount)
-        } else {
-            emptyList()
+            blocks = BlockIndex.of(metadata.mapIndexed { index, region ->
+                region.copy(nodes = outputs[index], hasSourceRanges = outputs[index].any(::hasSourceRanges))
+            })
         }
-
-        // 分类稳定和不稳定块
-        val (nowStable, stillOpen) = classifyTailBlocks(tailBlocks, newSource)
-        HLog.v(TAG) { "tailBlocks=${tailBlocks.size}, stable=${nowStable.size}, open=${stillOpen.size}" }
-
-        // 对仍在构建中的块做 auto-close 修复
-        val displayBlocks = if (_isStreaming && stillOpen.isNotEmpty()) {
-            autoCloseBlocks(stillOpen, newSource)
-        } else {
-            stillOpen
-        }
-
-        // 构建新文档
-        val newDoc = Document()
-        newDoc.linkDefinitions.putAll(_document.linkDefinitions)
-        newDoc.footnoteDefinitions.putAll(_document.footnoteDefinitions)
-        newDoc.abbreviationDefinitions.putAll(_document.abbreviationDefinitions)
-
-        // 复用 reparseStart 之前的旧块
-        val reusableCount = oldChildren.count { child ->
-            child.lineRange.endLine <= reparseStart
-        }
-        for (i in 0 until reusableCount) {
-            val child = oldChildren[i]
-            child.parent = null
-            newDoc.appendChild(child)
-        }
-
-        val reusedStableBlocks = reuseStreamingBlockInstances(nowStable, oldChildren)
-        for (block in reusedStableBlocks) {
-            newDoc.appendChild(block)
-        }
-
-        val reusedDisplayBlocks = reuseStreamingBlockInstances(displayBlocks, oldChildren)
-        for (block in reusedDisplayBlocks) {
-            newDoc.appendChild(block)
-        }
-
-        val newStableCount = reusableCount + reusedStableBlocks.size
-        stableBlockCount = newStableCount
-        stableEndLine = if (reusedStableBlocks.isNotEmpty()) {
-            reusedStableBlocks.last().lineRange.endLine
-        } else if (reusableCount > 0) {
-            oldChildren[reusableCount - 1].lineRange.endLine
-        } else {
-            0
-        }
-
-        setDocumentRanges(newDoc, newSource)
-
-        for (block in tailBlocks) {
-            collectLinkDefinitions(block, newDoc)
-        }
-
-        // 后处理
-        postProcessors.processAll(newDoc)
-
-        _document = newDoc
-        HLog.v(TAG) { "doIncrementalAppend done: reused=$reusableCount, stable=${reusedStableBlocks.size}, open=${displayBlocks.size}, total=${newDoc.children.size}" }
+        owner = DocumentOwner(_document)
+        publish(context, pipeline, blocks, runLint = false, publishedDocument = doc)
+        lastUpdate = UpdateStats(source.lineCount, fullParseReason = reason)
         return _document
     }
 
-    /**
-     * 对仍在构建中的 displayBlocks，尝试在旧文档的 children 中查找
-     * 同 startLine + 同类型的旧节点实例。若找到，将新解析的属性写入旧实例并返回旧实例，
-     * 使 Compose 的 === 引用比较判断为同一对象，跳过不必要的重组。
-     *
-     * 对内部渲染器带状态的块做复用，避免外层替换节点导致 Compose 子树被卸载重建。
-     */
+    /** Snapshot raw semantic inputs before local processors mutate nodes. */
+    private fun regionMetadata(region: ParseRegion, pipeline: Pipeline): ParsedRegion {
+        val headings = mutableListOf<HeadingInput>()
+        if (pipeline.hasHeadings) region.nodes.forEach { captureHeadings(it, headings) }
+        return ParsedRegion(region.end - region.start, region.nodes.toList(), region.dependsOnFirstLine,
+            region.hasDefinitions, region.hasNumberedReferences, region.startsWithAttribute, headings,
+            bibliographyTailGap = region.bibliographyEnd?.let { region.end - it })
+    }
+
+    private fun prepareRegions(
+        regions: List<ParseRegion>, context: Document, pipeline: Pipeline, oldTail: List<Node>,
+    ): List<Pair<ParsedRegion, Document>> {
+        val reusable = oldTail.filter { it is FencedCodeBlock || it is MathBlock }.associateBy { it.lineRange.startLine }
+        return regions.map { region ->
+            val nodes = reuseStreamingBlockInstances(region.nodes, reusable)
+            if (nodes !== region.nodes) {
+                region.nodes.clear()
+                region.nodes.addAll(nodes)
+            }
+            val doc = Document(context.definitionContext)
+            nodes.forEach(doc::appendChild)
+            regionMetadata(region, pipeline) to doc
+        }
+    }
+
+    private fun hasSourceRanges(node: Node): Boolean = node.sourceRange != SourceRange.EMPTY ||
+        (node is ContainerNode && node.materializedChildrenSnapshot().any(::hasSourceRanges))
+
+    private fun captureHeadings(node: Node, result: MutableList<HeadingInput>) {
+        when (node) {
+            is Heading -> result.add(HeadingInput(node, node.customId, HeadingIdProcessor.generateSlug(HeadingIdProcessor.extractPlainText(node))))
+            is SetextHeading -> result.add(HeadingInput(node, null, HeadingIdProcessor.generateSlug(HeadingIdProcessor.extractPlainText(node))))
+            is ContainerNode -> node.forEachMaterializedChild { captureHeadings(it, result) }
+            else -> Unit
+        }
+    }
+
+    private fun reindexHeadings(index: BlockIndex) {
+        val usedIds = mutableMapOf<String, Int>()
+        index.forEachHeading { heading ->
+            val id = if (heading.customId != null) {
+                usedIds[heading.customId] = (usedIds[heading.customId] ?: 0) + 1
+                null
+            } else HeadingIdProcessor.deduplicateId(heading.slug, usedIds)
+            when (val node = heading.node) {
+                is Heading -> if (heading.customId == null) node.autoId = id
+                is SetextHeading -> node.autoId = id
+                else -> Unit
+            }
+        }
+    }
+
+    private fun repairTail(regions: MutableList<ParseRegion>, context: Document) {
+        if (regions.isEmpty()) return
+        val last = regions.last()
+        if (regions.size > 1 && last.start == source.lineCount - 1 && last.dependsOnFirstLine) {
+            // The appendable last line can reopen its predecessor. Cache and repair them as
+            // one atomic interval so edits cannot reuse only half of a display-repaired tail.
+            regions.removeAt(regions.lastIndex)
+            val previous = regions.last()
+            previous.end = last.end
+            previous.nodes.addAll(last.nodes)
+            previous.hasDefinitions = previous.hasDefinitions || last.hasDefinitions
+            previous.hasNumberedReferences = previous.hasNumberedReferences || last.hasNumberedReferences
+            previous.acceptBibliographyNodes(last.nodes)
+        }
+        val nodes = regions.last().nodes
+        for (i in nodes.indices) nodes[i] = autoCloseBlock(nodes[i], source, context)
+    }
+
+    private fun publish(
+        context: Document, pipeline: Pipeline, newlyProcessed: BlockIndex,
+        runLint: Boolean = true, publishedDocument: Document? = null,
+    ) {
+        val doc = publishedDocument ?: Document(context.definitionContext)
+        doc.installIndexedChildren(blocks.asNodeList())
+        newlyProcessed.forEachRegion { it.nodes.forEach { node -> node.attachToDocument(owner) } }
+        owner.document = doc
+        if (publishedDocument == null) setDocumentRanges(doc, source)
+        if (runLint) pipeline.processors.filterIsInstance<LintingPostProcessor>().forEach { it.process(doc) }
+        lintingProcessor?.let {
+            if (pipeline.processors.none { processor -> processor === it }) it.process(doc)
+            doc.diagnostics = it.result
+        }
+        _document = doc
+        parsedSource = source
+        processedWith = pipeline.processors
+        hasDisplayRepairs = _isStreaming
+    }
+
     private fun reuseStreamingBlockInstances(
         displayBlocks: List<Node>,
-        oldChildren: List<Node>,
+        oldChildren: Map<Int, Node>,
     ): List<Node> {
         if (displayBlocks.isEmpty() || oldChildren.isEmpty()) return displayBlocks
 
@@ -480,12 +378,9 @@ class IncrementalEngine(
 
     private fun reuseFencedCodeBlockInstance(
         newBlock: FencedCodeBlock,
-        oldChildren: List<Node>,
+        oldChildren: Map<Int, Node>,
     ): Node {
-        val oldBlock = oldChildren.find { old ->
-            old is FencedCodeBlock &&
-                    old.lineRange.startLine == newBlock.lineRange.startLine
-        } as? FencedCodeBlock ?: return newBlock
+        val oldBlock = oldChildren[newBlock.lineRange.startLine] as? FencedCodeBlock ?: return newBlock
 
         oldBlock.literal = newBlock.literal
         oldBlock.lineRange = newBlock.lineRange
@@ -506,12 +401,9 @@ class IncrementalEngine(
 
     private fun reuseMathBlockInstance(
         newBlock: MathBlock,
-        oldChildren: List<Node>,
+        oldChildren: Map<Int, Node>,
     ): Node {
-        val oldBlock = oldChildren.find { old ->
-            old is MathBlock &&
-                    old.lineRange.startLine == newBlock.lineRange.startLine
-        } as? MathBlock ?: return newBlock
+        val oldBlock = oldChildren[newBlock.lineRange.startLine] as? MathBlock ?: return newBlock
 
         oldBlock.literal = newBlock.literal
         oldBlock.lineRange = newBlock.lineRange
@@ -521,101 +413,23 @@ class IncrementalEngine(
         return oldBlock
     }
 
-    // ────── 块稳定性分类 ──────
 
-    private fun classifyTailBlocks(
-        blocks: List<Node>,
-        source: SourceText
-    ): Pair<List<Node>, List<Node>> {
-        if (blocks.isEmpty()) return Pair(emptyList(), emptyList())
-        if (!_isStreaming) return Pair(blocks, emptyList())
-
-        val stable = mutableListOf<Node>()
-        val open = mutableListOf<Node>()
-
-        for (i in blocks.indices) {
-            if (i == blocks.size - 1) {
-                val lastBlock = blocks[i]
-                if (isBlockFullyClosed(lastBlock, source)) {
-                    stable.add(lastBlock)
-                } else {
-                    open.add(lastBlock)
-                }
-            } else {
-                val block = blocks[i]
-                val nextBlock = blocks[i + 1]
-                val gapStart = block.lineRange.endLine
-                val gapEnd = nextBlock.lineRange.startLine
-                val hasBlankSeparator = (gapStart < gapEnd) && hasBlankLineInRange(source, gapStart, gapEnd)
-                if (hasBlankSeparator || isSelfDelimitedBoundary(block, nextBlock)) {
-                    stable.add(block)
-                } else {
-                    for (j in i until blocks.size) {
-                        open.add(blocks[j])
-                    }
-                    break
-                }
-            }
-        }
-        return Pair(stable, open)
-    }
-
-    private fun isSelfDelimitedBoundary(block: Node, nextBlock: Node): Boolean {
-        if (block.lineRange.endLine > nextBlock.lineRange.startLine) return false
-        return isSelfDelimitedBlock(block)
-    }
-
-    private fun isSelfDelimitedBlock(block: Node): Boolean {
-        return when (block) {
-            is FencedCodeBlock,
-            is IndentedCodeBlock,
-            is HtmlBlock,
-            is MathBlock,
-            is DiagramBlock,
-            is FrontMatter,
-            is ThematicBreak -> true
-            else -> false
-        }
-    }
-
-    private fun isBlockFullyClosed(block: Node, source: SourceText): Boolean {
-        if (block is ListBlock) return false
-        val endLine = block.lineRange.endLine
-        if (endLine >= source.lineCount) return false
-        return hasBlankLineInRange(source, endLine, source.lineCount)
-    }
-
-    private fun hasBlankLineInRange(source: SourceText, startLine: Int, endLine: Int): Boolean {
-        // The last physical line is still appendable. A trailing newline creates an empty
-        // line that may become non-blank in the next chunk, so it cannot seal the prefix.
-        for (line in startLine until endLine.coerceAtMost(source.lineCount - 1)) {
-            if (source.lineContent(line).isBlank()) return true
-        }
-        return false
-    }
-
-    // ────── 块级自动关闭 ──────
-
-    private fun autoCloseBlocks(blocks: List<Node>, source: SourceText): List<Node> {
-        return blocks.map { block -> autoCloseBlock(block, source) }
-    }
-
-    private fun autoCloseBlock(block: Node, source: SourceText): Node {
+    private fun autoCloseBlock(block: Node, source: SourceText, references: Document): Node {
         return when (block) {
             is FencedCodeBlock, is MathBlock, is FrontMatter, is HtmlBlock, is DiagramBlock -> block
             is Paragraph -> {
-                autoCloseInlineContent(block, source)
+                autoCloseInlineContent(block, source, references)
                 block
             }
             is Heading -> {
-                autoCloseInlineContent(block, source)
+                autoCloseInlineContent(block, source, references)
                 block
             }
             is SetextHeading -> {
                 if (shouldDowngradeTransientSetextHeading(block, source)) {
-                    createDisplayParagraphFromSetextHeading(block, source)
+                    createDisplayParagraphFromSetextHeading(block, source, references)
                 } else {
-                    autoCloseInlineContent(block, source)
+                    autoCloseInlineContent(block, source, references)
                     block
                 }
             }
@@ -623,7 +437,7 @@ class IncrementalEngine(
                 val children = block.children.toList()
                 if (children.isNotEmpty()) {
                     val lastChild = children.last()
-                    val repaired = autoCloseBlock(lastChild, source)
+                    val repaired = autoCloseBlock(lastChild, source, references)
                     if (repaired !== lastChild) {
                         block.replaceChild(lastChild, repaired)
                     }
@@ -634,7 +448,7 @@ class IncrementalEngine(
                 val children = block.children.toList()
                 if (children.isNotEmpty()) {
                     val lastChild = children.last()
-                    val repaired = autoCloseBlock(lastChild, source)
+                    val repaired = autoCloseBlock(lastChild, source, references)
                     if (repaired !== lastChild) {
                         block.replaceChild(lastChild, repaired)
                     }
@@ -642,7 +456,7 @@ class IncrementalEngine(
                 block
             }
             is Table -> {
-                autoCloseTableCells(block, source)
+                autoCloseTableCells(block, source, references)
                 block
             }
             else -> block
@@ -663,6 +477,7 @@ class IncrementalEngine(
     private fun createDisplayParagraphFromSetextHeading(
         heading: SetextHeading,
         source: SourceText,
+        references: Document,
     ): Paragraph {
         val paragraph = Paragraph()
         val content = heading.rawContent ?: buildString {
@@ -680,7 +495,9 @@ class IncrementalEngine(
         paragraph.sourceRange = heading.sourceRange
         if (content.isNotEmpty()) {
             val tempDoc = Document()
-            tempDoc.linkDefinitions.putAll(_document.linkDefinitions)
+            tempDoc.linkDefinitions.putAll(references.linkDefinitions)
+            tempDoc.footnoteDefinitions.putAll(references.footnoteDefinitions)
+            tempDoc.abbreviationDefinitions.putAll(references.abbreviationDefinitions)
             val inlineParser = InlineParser(
                 tempDoc,
                 customEmojiMap,
@@ -695,14 +512,16 @@ class IncrementalEngine(
         return paragraph
     }
 
-    private fun autoCloseInlineContent(node: ContainerNode, source: SourceText) {
+    private fun autoCloseInlineContent(node: ContainerNode, source: SourceText, references: Document) {
         val inlineText = currentInlineSource(node, source)
         if (inlineText.isEmpty()) return
 
         val repairSuffix = InlineAutoCloser.buildRepairSuffix(inlineText)
         val repairedContent = inlineText + repairSuffix
         val tempDoc = Document()
-        tempDoc.linkDefinitions.putAll(_document.linkDefinitions)
+        tempDoc.linkDefinitions.putAll(references.linkDefinitions)
+        tempDoc.footnoteDefinitions.putAll(references.footnoteDefinitions)
+        tempDoc.abbreviationDefinitions.putAll(references.abbreviationDefinitions)
         val inlineParser = InlineParser(tempDoc, customEmojiMap, enableAsciiEmoticons, flavour.enableGfmAutolinks, flavour.enableExtendedInline, flavour.enableEmphasisCoalescing, flavour.enableStrikethrough)
         node.clearChildren()
         inlineParser.parseInlines(repairedContent, node)
@@ -730,7 +549,7 @@ class IncrementalEngine(
         return extractInlineText(node)
     }
 
-    private fun autoCloseTableCells(table: Table, source: SourceText) {
+    private fun autoCloseTableCells(table: Table, source: SourceText, references: Document) {
         for (child in table.children) {
             if (child is ContainerNode) {
                 for (row in child.children) {
@@ -739,7 +558,7 @@ class IncrementalEngine(
                         if (cells.isNotEmpty()) {
                             val lastCell = cells.last()
                             if (lastCell is TableCell) {
-                                autoCloseInlineContent(lastCell, source)
+                                autoCloseInlineContent(lastCell, source, references)
                             }
                         }
                     }
@@ -846,20 +665,4 @@ class IncrementalEngine(
         }
     }
 
-    private fun collectLinkDefinitions(node: Node, doc: Document) {
-        when (node) {
-            is LinkReferenceDefinition -> {
-                val label = node.label.lowercase().trim()
-                if (label.isNotEmpty() && !doc.linkDefinitions.containsKey(label)) {
-                    doc.linkDefinitions[label] = node
-                }
-            }
-            is ContainerNode -> {
-                for (child in node.children) {
-                    collectLinkDefinitions(child, doc)
-                }
-            }
-            else -> {}
-        }
-    }
 }

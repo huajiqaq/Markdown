@@ -3,118 +3,143 @@ package com.hrm.markdown.parser.core
 import com.hrm.markdown.parser.LineRange
 
 /**
- * 高性能源文本容器。
- * 对输入进行预处理：规范化行尾符、替换 NUL 字符、
- * 并构建行偏移索引以实现 O(1) 的行查找。
- *
- * Tree-sitter 风格支持：提供 [contentHash] 方法，
- * 用于计算指定行范围的内容哈希，支持增量节点复用。
+ * Normalized, immutable source backed by a persistent AVL tree of physical lines.
+ * Edits copy the search paths and changed lines, never the unchanged text or line index.
+ * [content] explicitly materializes (and caches) a flat String; parsing uses line access instead.
  */
 class SourceText private constructor(
-    val content: String,
-    private val lineOffsets: IntArray,
-    precomputedLineHashes: LongArray? = null,
+    private val root: Lines,
+    private var flattened: String? = null,
 ) {
-    private val lineHashes: LongArray = precomputedLineHashes
-        ?: computeLineHashes(content, lineOffsets)
-    private val rangeHashPrefix: LongArray
-    private val rangeHashPowers: LongArray
+    val content: String
+        get() = flattened ?: buildString(length) { root.appendTo(this) }.also { flattened = it }
+    val length: Int get() = root.characters
+    val lineCount: Int get() = root.count
+    internal val treeHeight: Int get() = root.height
 
-    init {
-        require(lineHashes.size == lineOffsets.size) {
-            "line hash count ${lineHashes.size} does not match line count ${lineOffsets.size}"
-        }
-        val prefix = LongArray(lineOffsets.size + 1)
-        val powers = LongArray(lineOffsets.size + 1)
-        powers[0] = 1L
-        for (line in lineOffsets.indices) {
-            prefix[line + 1] = prefix[line] * RANGE_HASH_BASE + lineHashes[line]
-            powers[line + 1] = powers[line] * RANGE_HASH_BASE
-        }
-        rangeHashPrefix = prefix
-        rangeHashPowers = powers
-    }
-
-    val length: Int get() = content.length
-    val lineCount: Int get() = lineOffsets.size
-
-    /**
-     * 获取指定行的起始偏移量（基于 0 的行索引）。
-     */
     fun lineStart(line: Int): Int {
         require(line in 0 until lineCount) { "Line $line out of range [0, $lineCount)" }
-        return lineOffsets[line]
+        return root.offsetOf(line)
     }
 
-    /**
-     * 获取指定行的结束偏移量（不包含，包括换行符）。
-     */
-    fun lineEnd(line: Int): Int {
-        require(line in 0 until lineCount) { "Line $line out of range [0, $lineCount)" }
-        return if (line + 1 < lineCount) lineOffsets[line + 1] else content.length
-    }
+    /** End offset, including a possible newline. */
+    fun lineEnd(line: Int): Int = lineStart(line) + root.lineAt(line).text.length
 
-    /**
-     * 获取指定行的内容（不包含末尾换行符）。
-     */
     fun lineContent(line: Int): String {
-        val start = lineStart(line)
-        var end = lineEnd(line)
-        if (end > start && content[end - 1] == '\n') end--
-        return content.substring(start, end)
+        require(line in 0 until lineCount) { "Line $line out of range [0, $lineCount)" }
+        val text = root.lineAt(line).text
+        return if (text.endsWith('\n')) text.dropLast(1) else text
     }
 
-    /**
-     * 获取范围 [startLine, endLine) 内的多行内容。
-     */
-    fun linesContent(startLine: Int, endLine: Int): List<String> {
-        val result = ArrayList<String>(endLine - startLine)
-        for (i in startLine until endLine) {
-            result.add(lineContent(i))
+    fun linesContent(startLine: Int, endLine: Int): List<String> =
+        (startLine until endLine).map(::lineContent)
+
+    /** Offset at EOF belongs to the last physical line, including the final empty line. */
+    fun lineAtOffset(offset: Int): Int = root.lineAtOffset(offset.coerceIn(0, length))
+
+    fun columnAtOffset(offset: Int): Int = offset - lineStart(lineAtOffset(offset))
+
+    operator fun get(index: Int): Char {
+        require(index in 0 until length)
+        val line = lineAtOffset(index)
+        return root.lineAt(line).text[index - lineStart(line)]
+    }
+
+    fun substring(startOffset: Int, endOffset: Int): String {
+        require(startOffset in 0..length && endOffset in startOffset..length)
+        if (startOffset == endOffset) return ""
+        return buildString(endOffset - startOffset) {
+            root.appendRangeTo(this, startOffset, endOffset)
         }
-        return result
     }
 
-    /**
-     * 使用二分查找确定给定偏移量所在的行。
-     */
-    fun lineAtOffset(offset: Int): Int {
-        var lo = 0
-        var hi = lineOffsets.size - 1
-        while (lo <= hi) {
-            val mid = (lo + hi) ushr 1
-            if (lineOffsets[mid] <= offset) {
-                lo = mid + 1
-            } else {
-                hi = mid - 1
+    /** Position-independent rolling hash of line hashes. Query cost is O(log(lineCount)). */
+    fun contentHash(range: LineRange): Long {
+        val start = range.startLine.coerceIn(0, lineCount)
+        val end = range.endLine.coerceIn(start, lineCount)
+        return root.hashRange(start, end).first
+    }
+
+    /** Sequential range traversal: O(log L + visited lines), with early termination. */
+    internal fun forEachLine(start: Int, end: Int, action: (Int, String, Long) -> Boolean) {
+        fun visit(tree: Lines, base: Int): Boolean {
+            if (base >= end || base + tree.count <= start) return true
+            return when (tree) {
+                is Line -> action(base, tree.text, tree.hash)
+                is Branch -> visit(tree.left, base) && visit(tree.right, base + tree.left.count)
             }
         }
-        return (lo - 1).coerceAtLeast(0)
+        visit(root, 0)
     }
 
-    /**
-     * 获取偏移量在其所在行内的列号。
-     */
-    fun columnAtOffset(offset: Int): Int {
-        val line = lineAtOffset(offset)
-        return offset - lineOffsets[line]
+    private sealed class Lines {
+        abstract val count: Int
+        abstract val characters: Int
+        abstract val height: Int
+        abstract val hash: Long
+        abstract val power: Long
+
+        fun lineAt(index: Int): Line = when (this) {
+            is Line -> this
+            is Branch -> if (index < left.count) left.lineAt(index) else right.lineAt(index - left.count)
+        }
+
+        fun offsetOf(index: Int): Int = when (this) {
+            is Line -> 0
+            is Branch -> if (index < left.count) left.offsetOf(index)
+                else left.characters + right.offsetOf(index - left.count)
+        }
+
+        fun lineAtOffset(offset: Int): Int = when (this) {
+            is Line -> 0
+            is Branch -> if (offset < left.characters) left.lineAtOffset(offset)
+                else left.count + right.lineAtOffset(offset - left.characters)
+        }
+
+        fun appendTo(out: StringBuilder) {
+            when (this) {
+                is Line -> out.append(text)
+                is Branch -> { left.appendTo(out); right.appendTo(out) }
+            }
+        }
+
+        fun appendRangeTo(out: StringBuilder, start: Int, end: Int) {
+            if (start >= end) return
+            when (this) {
+                is Line -> out.append(text, start, end)
+                is Branch -> {
+                    if (start < left.characters) left.appendRangeTo(out, start, minOf(end, left.characters))
+                    if (end > left.characters) right.appendRangeTo(out, maxOf(0, start - left.characters), end - left.characters)
+                }
+            }
+        }
+
+        fun hashRange(start: Int, end: Int): Pair<Long, Long> {
+            if (start == end) return 0L to 1L
+            if (start == 0 && end == count) return hash to power
+            this as Branch
+            if (end <= left.count) return left.hashRange(start, end)
+            if (start >= left.count) return right.hashRange(start - left.count, end - left.count)
+            val a = left.hashRange(start, left.count)
+            val b = right.hashRange(0, end - left.count)
+            return (a.first * b.second + b.first) to (a.second * b.second)
+        }
     }
 
-    operator fun get(index: Int): Char = content[index]
+    private class Line(val text: String) : Lines() {
+        override val count = 1
+        override val characters = text.length
+        override val height = 1
+        override val power = RANGE_HASH_BASE
+        override val hash: Long = text.fold(FNV_OFFSET_BASIS) { h, c -> (h xor c.code.toLong()) * FNV_PRIME }
+    }
 
-    fun substring(startOffset: Int, endOffset: Int): String =
-        content.substring(startOffset, endOffset)
-
-    /**
-     * 计算 [range] 行范围内源文本的内容哈希。
-     * 每行的 FNV-1a 哈希在构造时预计算，再通过滚动前缀索引 O(1) 聚合任意连续行范围。
-     */
-    fun contentHash(range: LineRange): Long {
-        val startLine = range.startLine.coerceIn(0, lineCount)
-        val endLine = range.endLine.coerceIn(startLine, lineCount)
-        val lineLength = endLine - startLine
-        return rangeHashPrefix[endLine] -
-            rangeHashPrefix[startLine] * rangeHashPowers[lineLength]
+    private class Branch(val left: Lines, val right: Lines) : Lines() {
+        override val count = left.count + right.count
+        override val characters = left.characters + right.characters
+        override val height = maxOf(left.height, right.height) + 1
+        override val hash = left.hash * right.power + right.hash
+        override val power = left.power * right.power
     }
 
     companion object {
@@ -122,118 +147,45 @@ class SourceText private constructor(
         private const val FNV_PRIME = 1099511628211L
         private const val RANGE_HASH_BASE = -7046029254386353131L
 
-        /**
-         * 从原始输入创建 SourceText。
-         * 规范化行尾符并替换 NUL 字符。
-         */
         fun of(input: String): SourceText {
-            val normalized = normalize(input)
-            return SourceText(normalized, computeLineOffsets(normalized))
+            val text = normalize(input)
+            return SourceText(fromText(text, includeFinalLine = true)!!, text)
         }
 
-        /**
-         * 对当前源文本应用编辑操作，返回新的 SourceText。
-         * 这是一个便捷方法，内部通过修改文本内容后重新创建 SourceText。
-         */
-        fun applyEdit(
-            current: SourceText,
-            offset: Int,
-            deleteLength: Int,
-            insertText: String
-        ): SourceText = applyEditFast(current, offset, deleteLength, insertText)
+        fun applyEdit(current: SourceText, offset: Int, deleteLength: Int, insertText: String): SourceText =
+            applyEditFast(current, offset, deleteLength, insertText)
 
-        /**
-         * 增量应用编辑：仅对插入文本做规范化，并在保留旧 lineOffsets 的基础上局部更新行偏移，
-         * 避免每次编辑都对完整文本重扫一遍换行符。
-         *
-         * 适合 [com.hrm.markdown.parser.incremental.IncrementalEngine.applyEdit] 这类高频调用路径。
-         */
-        fun applyEditFast(
-            current: SourceText,
-            offset: Int,
-            deleteLength: Int,
-            insertText: String
-        ): SourceText {
-            val oldContent = current.content
-            require(offset in 0..oldContent.length) { "offset $offset out of [0, ${oldContent.length}]" }
-            require(deleteLength >= 0 && offset + deleteLength <= oldContent.length) {
-                "delete range [$offset, ${offset + deleteLength}) out of [0, ${oldContent.length}]"
+        /** O(log L + I + A): inserted text I and the two affected boundary lines A. */
+        fun applyEditFast(current: SourceText, offset: Int, deleteLength: Int, insertText: String): SourceText {
+            require(offset in 0..current.length) { "offset $offset out of [0, ${current.length}]" }
+            require(deleteLength >= 0 && deleteLength <= current.length - offset) {
+                "delete length $deleteLength out of [0, ${current.length - offset}]"
             }
-
-            val normalizedInsert = if (insertText.isEmpty()) "" else normalize(insertText)
-            val newContent = buildString(oldContent.length - deleteLength + normalizedInsert.length) {
-                append(oldContent, 0, offset)
-                append(normalizedInsert)
-                append(oldContent, offset + deleteLength, oldContent.length)
+            val inserted = normalize(insertText)
+            if (deleteLength == inserted.length && current.substring(offset, offset + deleteLength) == inserted) return current
+            val first = current.lineAtOffset(offset)
+            val last = current.lineAtOffset(offset + deleteLength)
+            val firstText = current.root.lineAt(first).text
+            val lastText = current.root.lineAt(last).text
+            val middle = buildString {
+                append(firstText, 0, offset - current.lineStart(first))
+                append(inserted)
+                append(lastText, offset + deleteLength - current.lineStart(last), lastText.length)
             }
-
-            val oldOffsets = current.lineOffsets
-            // 保留行 0..firstAffected（这些行的起始 ≤ offset，新内容下仍然有效）。
-            val firstAffectedLine = current.lineAtOffset(offset)
-            val keepHead = firstAffectedLine + 1
-
-            // 编辑区域结束所在的旧行；其后的行需要平移 delta 后保留。
-            val deleteEnd = offset + deleteLength
-            val lineAfterDelete = current.lineAtOffset(deleteEnd) + 1
-            val tailCount = oldOffsets.size - lineAfterDelete
-
-            // 统计新增换行符数量。
-            var insertedNewlines = 0
-            for (i in normalizedInsert.indices) {
-                if (normalizedInsert[i] == '\n') insertedNewlines++
-            }
-
-            val newSize = keepHead + insertedNewlines + tailCount
-            val newOffsets = IntArray(newSize)
-            for (i in 0 until keepHead) newOffsets[i] = oldOffsets[i]
-            var idx = keepHead
-            for (i in normalizedInsert.indices) {
-                if (normalizedInsert[i] == '\n') {
-                    newOffsets[idx++] = offset + i + 1
-                }
-            }
-            val delta = normalizedInsert.length - deleteLength
-            for (i in 0 until tailCount) {
-                newOffsets[idx++] = oldOffsets[lineAfterDelete + i] + delta
-            }
-
-            val newLineHashes = LongArray(newSize)
-            // 受影响行之前的完整行内容没有变化。
-            for (line in 0 until firstAffectedLine) {
-                newLineHashes[line] = current.lineHashes[line]
-            }
-            // 首个受影响行以及插入换行产生的新行需要重新计算。
-            val affectedEndExclusive = firstAffectedLine + insertedNewlines + 1
-            for (line in firstAffectedLine until affectedEndExclusive) {
-                newLineHashes[line] = hashLine(newContent, newOffsets, line)
-            }
-            // 删除终点之后的完整行可以直接复用旧哈希。
-            for (i in 0 until tailCount) {
-                newLineHashes[affectedEndExclusive + i] = current.lineHashes[lineAfterDelete + i]
-            }
-
-            return SourceText(newContent, newOffsets, newLineHashes)
+            val (head, rest) = split(current.root, first)
+            val (_, tail) = split(rest, last - first + 1)
+            val changed = fromText(middle, includeFinalLine = last == current.lineCount - 1)
+            return SourceText(join(join(head, changed), tail) ?: Line(""))
         }
 
         internal fun normalize(input: String): String {
-            // 行尾符：\r\n -> \n，\r -> \n；NUL（U+0000）-> U+FFFD。
-            // 仅当输入需要规范化时才走 buildString 拷贝路径。
-            var needs = false
-            for (i in input.indices) {
-                val c = input[i]
-                if (c == '\r' || c == '\u0000') { needs = true; break }
-            }
-            if (!needs) return input
+            if (input.none { it == '\r' || it == '\u0000' }) return input
             return buildString(input.length) {
                 var i = 0
                 while (i < input.length) {
-                    val c = input[i]
-                    when {
-                        c == '\r' -> {
-                            append('\n')
-                            if (i + 1 < input.length && input[i + 1] == '\n') i++
-                        }
-                        c == '\u0000' -> append('\uFFFD')
+                    when (val c = input[i]) {
+                        '\r' -> { append('\n'); if (i + 1 < input.length && input[i + 1] == '\n') i++ }
+                        '\u0000' -> append('\uFFFD')
                         else -> append(c)
                     }
                     i++
@@ -241,34 +193,64 @@ class SourceText private constructor(
             }
         }
 
-        private fun computeLineOffsets(normalized: String): IntArray {
-            val estimatedLines = (normalized.length / 40).coerceAtLeast(16)
-            var offsets = IntArray(estimatedLines)
-            offsets[0] = 0
-            var lineCount = 1
-            for (i in normalized.indices) {
-                if (normalized[i] == '\n') {
-                    if (lineCount >= offsets.size) {
-                        offsets = offsets.copyOf(offsets.size * 2)
-                    }
-                    offsets[lineCount++] = i + 1
-                }
+        private fun fromText(text: String, includeFinalLine: Boolean): Lines? {
+            val lines = ArrayList<Line>()
+            var start = 0
+            for (i in text.indices) {
+                if (text[i] == '\n') { lines.add(Line(text.substring(start, i + 1))); start = i + 1 }
             }
-            return if (lineCount == offsets.size) offsets else offsets.copyOf(lineCount)
+            if (start < text.length || includeFinalLine) lines.add(Line(text.substring(start)))
+            fun build(startIndex: Int, endIndex: Int): Lines? {
+                if (startIndex == endIndex) return null
+                if (endIndex - startIndex == 1) return lines[startIndex]
+                val mid = (startIndex + endIndex) ushr 1
+                return Branch(build(startIndex, mid)!!, build(mid, endIndex)!!)
+            }
+            return build(0, lines.size)
         }
 
-        private fun computeLineHashes(content: String, lineOffsets: IntArray): LongArray =
-            LongArray(lineOffsets.size) { line -> hashLine(content, lineOffsets, line) }
-
-        private fun hashLine(content: String, lineOffsets: IntArray, line: Int): Long {
-            val start = lineOffsets[line]
-            val end = if (line + 1 < lineOffsets.size) lineOffsets[line + 1] else content.length
-            var hash = FNV_OFFSET_BASIS
-            for (offset in start until end) {
-                hash = hash xor content[offset].code.toLong()
-                hash *= FNV_PRIME
+        private fun split(tree: Lines?, count: Int): Pair<Lines?, Lines?> {
+            if (tree == null) return null to null
+            if (count <= 0) return null to tree
+            if (count >= tree.count) return tree to null
+            tree as Branch
+            return if (count < tree.left.count) {
+                val (a, b) = split(tree.left, count)
+                a to join(b, tree.right)
+            } else {
+                val (a, b) = split(tree.right, count - tree.left.count)
+                join(tree.left, a) to b
             }
-            return hash
+        }
+
+        private fun join(left: Lines?, right: Lines?): Lines? {
+            if (left == null) return right
+            if (right == null) return left
+            if (left.height > right.height + 1) {
+                left as Branch
+                return balance(left.left, join(left.right, right)!!)
+            }
+            if (right.height > left.height + 1) {
+                right as Branch
+                return balance(join(left, right.left)!!, right.right)
+            }
+            return Branch(left, right)
+        }
+
+        private fun balance(left: Lines, right: Lines): Lines {
+            if (left.height > right.height + 1) {
+                left as Branch
+                if (left.left.height >= left.right.height) return Branch(left.left, Branch(left.right, right))
+                val pivot = left.right as Branch
+                return Branch(Branch(left.left, pivot.left), Branch(pivot.right, right))
+            }
+            if (right.height > left.height + 1) {
+                right as Branch
+                if (right.right.height >= right.left.height) return Branch(Branch(left, right.left), right.right)
+                val pivot = right.left as Branch
+                return Branch(Branch(left, pivot.left), Branch(pivot.right, right.right))
+            }
+            return Branch(left, right)
         }
     }
 }

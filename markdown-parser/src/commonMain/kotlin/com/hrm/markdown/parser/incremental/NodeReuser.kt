@@ -14,6 +14,7 @@ import com.hrm.markdown.parser.core.SourceText
  * 1. 节点的行范围完全在脏区域之外
  * 2. 节点对应的源文本内容哈希与旧节点一致
  */
+@Deprecated("Use MarkdownParser's checkpoint-based edit API; hashes alone cannot prove parse-context equality.")
 class NodeReuser {
 
     /**
@@ -57,22 +58,15 @@ class NodeReuser {
         offsetDelta: Int,
         newSource: SourceText
     ): List<Node> {
-        val result = mutableListOf<Node>()
-        for (child in oldChildren) {
-            if (child.lineRange.startLine >= dirtyRangeOld.endLine) {
-                // 调整行范围
-                val newLineRange = child.lineRange.shift(linesDelta)
-                // 验证哈希
-                if (newLineRange.startLine >= 0 &&
-                    newLineRange.endLine <= newSource.lineCount) {
-                    val newHash = newSource.contentHash(newLineRange)
-                    if (newHash == child.contentHash) {
-                        child.shiftSubtreeCoordinates(linesDelta, offsetDelta)
-                        result.add(child)
-                    }
-                }
-            }
-        }
+        val result = oldChildren.filter { it.lineRange.startLine >= dirtyRangeOld.endLine }
+        // Validate the COMPLETE proposed suffix before mutating anything. A failed check means
+        // the caller must parse that suffix; silently dropping individual nodes loses content.
+        if (result.any { child ->
+            val range = child.lineRange.shift(linesDelta)
+            range.startLine < 0 || range.endLine > newSource.lineCount ||
+                newSource.contentHash(range) != child.contentHash
+        }) return emptyList()
+        result.forEach { it.shiftSubtreeCoordinates(linesDelta, offsetDelta) }
         return result
     }
 }
