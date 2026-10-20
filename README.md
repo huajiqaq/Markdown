@@ -656,7 +656,10 @@ Supports size specification in Markdown:
 ```bash
 ./gradlew :markdown-parser:jvmTest      # Parser tests
 ./gradlew :markdown-renderer:jvmTest     # Renderer tests
-./gradlew jvmTest                        # All tests
+./gradlew jvmTest                        # All regular JVM tests
+
+# Extreme inputs in child JVMs (256 MiB heap, 1 MiB stack, 45-second deadline per input family)
+./gradlew :markdown-parser:stressTest
 
 # Forked parser performance gate (p95, throughput, allocation, peak heap)
 ./gradlew :markdown-benchmark:performanceGate
@@ -669,6 +672,8 @@ Supports size specification in Markdown:
 Performance budgets live in `markdown-benchmark/performance-baseline.json`. See
 [`markdown-benchmark/README.md`](markdown-benchmark/README.md) for reproducible runs and baseline
 update rules.
+The separate [parser stress suite](markdown-parser/STRESS_TESTING.md) checks deep nesting, long lines,
+dense delimiters and large unclosed blocks, and preserves child-process failure logs in CI.
 
 ---
 

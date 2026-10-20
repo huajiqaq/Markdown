@@ -248,6 +248,7 @@ private class InlineParserInstance(
     private var bracketTop: BracketEntry? = null
 
     private val scanner = InlineScanner(input)
+    private var unclosedWikiBefore = -1
 
     fun parse(): List<Node> {
         // 第一阶段：扫描并构建链表
@@ -295,13 +296,21 @@ private class InlineParserInstance(
         var cur = llHead
         while (cur != null) {
             val astNode = cur.astNode
-            if (astNode is Text && result.isNotEmpty() && result.last() is Text) {
-                // 合并相邻的文本节点
-                (result.last() as Text).literal += astNode.literal
+            if (astNode is Text && cur.next?.astNode is Text) {
+                // Join a whole run once; repeated immutable String concatenation copies every prefix.
+                val text = StringBuilder(astNode.literal)
+                var next = cur.next
+                while (next?.astNode is Text) {
+                    text.append((next.astNode as Text).literal)
+                    next = next.next
+                }
+                astNode.literal = text.toString()
+                result.add(astNode)
+                cur = next
             } else {
                 result.add(astNode)
+                cur = cur.next
             }
-            cur = cur.next
         }
         return result
     }
@@ -421,8 +430,8 @@ private class InlineParserInstance(
 
             // 自动链接：<scheme:...>  — 下一个字符必须是字母
             if (nextChar.isLetter()) {
-                val autolinkMatch = InlineParser.AUTOLINK_REGEX.find(input, pos)
-                if (autolinkMatch != null && autolinkMatch.range.first == pos) {
+                val autolinkMatch = InlineParser.AUTOLINK_REGEX.matchAt(input, pos)
+                if (autolinkMatch != null) {
                     scanner.pos = autolinkMatch.range.last + 1
                     val raw = autolinkMatch.groupValues[1]
                     appendLL(Autolink(destination = CharacterUtils.percentEncodeUrl(raw), isEmail = false, rawText = raw))
@@ -430,8 +439,8 @@ private class InlineParserInstance(
                 }
 
                 // 邮件自动链接也以字母开头
-                val emailMatch = InlineParser.EMAIL_AUTOLINK_REGEX.find(input, pos)
-                if (emailMatch != null && emailMatch.range.first == pos) {
+                val emailMatch = InlineParser.EMAIL_AUTOLINK_REGEX.matchAt(input, pos)
+                if (emailMatch != null) {
                     scanner.pos = emailMatch.range.last + 1
                     appendLL(Autolink(destination = emailMatch.groupValues[1], isEmail = true))
                     return
@@ -440,8 +449,8 @@ private class InlineParserInstance(
 
             // <kbd>...</kbd> 键盘按键标签
             if (nextChar == 'k' || nextChar == 'K') {
-                val kbdMatch = InlineParser.KBD_REGEX.find(input, pos)
-                if (kbdMatch != null && kbdMatch.range.first == pos) {
+                val kbdMatch = InlineParser.KBD_REGEX.matchAt(input, pos)
+                if (kbdMatch != null) {
                     scanner.pos = kbdMatch.range.last + 1
                     appendLL(KeyboardInput(kbdMatch.groupValues[1]))
                     return
@@ -450,8 +459,8 @@ private class InlineParserInstance(
 
             // 行内 HTML：<tag>、</tag>、<!--、<?、<!、<![CDATA[
             if (nextChar.isLetter() || nextChar == '/' || nextChar == '!' || nextChar == '?') {
-                val htmlMatch = InlineParser.INLINE_HTML_REGEX.find(input, pos)
-                if (htmlMatch != null && htmlMatch.range.first == pos) {
+                val htmlMatch = InlineParser.INLINE_HTML_REGEX.matchAt(input, pos)
+                if (htmlMatch != null) {
                     scanner.pos = htmlMatch.range.last + 1
                     appendLL(InlineHtml(htmlMatch.value))
                     return
@@ -927,6 +936,8 @@ private class InlineParserInstance(
      */
     private fun tryAppendWikiLink(): Boolean {
         val pos = scanner.pos
+        // A failed scan proves that no later opener on this line can find a closing ]].
+        if (pos < unclosedWikiBefore) return false
         // 期望 [[
         if (scanner.peek() != '[' || scanner.peek(1) != '[') return false
         scanner.advance() // skip first [
@@ -974,6 +985,7 @@ private class InlineParserInstance(
         }
 
         // 未找到 ]]，回退
+        unclosedWikiBefore = scanner.pos
         scanner.pos = pos
         return false
     }
@@ -1086,8 +1098,8 @@ private class InlineParserInstance(
 
             // GFM bare URL autolink detection
             if (enableGfmAutolinks && (c == 'h' || c == 'H' || c == 'w' || c == 'W')) {
-                val urlMatch = InlineParser.GFM_URL_REGEX.find(input, scanner.pos)
-                if (urlMatch != null && urlMatch.range.first == scanner.pos) {
+                val urlMatch = InlineParser.GFM_URL_REGEX.matchAt(input, scanner.pos)
+                if (urlMatch != null) {
                     // 先输出已收集的文本
                     if (sb.isNotEmpty()) {
                         appendLL(Text(sb.toString()))
@@ -1554,6 +1566,7 @@ private class InlineParserInstance(
     }
 
     private fun tryParseRefLink(bracket: BracketEntry): Pair<String, String?>? {
+        if (document.linkDefinitions.isEmpty()) return null
         val pos = scanner.pos
 
         // [text][label] - full reference link
@@ -1575,6 +1588,8 @@ private class InlineParserInstance(
 
         // use raw text from input for label matching (preserves backslash escapes)
         val closeBracketPos = scanner.pos - 1 // position of the ] we just consumed
+        // Full references above allow nested link text; shortcut/collapsed labels cannot start with [.
+        if (bracket.contentStartPos < closeBracketPos && input[bracket.contentStartPos] == '[') return null
         val rawLabel = input.substring(bracket.contentStartPos, closeBracketPos)
 
         // collapsed [label][]
@@ -1638,6 +1653,7 @@ private class InlineParserInstance(
     }
 
     private fun tryParseFootnoteReference(bracket: BracketEntry): FootnoteReference? {
+        if (!bracketTextStartsWith(bracket, '^')) return null
         // 提取方括号内的文本内容
         val text = extractBracketText(bracket)
         // 脚注引用格式：[^label]，内容必须以 ^ 开头
@@ -1673,6 +1689,17 @@ private class InlineParserInstance(
         return sb.toString()
     }
 
+    private fun bracketTextStartsWith(bracket: BracketEntry, prefix: Char): Boolean {
+        // Use parsed text so escaped characters and code spans retain their existing interpretation.
+        var current = bracket.llNode.next
+        while (current != null) {
+            val text = nodeToText(current.astNode)
+            if (text.isNotEmpty()) return text[0] == prefix
+            current = current.next
+        }
+        return false
+    }
+
     private fun nodeToText(node: Node): String = when (node) {
         is Text -> node.literal
         is InlineCode -> node.literal
@@ -1687,6 +1714,7 @@ private class InlineParserInstance(
      * 尝试解析参考文献引用：[@key]
      */
     private fun tryParseCitationReference(bracket: BracketEntry): CitationReference? {
+        if (!bracketTextStartsWith(bracket, '@')) return null
         val text = extractBracketText(bracket)
         // 格式：[@key]
         if (!text.startsWith("@")) return null

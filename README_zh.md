@@ -645,7 +645,10 @@ Markdown(
 ```bash
 ./gradlew :markdown-parser:jvmTest      # Parser 模块测试
 ./gradlew :markdown-renderer:jvmTest     # Renderer 模块测试
-./gradlew jvmTest                        # 全部测试
+./gradlew jvmTest                        # 全部常规 JVM 测试
+
+# 独立子 JVM 极端输入测试（256 MiB 堆、1 MiB 栈，每类输入限时 45 秒）
+./gradlew :markdown-parser:stressTest
 
 # Parser 性能回归门禁（p95、吞吐、分配量、峰值堆）
 ./gradlew :markdown-benchmark:performanceGate
@@ -657,6 +660,8 @@ Markdown(
 
 性能预算保存在 `markdown-benchmark/performance-baseline.json`；可复现执行方式和基线更新规则见
 [`markdown-benchmark/README.md`](markdown-benchmark/README.md)。
+独立的 [Parser 压力测试](markdown-parser/STRESS_TESTING.md) 覆盖深层嵌套、超长单行、密集分隔符与巨大未闭合块，
+CI 会保存子进程阶段日志及资源预算报告。
 
 ---
 

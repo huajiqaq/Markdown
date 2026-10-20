@@ -1,3 +1,5 @@
+import java.time.Duration
+
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
@@ -48,6 +50,35 @@ kotlin {
         }
     }
 }
+
+val parserJvmTest = tasks.named<Test>("jvmTest") {
+    exclude("**/ParserStressProcessTest.class")
+}
+
+tasks.register<Test>("stressTest") {
+    group = "verification"
+    description = "Checks extreme parser inputs in time- and memory-limited child JVMs."
+    val ordinaryTest = parserJvmTest.get()
+    testClassesDirs = ordinaryTest.testClassesDirs
+    classpath = ordinaryTest.classpath
+    javaLauncher.set(ordinaryTest.javaLauncher)
+    include("**/ParserStressProcessTest.class")
+    useJUnit()
+    maxHeapSize = "128m"
+    maxParallelForks = 1
+    timeout.set(Duration.ofMinutes(8))
+    outputs.upToDateWhen { false }
+    outputs.cacheIf("Resource budgets need fresh child JVMs") { false }
+    val stressReports = layout.buildDirectory.dir("reports/parser-stress")
+    outputs.dir(stressReports)
+    systemProperty("markdown.stress.reportDir", stressReports.get().asFile.absolutePath)
+    doFirst {
+        val testTask = this as Test
+        testTask.systemProperty("markdown.stress.classpath", testTask.classpath.asPath)
+    }
+}
+
+tasks.named("check") { dependsOn("stressTest") }
 
 mavenPublishing {
     publishToMavenCentral(true)
