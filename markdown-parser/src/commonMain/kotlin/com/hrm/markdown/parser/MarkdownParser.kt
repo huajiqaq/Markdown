@@ -91,9 +91,10 @@ class MarkdownParser(
      *
      * 仅在 `enableLinting = true` 时有内容。
      * 每次 [parse]、[endStream] 或编辑操作后自动更新。
+     * 与当前 [document] 保持一致；[beginStream] 清空文档时也清空可见诊断。
      */
     val diagnostics: DiagnosticResult
-        get() = lintingProcessor?.result ?: DiagnosticResult()
+        get() = if (enableLinting) document.diagnostics else DiagnosticResult()
 
     /**
      * 当前文档 AST。每次解析/编辑后更新。

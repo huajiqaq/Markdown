@@ -477,6 +477,9 @@ document.diagnostics.forEach { diagnostic ->
 
 **13+ diagnostic rules:**
 
+With linting enabled, `parser.diagnostics` describes the currently published `parser.document`.
+`beginStream()` clears both; buffered chunks keep the last published diagnostics until the next parse is committed.
+
 | Rule | Severity | Description |
 |------|----------|-------------|
 | Heading level skip | ⚠️ WARNING | h1 → h3 without h2 |

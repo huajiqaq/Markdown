@@ -470,6 +470,9 @@ document.diagnostics.forEach { diagnostic ->
 
 **13+ 条诊断规则：**
 
+启用 Lint 后，`parser.diagnostics` 始终对应当前发布的 `parser.document`。
+`beginStream()` 同时清空文档与可见诊断；未达合并阈值的缓冲输入会保留上次已提交文档的诊断。
+
 | 规则 | 严重级别 | 描述 |
 |------|----------|------|
 | 标题层级跳跃 | ⚠️ 警告 | h1 → h3，缺少 h2 |
