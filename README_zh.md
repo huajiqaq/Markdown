@@ -23,15 +23,15 @@
 
 |  | 特性 | 描述 |
 |--|------|------|
-| 🚀 | **极速解析** | 基于 AST 的递归下降解析器，支持增量解析 — 仅重新解析变更部分 |
+| 🚀 | **增量更新** | 编辑文档或接收流式输出时复用未变化的内容 |
 | 🌍 | **真正跨平台** | 一套代码，在 **Android**、**iOS**、**Desktop (JVM)**、**Web (Wasm/JS)** 上实现一致渲染 |
-| 📐 | **100% 覆盖** | 413 项 Markdown 功能，**652/652 CommonMark 规范测试**全部通过，另支持 GFM 及 20+ 扩展 |
+| 📐 | **语法支持** | 支持 413 项语法与行为，**652/652 CommonMark 规范样例**全部通过，另支持 GFM 及 20+ 扩展 |
 | 🤖 | **LLM 流式渲染** | 一等公民级别的逐 token 渲染，按显示帧合并提交 — AI 生成过程中零闪烁 |
 | 🎨 | **完整主题系统** | 30+ 可配置属性，内置 GitHub 亮色/暗色主题，自动跟随系统模式 |
 | 📊 | **LaTeX 数学公式** | 支持行内 `$...$` 和块级 `$$...$$` 数学公式，集成 LaTeX 渲染引擎 |
 | 🔍 | **内置语法诊断** | 13+ 诊断规则，包含 WCAG 无障碍检查 — 在解析时即发现问题 |
 | 🖼️ | **图片加载** | 开箱即用的 Coil3 + Ktor3 图片加载，支持尺寸指定和自定义渲染器 |
-| 🖱️ | **跨 Block 选中** | 基于 LazyColumn 的自研选区层 —— 跨 block 连续选中，复用系统复制/翻译菜单，超长文档首帧不卡 |
+| 🖱️ | **跨块文本选择** | 跨块连续选择文字，复用系统复制/翻译菜单 |
 
 长按并拖动可选择文本。松手或调整选择手柄后，单击 Markdown 内容区域内的空白处即可清除选区。
 
@@ -154,11 +154,8 @@ implementation(libs.markdown.renderer) {
 
 ## 🔌 插件扩展
 
-本项目提供“官方 directive 扩展网关 + runtime 输入转换器 + renderer 插件分发”的终极扩展方案：
-
-- `markdown-parser` 保持纯净：只解析 Markdown + 官方 directive AST
-- 外部特殊语法（例如 `!VIDEO[...]`）通过 transformer 转换为 `{% video ... %}`
-- renderer 通过插件注册表把 `video` directive 渲染为原生 Compose 内容
+通过 `directivePlugins` 接入视频等自定义语法，并使用原生 Compose 组件渲染。
+插件也可以处理标准的 `{% tag ... %}` 指令语法及 HTML 导出。
 
 基础用法：
 
@@ -253,26 +250,14 @@ Markdown(
 )
 ```
 
-`LlmStreaming` 保持 16 字符解析缓冲：遇换行提前提交，结束或取消时提交剩余尾部。
-每次解析在发布前统一生成当前代码内容，未闭合围栏也会更新；全量解析提速不会增加缓冲或等待关闭围栏。
+`LlmStreaming` 以 16 字符为解析合并阈值：遇换行提前提交，结束或取消时提交剩余尾部。
+代码正文随输出更新，未闭合的代码围栏也会显示当前内容。
 
-**底层机制：**
-- ✅ 仅重新解析"脏"尾部区域 — 稳定的块直接复用
-- ✅ 校验 append-only 前缀 — 重试、清空或全文替换会原子重启流式会话
-- ✅ 跨 token/chunk 正确归一化 CRLF，并在取消时提交尚未解析的缓冲尾部
-- ✅ 流式输出期间自动闭合未闭合的围栏、数学块、强调标记
-- ✅ Parser 级延迟行内解析 — 仅消费块结构的调用方无需物化行内节点
-- ✅ 持久化 AVL 行树与块索引共享未变化的文本和节点；哈希不承担解析边界正确性判断
-- ✅ 由解析器记录根状态检查点，正确区分容器内部空行、关闭标记与真正边界
-- ✅ 按显示帧合并 — 同一帧内多个 token 更新只提交最新文档，不人为限制成低帧率
+- 生成过程中可以重试、清空或替换全文，显示内容跟随最新输入。
+- 流式输出期间，未闭合的围栏、数学块和强调标记会获得临时显示补全。
+- 同一显示帧内的多次 token 更新合并为最新文档更新。
 
-编辑与流式追加共用检查点算法，未变化的后缀整体复用，属性与参考文献的跨块依赖合并缓存。
-真实定义变化会刷新全局引用；无法证明局部性的自定义后处理器使用完整管线。固定大小脏尾部、
-没有全局失效时，增量维护成本为 O(log N)，另加局部语法工作；中间编辑的后缀坐标平移、Lint
-和标题等全局依赖另计。读取完整 String 仍为 O(N)。详见[算法设计、复杂度与验证](markdown-parser/INCREMENTAL_PARSING.md)。
-
-`Markdown(document = ...)` 同样支持可变的自定义 AST：没有源码范围的节点会获得确定性的
-树路径身份，所有参与渲染的语义字段都会参与缓存失效判断。
+通过 `Markdown(document = ...)` 重载，也可以直接渲染自定义 AST。
 
 选择文字期间更新正文时，选区端点和正在拖动的手柄都会校正到有效的 UTF-16 字符边界。
 删除选中块会同时清除选区与拖动状态，复制不会使用已经失效的端点。
@@ -501,40 +486,6 @@ Compose 渲染器默认提供基础阅读语义，无需启用 `enableLinting`�
 
 ---
 
-## 🏗️ 项目架构
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Your Compose App                        │
-├─────────────────────────────────────────────────────────────┤
-│  markdown-preview                                           │
-│  交互式展示与演示                                           │
-├─────────────────────────────────────────────────────────────┤
-│  markdown-renderer                                          │
-│  AST → Compose UI / HTML                                    │
-│  块级/行内渲染、主题、图片加载                              │
-├─────────────────────────────────────────────────────────────┤
-│  markdown-runtime                                           │
-│  Directive 插件注册、输入转换、运行时管线                   │
-├─────────────────────────────────────────────────────────────┤
-│  markdown-parser                                            │
-│  Markdown → AST                                             │
-│  流式 / 增量 / Flavour 系统                                 │
-│  诊断 / Linting / 后处理器                                  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-| 模块 | 描述 |
-|------|------|
-| `:markdown-parser` | 核心解析引擎 — Markdown 字符串 → AST。支持流式、增量、多 Flavour。 |
-| `:markdown-runtime` | Directive 运行时层 — 插件注册表、输入转换器、directive 管线、source map。 |
-| `:markdown-renderer` | 渲染引擎 — AST → Compose UI。主题、图片加载、代码高亮。 |
-| `:markdown-preview` | 交互式展示 — 分类浏览所有支持功能的演示。 |
-| `:composeApp` | 跨平台 Demo 应用（Android/iOS/Desktop/Web）。 |
-| `:androidApp` | Android 独立 Demo 应用。 |
-
----
-
 ## 🧪 规范兼容性
 
 | 规范 | 状态 |
@@ -542,6 +493,17 @@ Compose 渲染器默认提供基础阅读语义，无需启用 `enableLinting`�
 | [CommonMark 0.31.2](https://spec.commonmark.org/0.31.2/) | **652/652 (100%)** ✅ |
 | [GFM 0.29](https://github.github.com/gfm/) | 表格、任务列表、删除线、自动链接 ✅ |
 | [Markdown Extra](https://michelf.ca/projects/php-markdown/extra/) | 脚注、定义列表、缩写、围栏代码 ✅ |
+
+### 稳定性验证
+
+| 范围 | 已验证的行为 |
+|------|--------------|
+| 增量与流式解析 | 四种方言下，连续编辑及流式前缀的结果与独立完整解析一致 |
+| 异步生命周期 | 覆盖快速替换全文、取消、切换配置及退出页面的回归场景 |
+| 极端输入 | 512 层引用、百万字符单行、密集分隔符和巨大未闭合块通过独立进程检查 |
+| 回归检查 | JVM 测试及 Parser 性能预算通过；Parser、Renderer 测试可编译至 JS 和 Wasm |
+
+当前版本的执行结果见 [CI](https://github.com/huarangmeng/Markdown/actions/workflows/test.yml)。
 
 ### Flavour 系统
 
@@ -640,34 +602,11 @@ Markdown(
 # iOS — 在 Xcode 中打开 iosApp/ 目录
 ```
 
-### 运行测试
-
-```bash
-./gradlew :markdown-parser:jvmTest      # Parser 模块测试
-./gradlew :markdown-renderer:jvmTest     # Renderer 模块测试
-./gradlew jvmTest                        # 全部常规 JVM 测试
-
-# 独立子 JVM 极端输入测试（256 MiB 堆、1 MiB 栈，每类输入限时 45 秒）
-./gradlew :markdown-parser:stressTest
-
-# Parser 性能回归门禁（p95、吞吐、分配量、峰值堆）
-./gradlew :markdown-benchmark:performanceGate
-
-# 真实 Compose 首帧、长文档滚动、跨 Block 选择
-# 请在真机上使用 benchmark 构建变体运行。
-./gradlew :macrobenchmark:connectedBenchmarkAndroidTest
-```
-
-性能预算保存在 `markdown-benchmark/performance-baseline.json`；可复现执行方式和基线更新规则见
-[`markdown-benchmark/README.md`](markdown-benchmark/README.md)。
-独立的 [Parser 压力测试](markdown-parser/STRESS_TESTING.md) 覆盖深层嵌套、超长单行、密集分隔符与巨大未闭合块，
-CI 会保存子进程阶段日志及资源预算报告。
-
 ---
 
-## 📊 功能覆盖总览
+## 📊 功能支持总览
 
-| # | 类别 | 覆盖率 |
+| # | 类别 | 已支持 / 清单项 |
 |---|------|--------|
 | 1 | 标题 | 17/17 (100%) |
 | 2 | 段落 | 5/5 (100%) |

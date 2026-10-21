@@ -1,6 +1,8 @@
-# Performance regression checks
+# Benchmark module guidance
 
-This module contains complementary benchmarks and regression checks.
+Follow the repository's [AGENTS.md](../AGENTS.md) as well as this module's performance verification
+instructions. This module contains complementary benchmarks and regression checks; publish user-facing
+capabilities and verified results in the root READMEs, and keep execution and budget maintenance here.
 
 ## Parser gate
 

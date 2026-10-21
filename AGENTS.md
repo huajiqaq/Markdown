@@ -7,7 +7,7 @@ Guidance for Codex when working in this repository.
 Kotlin Multiplatform Markdown engine for Compose Multiplatform.
 
 - Platforms: Android, iOS, Desktop (JVM), Web (Wasm/JS)
-- Stack: Kotlin `2.3.10`, Compose Multiplatform `1.10.1`
+- Stack: Kotlin and Compose Multiplatform; use `gradle/libs.versions.toml` as the version source of truth
 
 ## Read This First
 
@@ -16,6 +16,9 @@ Kotlin Multiplatform Markdown engine for Compose Multiplatform.
 - `markdown-renderer`: AST -> Compose / HTML
 - `markdown-preview`: demo data and preview categories
 - `composeApp`: thin shell around preview UI
+- `androidapp`: Android demo app
+- `markdown-benchmark`: parser JMH workloads, allocation/scaling checks, performance budgets
+- `macrobenchmark`: Android startup, scrolling, and cross-block selection measurements
 
 Dependency chain:
 
@@ -30,6 +33,10 @@ markdown-preview
       ↑
 composeApp
 ```
+
+The preview and demo modules are repository clients; applications using the published renderer do not need them.
+Parser-specific invariants and verification live in [markdown-parser/AGENTS.md](markdown-parser/AGENTS.md).
+Benchmark commands and baseline maintenance live in [markdown-benchmark/AGENTS.md](markdown-benchmark/AGENTS.md).
 
 ## Module Notes
 
@@ -52,6 +59,8 @@ composeApp
 - Entry: `Markdown()` and `MarkdownHtml`; public settings use `MarkdownColors`, `MarkdownTypography`, `MarkdownLayout`, `MarkdownParserConfig`, `MarkdownState`, `MarkdownComponents`, and `MarkdownInteractions`
 - Owns block renderers, inline rendering, theme, image loading, HTML export
 - Compose-specific changes belong here, not in parser/runtime
+- `Markdown(document = ...)` accepts mutable custom ASTs: nodes without source ranges use deterministic
+  tree-path identities, and rendered semantic fields must participate in cache invalidation
 
 ### `markdown-preview`
 
@@ -69,11 +78,36 @@ composeApp
 # Full JVM verification
 ./gradlew jvmTest
 
+# Compile common parser/renderer tests for Web (compilation only, not browser execution)
+./gradlew :markdown-parser:compileTestKotlinJs :markdown-parser:compileTestKotlinWasmJs :markdown-renderer:compileTestKotlinJs :markdown-renderer:compileTestKotlinWasmJs
+
+# Extreme inputs in bounded child JVMs; separate from jvmTest
+./gradlew :markdown-parser:stressTest
+
+# Parser performance budgets
+./gradlew :markdown-benchmark:performanceGate
+
 # Demo app
 ./gradlew :composeApp:run
 ```
 
 All tests must pass before commit.
+
+CI is defined in [test.yml](.github/workflows/test.yml): `JVM Tests` runs regular JVM tests and Web test
+compilation; `Parser Stress Tests` runs isolated extreme-input checks; `JVM Performance Gate` checks
+parser performance budgets. Each job uploads its reports on success or failure. Android Macrobenchmark
+requires a physical device and is documented in the benchmark module's AGENTS.md.
+
+## Documentation Audiences
+
+- `README.md` and `README_zh.md` serve component users: supported features, installation, public APIs,
+  examples, observable behavior, compatibility, and verified results. Keep the two languages aligned.
+- Put repository architecture, module boundaries, implementation details, test commands, verification
+  procedures, resource budgets, and baseline maintenance in the root or owning module's `AGENTS.md`.
+- Keep root guidance cross-module; put module-specific instructions in that module and link them here.
+  Detailed design records may stay beside their module, linked from its AGENTS.md.
+- README quality claims must describe what was actually checked. Keep test execution separate from
+  test compilation, and do not present a functional checklist as measured code coverage.
 
 ## Working Rules
 
@@ -89,7 +123,9 @@ All tests must pass before commit.
 - Preview changes:
   - Add or update demo cases in `markdown-preview`
 - Docs changes:
-  - Update `README.md`, `README_zh.md`, and `markdown-parser/PARSER_COVERAGE_ANALYSIS.md` when behavior changes
+  - Update both READMEs when user-facing behavior or public APIs change
+  - Update `markdown-parser/PARSER_COVERAGE_ANALYSIS.md` when parser syntax support changes
+  - Update the owning `AGENTS.md` when architecture or verification workflows change
 
 ## Common Workflows
 

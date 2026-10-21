@@ -23,15 +23,15 @@
 
 |  | Feature | Description |
 |--|---------|-------------|
-| 🚀 | **Blazing Fast** | AST-based recursive descent parser with incremental parsing — only re-parses what changed |
+| 🚀 | **Incremental Updates** | Reuses unchanged content when editing documents or receiving streaming output |
 | 🌍 | **True Cross-Platform** | One codebase renders identically on **Android**, **iOS**, **Desktop (JVM)**, **Web (Wasm/JS)** |
-| 📐 | **100% Coverage** | 413 Markdown features, **652/652 CommonMark Spec** tests passing, plus GFM & 20+ extensions |
+| 📐 | **Syntax Support** | 413 supported syntax and behavior items, **652/652 CommonMark Spec** examples passing, plus GFM & 20+ extensions |
 | 🤖 | **LLM-Ready Streaming** | First-class token-by-token rendering with display-frame coalescing — zero flicker during AI generation |
 | 🎨 | **Fully Themeable** | 30+ configurable properties, built-in GitHub light/dark themes, auto system detection |
 | 📊 | **LaTeX Math** | Inline `$...$` and block `$$...$$` formulas via integrated LaTeX rendering engine |
 | 🔍 | **Built-in Linting** | 13+ diagnostic rules including WCAG accessibility checks — catch issues at parse time |
 | 🖼️ | **Image Loading** | Coil3 + Ktor3 out-of-the-box, with size specification and custom renderer support |
-| 🖱️ | **Cross-Block Selection** | DIY selection layer over LazyColumn — continuous selection across blocks, reuses the system copy/translate menu, no first-frame stall on huge docs |
+| 🖱️ | **Cross-Block Selection** | Select text across blocks with the system copy/translate menu |
 
 Long-press and drag to select text. After releasing the gesture or adjusting a selection handle, tap a blank area inside the Markdown content once to clear the selection.
 
@@ -154,11 +154,8 @@ implementation(libs.markdown.renderer) {
 
 ## 🔌 Plugin Extensions
 
-This project ships a plugin-friendly architecture based on:
-
-- An official directive gateway (`{% tag ... %}`) parsed by `markdown-parser`
-- A runtime input transform pipeline to normalize custom syntax into directives
-- Renderer-side dispatch that maps directives (e.g. `video`) to native Compose blocks
+Use `directivePlugins` to add custom syntax such as video embeds and render it with native Compose
+components. Plugins can also handle the standard `{% tag ... %}` directive syntax and HTML export.
 
 Basic usage:
 
@@ -255,30 +252,14 @@ Markdown(
 )
 ```
 
-`LlmStreaming` retains its 16-character parser buffer: newlines commit early, and stopping or cancelling
-flushes the remaining tail. Code content is assembled once per parse before publication, including
-unclosed fences; full-parse optimizations introduce no additional buffering or wait for a closing fence.
+`LlmStreaming` uses a 16-character parser coalescing threshold; newlines commit early, and stopping
+or cancelling flushes the remaining tail. Code appears as it arrives, including inside unclosed fences.
 
-**What happens under the hood:**
-- ✅ Only re-parses the "dirty" tail region — stable blocks are reused
-- ✅ Validates the append-only prefix — retry, clear, or replacement updates restart atomically
-- ✅ Normalizes CRLF across token/chunk boundaries and flushes buffered tails on cancellation
-- ✅ Auto-closes unclosed fences, math blocks, emphasis during streaming
-- ✅ Parser-level lazy inline parsing — block-only consumers can defer inline materialization
-- ✅ Persistent AVL source/block indexes share unchanged text and blocks; hashes do not decide parse safety
-- ✅ Display-frame coalescing — multiple token updates in one frame commit only the latest document, without an artificial low-fps cap
+- Retry, clear, or replace the text during generation; the displayed document follows the latest input.
+- Unclosed fences, math blocks, and emphasis receive temporary display completion during streaming.
+- Multiple token updates in one display frame are combined into the latest document update.
 
-Edits and streaming appends share parser-recorded root checkpoints and reuse complete unchanged suffixes.
-Attribute and bibliography dependencies stay within atomic source regions. Definition changes refresh
-references globally; unknown custom postprocessors safely use the full pipeline. Stable-prefix updates
-avoid whole-text/index/list copies. For a fixed-size dirty tail without global invalidation, maintenance
-is O(log N), plus local syntax work. Middle edits may shift materialized suffix coordinates, and lint,
-heading changes or global dependencies add their own work. Full String reads still cost O(N).
-See [algorithm, complexity and verification](markdown-parser/INCREMENTAL_PARSING.md).
-
-The `Markdown(document = ...)` overload also supports mutable custom ASTs: nodes without source
-ranges receive deterministic tree-path identities, and rendered semantic fields participate in
-cache invalidation.
+Use the `Markdown(document = ...)` overload to render a custom AST directly.
 
 When the document changes during text selection, selection endpoints and active drag handles are
 clamped to valid UTF-16 character boundaries. Removing a selected block clears the selection and
@@ -508,40 +489,6 @@ These semantics are supplied by the shared Compose rendering path. Platform scre
 
 ---
 
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Your Compose App                        │
-├─────────────────────────────────────────────────────────────┤
-│  markdown-preview                                           │
-│  Interactive demo & showcase                                │
-├─────────────────────────────────────────────────────────────┤
-│  markdown-renderer                                          │
-│  AST → Compose UI / HTML                                    │
-│  Block/Inline renderers, theme, images                      │
-├─────────────────────────────────────────────────────────────┤
-│  markdown-runtime                                           │
-│  Directive plugins / input transforms / runtime pipeline    │
-├─────────────────────────────────────────────────────────────┤
-│  markdown-parser                                            │
-│  Markdown → AST                                             │
-│  Streaming / Incremental / Flavour system                   │
-│  Linting / Diagnostics / Post-processors                    │
-└─────────────────────────────────────────────────────────────┘
-```
-
-| Module | Description |
-|--------|-------------|
-| `:markdown-parser` | Core parsing engine — Markdown string → AST. Streaming, incremental, multi-flavour. |
-| `:markdown-runtime` | Directive runtime layer — plugin registry, input transforms, directive pipeline, source maps. |
-| `:markdown-renderer` | Rendering engine — AST → Compose UI. Theming, image loading, code highlighting. |
-| `:markdown-preview` | Interactive showcase — categorized demo of all supported features. |
-| `:composeApp` | Cross-platform demo app (Android/iOS/Desktop/Web). |
-| `:androidApp` | Android-specific demo app. |
-
----
-
 ## 🧪 Spec Compliance
 
 | Spec | Status |
@@ -549,6 +496,17 @@ These semantics are supplied by the shared Compose rendering path. Platform scre
 | [CommonMark 0.31.2](https://spec.commonmark.org/0.31.2/) | **652/652 (100%)** ✅ |
 | [GFM 0.29](https://github.github.com/gfm/) | Tables, task lists, strikethrough, autolinks ✅ |
 | [Markdown Extra](https://michelf.ca/projects/php-markdown/extra/) | Footnotes, definition lists, abbreviations, fenced code ✅ |
+
+### Reliability
+
+| Area | Verified behavior |
+|------|-------------------|
+| Incremental and streaming parsing | Matches independent full parsing across four flavours, including continuous edits and streamed prefixes |
+| Asynchronous lifecycle | Regression coverage for full-text replacement, cancellation, configuration changes, and page disposal |
+| Extreme inputs | Isolated-process checks pass for 512 nested quotes, million-character lines, dense delimiters, and large unclosed blocks |
+| Regression checks | JVM tests and parser performance budgets pass; parser and renderer tests compile for JS and Wasm |
+
+See the [CI results](https://github.com/huarangmeng/Markdown/actions/workflows/test.yml) for the current revision.
 
 ### Flavour System
 
@@ -651,35 +609,11 @@ Supports size specification in Markdown:
 # iOS — open iosApp/ in Xcode
 ```
 
-### Running Tests
-
-```bash
-./gradlew :markdown-parser:jvmTest      # Parser tests
-./gradlew :markdown-renderer:jvmTest     # Renderer tests
-./gradlew jvmTest                        # All regular JVM tests
-
-# Extreme inputs in child JVMs (256 MiB heap, 1 MiB stack, 45-second deadline per input family)
-./gradlew :markdown-parser:stressTest
-
-# Forked parser performance gate (p95, throughput, allocation, peak heap)
-./gradlew :markdown-benchmark:performanceGate
-
-# Real Compose startup, long-document scrolling, and cross-block selection
-# Run on a physical Android device with the benchmark build variant.
-./gradlew :macrobenchmark:connectedBenchmarkAndroidTest
-```
-
-Performance budgets live in `markdown-benchmark/performance-baseline.json`. See
-[`markdown-benchmark/README.md`](markdown-benchmark/README.md) for reproducible runs and baseline
-update rules.
-The separate [parser stress suite](markdown-parser/STRESS_TESTING.md) checks deep nesting, long lines,
-dense delimiters and large unclosed blocks, and preserves child-process failure logs in CI.
-
 ---
 
-## 📊 Coverage Summary
+## 📊 Feature Support Summary
 
-| # | Category | Coverage |
+| # | Category | Supported / Listed |
 |---|----------|----------|
 | 1 | Headings | 17/17 (100%) |
 | 2 | Paragraphs | 5/5 (100%) |

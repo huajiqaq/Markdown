@@ -61,14 +61,7 @@ O(log L + log B + I + A + R + S + G)
 
 ## 验证与复现
 
-```bash
-./gradlew :markdown-parser:jvmTest
-./gradlew jvmTest
-./gradlew :markdown-parser:compileKotlinJs :markdown-parser:compileKotlinWasmJs
-./gradlew :markdown-benchmark:performanceGate
-./gradlew :markdown-benchmark:fullParsingBenchmark
-./gradlew :markdown-benchmark:incrementalScalingBenchmark --args='--warmups 20 --iterations 40'
-```
+执行入口与验证流程见 [Parser 维护指南](AGENTS.md#常规验证)；性能基准、测量口径和预算维护规则见 [Benchmark 维护指南](../markdown-benchmark/AGENTS.md)。
 
 测试对照不是增量引擎自己的 fullParse：`referenceDocument` 直接运行 BlockParser 和完整 PostProcessor 管线，比较源文本、完整语义树、引用表、诊断和递归坐标。
 
