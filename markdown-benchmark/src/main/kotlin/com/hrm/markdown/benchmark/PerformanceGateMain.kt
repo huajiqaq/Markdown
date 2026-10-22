@@ -29,7 +29,9 @@ fun main(args: Array<String>) {
         val secondary = result.requiredObject("secondaryMetrics")
 
         val averageUs = primary.requiredDouble("score")
-        val p95Us = percentiles.requiredDouble("95.0")
+        // In AverageTime mode these are percentiles of iteration means, not individual calls.
+        // Keep the legacy maxP95Us budget key so historical reports and budgets stay comparable.
+        val iterationMeanP95Us = percentiles.requiredDouble("95.0")
         val throughputOpsPerSecond = 1_000_000.0 / averageUs
         val allocatedBytesPerOp = secondary.requiredObject("gc.alloc.rate.norm").requiredDouble("score")
         val peakHeapDeltaBytes = secondary.requiredObject("heap.peak.delta").requiredDouble("score")
@@ -44,13 +46,13 @@ fun main(args: Array<String>) {
             if (actual < limit) failures += "$benchmarkSuffix $metric ${actual.fmt()} < ${limit.fmt()}"
         }
 
-        requireAtMost("p95Us", p95Us, "maxP95Us")
+        requireAtMost("iterationMeanP95Us", iterationMeanP95Us, "maxP95Us")
         requireAtLeast("throughputOpsPerSecond", throughputOpsPerSecond, "minThroughputOpsPerSecond")
         requireAtMost("allocatedBytesPerOp", allocatedBytesPerOp, "maxAllocatedBytesPerOp")
         requireAtMost("peakHeapDeltaBytes", peakHeapDeltaBytes, "maxPeakHeapDeltaBytes")
 
         println(
-            "$benchmarkSuffix: avg=${averageUs.fmt()}us, p95=${p95Us.fmt()}us, " +
+            "$benchmarkSuffix: avg=${averageUs.fmt()}us, iterationMeanP95=${iterationMeanP95Us.fmt()}us, " +
                 "throughput=${throughputOpsPerSecond.fmt()} ops/s, " +
                 "alloc=${allocatedBytesPerOp.fmt(0)} B/op, peakDelta=${peakHeapDeltaBytes.fmt(0)} B"
         )

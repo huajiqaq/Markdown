@@ -1,6 +1,11 @@
 {
   "schemaVersion": 1,
   "description": "GitHub ubuntu-latest/Zulu 21 budgets with approximately 30% shared-runner headroom. Update only after reviewing reproducible reports.",
+  "metricSemantics": {
+    "p95UsAndMaxP95Us": "Legacy field names: p95 of JMH AverageTime iteration means, not the p95 latency of individual parser calls.",
+    "throughputOpsPerSecond": "Reciprocal of the AverageTime score; not a separate concurrent throughput measurement.",
+    "peakHeapDeltaBytes": "Additional observed heap-pool peak during an iteration; not retained AST bytes or process RSS."
+  },
   "referenceEnvironment": {
     "runner": "GitHub-hosted ubuntu-latest",
     "java": "Zulu JDK 21",

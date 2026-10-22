@@ -5,6 +5,16 @@ import com.hrm.markdown.parser.core.CharacterUtils
 import com.hrm.markdown.parser.core.HtmlEntities
 import com.hrm.markdown.parser.block.BlockParser
 
+/** Optional deterministic work counters; normal parsing does not collect them. */
+internal class InlineScanMetrics {
+    var emphasisOpenerChecks: Long = 0
+    var backtickSearchCharacters: Long = 0
+    var directiveSearchCharacters: Long = 0
+    var spoilerSearchCharacters: Long = 0
+    var autolinkTailCharacters: Long = 0
+    var footnoteDefinitionChecks: Long = 0
+}
+
 /**
  * 高性能行内解析器，实现 CommonMark 分隔符算法。
  *
@@ -22,10 +32,11 @@ class InlineParser(
     private val enableEmphasisCoalescing: Boolean = false,
     private val enableStrikethrough: Boolean = true,
 ) : BlockParser.InlineParserInterface {
+    internal var scanMetrics: InlineScanMetrics? = null
 
     override fun parseInlines(content: String, parent: ContainerNode) {
         if (content.isEmpty()) return
-        val parser = InlineParserInstance(content, document, customEmojiMap, enableAsciiEmoticons, enableGfmAutolinks, enableExtendedInline, enableStrikethrough)
+        val parser = InlineParserInstance(content, document, customEmojiMap, enableAsciiEmoticons, enableGfmAutolinks, enableExtendedInline, enableStrikethrough, scanMetrics)
         val nodes = parser.parse()
         for (node in nodes) {
             parent.appendChild(node)
@@ -204,6 +215,7 @@ private class InlineParserInstance(
     private val enableGfmAutolinks: Boolean = true,
     private val enableExtendedInline: Boolean = true,
     private val enableStrikethrough: Boolean = true,
+    private val scanMetrics: InlineScanMetrics? = null,
 ) {
     // 链表包装 AST 节点
     private class LLNode(var astNode: Node) {
@@ -222,6 +234,7 @@ private class InlineParserInstance(
     ) {
         var prev: DelimEntry? = null
         var next: DelimEntry? = null
+        var ordinal: Int = 0
     }
 
     private class BracketEntry(
@@ -243,12 +256,23 @@ private class InlineParserInstance(
     // 分隔符栈（双向链表）
     private var delimHead: DelimEntry? = null
     private var delimTail: DelimEntry? = null
+    private var nextDelimiterOrdinal = 0
 
     // 方括号栈
     private var bracketTop: BracketEntry? = null
 
     private val scanner = InlineScanner(input)
     private var unclosedWikiBefore = -1
+    private var unclosedSpoilerBefore = -1
+    private var directiveClose = -1
+    private var directiveContentEnd = -1
+    private var directiveSearchFinished = false
+    private var backticksScannedToEnd = false
+    private var backtickLastRunPositions: MutableMap<Int, Int>? = null
+    // This instance belongs to one parseInlines call. Public definitions and indices
+    // can change between calls, so numbering state must not outlive this instance.
+    private var numberedFootnoteCount = -1
+    private var unnumberedFootnoteMultiplicity: MutableMap<FootnoteDefinition, Int>? = null
 
     fun parse(): List<Node> {
         // 第一阶段：扫描并构建链表
@@ -350,6 +374,7 @@ private class InlineParserInstance(
     // ────── 分隔符栈操作 ──────
 
     private fun pushDelim(entry: DelimEntry) {
+        entry.ordinal = nextDelimiterOrdinal++
         entry.prev = delimTail
         if (delimTail != null) delimTail!!.next = entry else delimHead = entry
         delimTail = entry
@@ -395,6 +420,15 @@ private class InlineParserInstance(
 
         val startContent = scanner.pos
         val saved = scanner.pos
+        val lastRuns = backtickLastRunPositions ?: mutableMapOf<Int, Int>().also {
+            backtickLastRunPositions = it
+        }
+        // A completed search indexed every later run. Runs at or before this opener
+        // cannot close it; do not scan the same unsuccessful suffix again.
+        if (backticksScannedToEnd && (lastRuns[count] ?: -1) <= pos) {
+            appendLL(Text("`".repeat(count)))
+            return
+        }
         while (!scanner.isAtEnd) {
             if (scanner.peek() == '`') {
                 val closeStart = scanner.pos
@@ -403,7 +437,11 @@ private class InlineParserInstance(
                     scanner.advance()
                     closeCount++
                 }
+                // Once EOF was indexed, later successful searches must not replace
+                // a last occurrence with an earlier occurrence they encounter.
+                if (!backticksScannedToEnd) lastRuns[closeCount] = closeStart
                 if (closeCount == count) {
+                    scanMetrics?.let { it.backtickSearchCharacters += scanner.pos - startContent }
                     var content = input.substring(startContent, closeStart)
                     content = content.replace('\n', ' ')
                     if (content.length >= 2 && content[0] == ' ' && content.last() == ' ' && !content.all { it == ' ' }) {
@@ -416,6 +454,8 @@ private class InlineParserInstance(
                 scanner.advance()
             }
         }
+        scanMetrics?.let { it.backtickSearchCharacters += scanner.pos - startContent }
+        backticksScannedToEnd = true
         scanner.pos = saved
         appendLL(Text("`".repeat(count)))
     }
@@ -846,22 +886,38 @@ private class InlineParserInstance(
 
     private fun appendDirective() {
         val pos = scanner.pos
-        // find the closing %}
-        val closeIdx = input.indexOf("%}", pos + 2)
-        if (closeIdx < 0) {
+        // Failed or rejected openers may share a closing marker. Search each source
+        // interval only once, and trim its common trailing whitespace only once too.
+        if (!directiveSearchFinished && directiveClose < pos + 2) {
+            directiveClose = input.indexOf("%}", pos + 2)
+            scanMetrics?.let {
+                it.directiveSearchCharacters += (if (directiveClose < 0) input.length else directiveClose + 2) - pos - 2
+            }
+            if (directiveClose < 0) {
+                directiveSearchFinished = true
+            } else {
+                directiveContentEnd = directiveClose
+                while (directiveContentEnd > pos + 2 && input[directiveContentEnd - 1].isWhitespace()) {
+                    directiveContentEnd--
+                }
+            }
+        }
+        if (directiveSearchFinished) {
             // not a valid directive, emit as text
             scanner.advance() // {
             appendLL(Text("{"))
             return
         }
-        val inner = input.substring(pos + 2, closeIdx).trim()
-        if (inner.isEmpty() || inner.startsWith("end")) {
+        var contentStart = pos + 2
+        while (contentStart < directiveContentEnd && input[contentStart].isWhitespace()) contentStart++
+        if (contentStart >= directiveContentEnd || input.startsWith("end", contentStart)) {
             scanner.advance()
             appendLL(Text("{"))
             return
         }
+        val inner = input.substring(contentStart, directiveContentEnd)
         // advance past the closing %}
-        scanner.pos = closeIdx + 2
+        scanner.pos = directiveClose + 2
         val (tagName, args) = com.hrm.markdown.parser.block.starters.DirectiveBlockStarter.parseDirectiveArgs(inner)
         appendLL(DirectiveInline(tagName = tagName, args = args))
     }
@@ -1126,23 +1182,35 @@ private class InlineParserInstance(
     }
 
     private fun trimAutolinkTrailing(url: String): String {
-        var result = url
-        while (result.isNotEmpty()) {
-            val last = result.last()
+        var end = url.length
+        var excessClosingParentheses = Int.MIN_VALUE
+        var parenthesesScanLength = 0
+        while (end > 0) {
+            val last = url[end - 1]
             when {
                 last == '.' || last == ',' || last == ':' || last == ';' ||
                         last == '!' || last == '?' || last == '\'' || last == '"' -> {
-                    result = result.dropLast(1)
+                    end--
                 }
                 last == ')' -> {
-                    if (result.count { it == ')' } > result.count { it == '(' }) {
-                        result = result.dropLast(1)
+                    if (excessClosingParentheses == Int.MIN_VALUE) {
+                        var excess = 0
+                        for (i in 0 until end) {
+                            if (url[i] == ')') excess++ else if (url[i] == '(') excess--
+                        }
+                        excessClosingParentheses = excess
+                        parenthesesScanLength = end
+                    }
+                    if (excessClosingParentheses > 0) {
+                        end--
+                        excessClosingParentheses--
                     } else break
                 }
                 else -> break
             }
         }
-        return result
+        scanMetrics?.let { it.autolinkTailCharacters += parenthesesScanLength + url.length - end }
+        return if (end == url.length) url else url.substring(0, end)
     }
 
     // ────── 强调处理（CommonMark 算法） ──────
@@ -1150,6 +1218,11 @@ private class InlineParserInstance(
     private fun processEmphasis(stackBottom: DelimEntry?) {
         // 查找 stackBottom 上方的第一个分隔符
         var closer = if (stackBottom != null) stackBottom.next else delimHead
+        if (closer == null) return
+        val bottomOrdinal = stackBottom?.ordinal ?: -1
+        // Matching depends on the delimiter, closer openness, and the rule-of-three
+        // residue. Tilde additionally distinguishes single and double runs.
+        val openersBottom = IntArray(17) { bottomOrdinal }
 
         while (closer != null) {
             if (!closer.canClose) {
@@ -1158,9 +1231,18 @@ private class InlineParserInstance(
             }
 
             // 查找匹配的开始分隔符
+            val bottomIndex = when (closer.char) {
+                '*' -> (if (closer.canOpen) 3 else 0) + closer.origCount % 3
+                '_' -> 6 + (if (closer.canOpen) 3 else 0) + closer.origCount % 3
+                '~' -> if (closer.count == 1) 12 else 13
+                '=' -> 14
+                '+' -> 15
+                else -> 16 // ^
+            }
             var opener = closer.prev
             var openerFound = false
-            while (opener != null && opener !== stackBottom) {
+            while (opener != null && opener !== stackBottom && opener.ordinal > openersBottom[bottomIndex]) {
+                scanMetrics?.let { it.emphasisOpenerChecks++ }
                 if (opener.canOpen && opener.char == closer.char && delimsMatch(opener, closer)) {
                     openerFound = true
                     break
@@ -1169,6 +1251,9 @@ private class InlineParserInstance(
             }
 
             if (!openerFound || opener == null) {
+                // Ordinals remain valid even if a successful match removes the node
+                // that established a lower bound from the linked delimiter stack.
+                openersBottom[bottomIndex] = maxOf(openersBottom[bottomIndex], closer.prev?.ordinal ?: bottomOrdinal)
                 closer = closer.next
                 continue
             }
@@ -1669,7 +1754,23 @@ private class InlineParserInstance(
         val def = document.footnoteDefinitions[label]
         val index = if (def != null) {
             if (def.index == 0) {
-                def.index = document.footnoteDefinitions.values.count { it.index > 0 } + 1
+                if (numberedFootnoteCount < 0) {
+                    var count = 0
+                    val multiplicity = mutableMapOf<FootnoteDefinition, Int>()
+                    for (definition in document.footnoteDefinitions.values) {
+                        if (definition.index > 0) count++
+                        else if (definition.index == 0) {
+                            multiplicity[definition] = (multiplicity[definition] ?: 0) + 1
+                        }
+                    }
+                    scanMetrics?.let { it.footnoteDefinitionChecks += document.footnoteDefinitions.size }
+                    numberedFootnoteCount = count
+                    unnumberedFootnoteMultiplicity = multiplicity
+                }
+                def.index = numberedFootnoteCount + 1
+                // Public maps may contain several labels pointing to the same
+                // definition. Preserve values.count semantics for those aliases.
+                numberedFootnoteCount += unnumberedFootnoteMultiplicity!!.remove(def)!!
             }
             def.index
         } else {
@@ -1733,6 +1834,11 @@ private class InlineParserInstance(
      */
     private fun appendSpoiler() {
         val pos = scanner.pos
+        if (pos < unclosedSpoilerBefore) {
+            scanner.advance()
+            appendLL(Text(">"))
+            return
+        }
         scanner.advance() // skip '>'
         if (scanner.isAtEnd || scanner.peek() != '!') {
             scanner.pos = pos
@@ -1745,6 +1851,7 @@ private class InlineParserInstance(
         val startContent = scanner.pos
         while (!scanner.isAtEnd) {
             if (scanner.peek() == '!' && scanner.pos + 1 < input.length && input[scanner.pos + 1] == '<') {
+                scanMetrics?.let { it.spoilerSearchCharacters += scanner.pos + 2 - startContent }
                 val content = input.substring(startContent, scanner.pos)
                 scanner.advance() // skip '!'
                 scanner.advance() // skip '<'
@@ -1763,6 +1870,8 @@ private class InlineParserInstance(
         }
 
         // 未找到匹配的 !<，将起始 > 作为普通文本消费，避免死循环
+        scanMetrics?.let { it.spoilerSearchCharacters += scanner.pos - startContent }
+        unclosedSpoilerBefore = scanner.pos
         scanner.pos = pos + 1
         appendLL(Text(">"))
     }

@@ -6,10 +6,14 @@ import com.hrm.markdown.parser.SourceRange
 import com.hrm.markdown.parser.ast.*
 import com.hrm.markdown.parser.block.BlockParser
 import com.hrm.markdown.parser.block.postprocessors.*
+import com.hrm.markdown.parser.core.Attributes
 import com.hrm.markdown.parser.core.SourceText
+import com.hrm.markdown.parser.flavour.CommonMarkFlavour
 import com.hrm.markdown.parser.flavour.ExtendedFlavour
 import com.hrm.markdown.parser.flavour.FlavourCache
+import com.hrm.markdown.parser.flavour.GFMFlavour
 import com.hrm.markdown.parser.flavour.MarkdownFlavour
+import com.hrm.markdown.parser.flavour.MarkdownExtraFlavour
 import com.hrm.markdown.parser.inline.InlineParser
 import com.hrm.markdown.parser.lint.LintingPostProcessor
 import com.hrm.markdown.parser.streaming.InlineAutoCloser
@@ -47,6 +51,53 @@ class IncrementalEngine(
     private var hasDisplayRepairs = false
     private var previousRawChunkEndedWithCarriageReturn = false
     private var processedWith: List<PostProcessor>? = null
+    private var rootFenceContinuation: RootFenceContinuation? = null
+    private val hasBuiltInFenceSyntax = flavour === CommonMarkFlavour || flavour === GFMFlavour ||
+        flavour === ExtendedFlavour || flavour === MarkdownExtraFlavour
+
+    /** Copy collection values once; public AST attributes and highlight lists may be mutable. */
+    private data class RootFenceMetadata(
+        val info: String,
+        val language: String,
+        val fenceChar: Char,
+        val fenceLength: Int,
+        val fenceIndent: Int,
+        val attributes: Attributes,
+        val highlightLines: List<IntRange>,
+        val showLineNumbers: Boolean,
+        val startLineNumber: Int,
+    ) {
+        fun matches(block: FencedCodeBlock): Boolean =
+            info == block.info && language == block.language && fenceChar == block.fenceChar &&
+                fenceLength == block.fenceLength && fenceIndent == block.fenceIndent &&
+                attributes == block.attributes && highlightLines == block.highlightLines &&
+                showLineNumbers == block.showLineNumbers && startLineNumber == block.startLineNumber
+
+        companion object {
+            fun capture(block: FencedCodeBlock) = RootFenceMetadata(
+                block.info, block.language, block.fenceChar, block.fenceLength, block.fenceIndent,
+                block.attributes.copy(classes = block.attributes.classes.toList(), pairs = block.attributes.pairs.toMap()),
+                block.highlightLines.toList(), block.showLineNumbers, block.startLineNumber,
+            )
+        }
+    }
+
+    private data class RootFenceContinuation(
+        val source: SourceText,
+        val document: Document,
+        val region: ParsedRegion,
+        val block: FencedCodeBlock,
+        val metadata: RootFenceMetadata,
+        val lineRange: LineRange,
+        val sourceRange: SourceRange,
+        val contentHash: Long,
+        val literalRevision: Long,
+    ) {
+        fun matches(source: SourceText, document: Document, region: ParsedRegion, block: FencedCodeBlock): Boolean =
+            this.source === source && this.document === document && this.region === region && this.block === block &&
+                block.parent === document && lineRange == block.lineRange && sourceRange == block.sourceRange &&
+                contentHash == block.contentHash && literalRevision == block.literalRevision && metadata.matches(block)
+    }
 
     internal data class UpdateStats(
         val parsedLines: Int,
@@ -76,6 +127,7 @@ class IncrementalEngine(
         _document = Document()
         owner = DocumentOwner(_document)
         processedWith = null
+        rootFenceContinuation = null
         _isStreaming = true
         hasDisplayRepairs = false
         previousRawChunkEndedWithCarriageReturn = false
@@ -89,6 +141,7 @@ class IncrementalEngine(
         source = SourceText.applyEditFast(source, source.length, 0, normalized)
         if (appendCoalesceThreshold > 0 && '\n' !in normalized &&
             source.length - parsedSource.length < appendCoalesceThreshold) return _document
+        continueOpenRootFence()?.let { return it }
         return update(parsedSource.length, 0, source.length - parsedSource.length)
     }
 
@@ -143,6 +196,108 @@ class IncrementalEngine(
         doc, customEmojiMap, enableAsciiEmoticons, flavour.enableGfmAutolinks,
         flavour.enableExtendedInline, flavour.enableEmphasisCoalescing, flavour.enableStrikethrough,
     )
+
+    /**
+     * A root fence with a completed opening line has no syntax decisions left until its closer.
+     * Continue that raw leaf without rebuilding its accumulated body. All ambiguous boundaries,
+     * custom syntax and global processing retain the checkpoint update path.
+     */
+    private fun continueOpenRootFence(): Document? {
+        if (!_isStreaming || blocks.size == 0 || lintingProcessor != null) return null
+        val continuation = rootFenceContinuation ?: return null
+        // A custom starter can construct a FencedCodeBlock with different OpenBlock state.
+        if (!hasBuiltInFenceSyntax) return null
+        val pipeline = Pipeline(postProcessors.sortedSnapshot())
+        if (processedWith !== pipeline.processors || !pipeline.supportsIncremental ||
+            pipeline.processors.any { it is LintingPostProcessor }) return null
+        val region = blocks[blocks.size - 1]
+        val block = region.nodes.singleOrNull() as? FencedCodeBlock ?: return null
+        val old = parsedSource
+        // Public AST mutations must be replaced by source-derived syntax, just as on the
+        // regular update path. Reading literalRevision never materializes the code body.
+        if (!continuation.matches(old, _document, region, block)) return null
+        val openingLine = block.lineRange.startLine
+        if (region.hasDefinitions || region.headings.isNotEmpty() || block.fenceIndent != 0 ||
+            block.sourceRange != SourceRange.EMPTY || openingLine >= old.lineCount - 1 ||
+            block.lineRange.endLine != old.lineCount || blocks.startLine(blocks.size - 1) != openingLine) return null
+        // A closed fence without a final newline also ends on the last physical line.
+        val firstChangedLine = old.lineCount - 1
+        if (isClosingFenceLine(old, firstChangedLine, block)) return null
+        if (isClosingFenceLine(source, firstChangedLine, block)) return null
+        var hasClosingFence = false
+        source.forEachLine(firstChangedLine + 1, source.lineCount) { _, text, _ ->
+            if (isClosingFenceText(text, block)) hasClosingFence = true
+            !hasClosingFence
+        }
+        if (hasClosingFence) return null
+
+        val hasNumberedReferences = region.hasNumberedReferences ||
+            source.substring((old.length - 1).coerceAtLeast(0), source.length).contains("[^")
+        if (_document.footnoteDefinitions.isNotEmpty() && hasNumberedReferences) return null
+
+        // The surviving built-in processors cannot transform this single raw leaf: diagrams
+        // have already become DiagramBlock, and attributes outside the fence require a closer.
+        val committedSource = source
+        val bodyStart = committedSource.lineEnd(openingLine)
+        block.setLazyLiteral {
+            val body = committedSource.substring(bodyStart, committedSource.length)
+            if (body.isNotEmpty() && !body.endsWith('\n')) body + "\n" else body
+        }
+        block.lineRange = LineRange(openingLine, committedSource.lineCount)
+        block.contentHash = committedSource.contentHash(block.lineRange)
+        val prefix = blocks.splitAt(blocks.size - 1).first
+        val replacement = BlockIndex.of(listOf(region.copy(
+            lines = committedSource.lineCount - openingLine,
+            hasNumberedReferences = hasNumberedReferences,
+        )))
+        blocks = prefix + replacement
+        publish(_document, pipeline, replacement, fenceMetadata = continuation.metadata)
+        lastUpdate = UpdateStats(committedSource.lineCount - firstChangedLine, prefix.size)
+        return _document
+    }
+
+    /** Check the old partial line without flattening a potentially very long code line. */
+    private fun isClosingFenceLine(text: SourceText, line: Int, block: FencedCodeBlock): Boolean {
+        var position = text.lineStart(line)
+        val end = text.lineEnd(line)
+        var indent = 0
+        while (position < end && indent < 3 && text[position] == ' ') { position++; indent++ }
+        // A leading tab reaches column four, leaving virtual indentation after advanceSpaces(3).
+        var run = 0
+        while (position < end && text[position] == block.fenceChar) { position++; run++ }
+        if (run < block.fenceLength) return false
+        while (position < end) if (!text[position++].isWhitespace()) return false
+        return true
+    }
+
+    private fun isClosingFenceText(text: String, block: FencedCodeBlock): Boolean {
+        var position = 0
+        while (position < minOf(3, text.length) && text[position] == ' ') position++
+        var run = 0
+        while (position < text.length && text[position] == block.fenceChar) { position++; run++ }
+        if (run < block.fenceLength) return false
+        while (position < text.length) if (!text[position++].isWhitespace()) return false
+        return true
+    }
+
+    private fun captureRootFenceContinuation(
+        pipeline: Pipeline, newlyProcessed: BlockIndex, metadata: RootFenceMetadata?,
+    ): RootFenceContinuation? {
+        if (!_isStreaming || !hasBuiltInFenceSyntax || blocks.size == 0 || newlyProcessed.size == 0 ||
+            lintingProcessor != null || !pipeline.supportsIncremental ||
+            pipeline.processors.any { it is LintingPostProcessor }) return null
+        val region = newlyProcessed[newlyProcessed.size - 1]
+        val block = region.nodes.singleOrNull() as? FencedCodeBlock ?: return null
+        // A reused suffix may have been changed externally. Only freshly processed leaves
+        // can establish trusted metadata; full non-streaming parses do no capture work.
+        if (blocks[blocks.size - 1] !== region) return null
+        val openingLine = block.lineRange.startLine
+        if (region.hasDefinitions || region.headings.isNotEmpty() || block.fenceIndent != 0 ||
+            block.sourceRange != SourceRange.EMPTY || openingLine >= source.lineCount - 1 ||
+            block.lineRange.endLine != source.lineCount || blocks.startLine(blocks.size - 1) != openingLine) return null
+        return RootFenceContinuation(source, _document, region, block, metadata ?: RootFenceMetadata.capture(block),
+            block.lineRange, block.sourceRange, block.contentHash, block.literalRevision)
+    }
 
     private data class Pipeline(val processors: List<PostProcessor>) {
         val hasAttributes = processors.any { it is BlockAttributeProcessor }
@@ -350,6 +505,7 @@ class IncrementalEngine(
     private fun publish(
         context: Document, pipeline: Pipeline, newlyProcessed: BlockIndex,
         runLint: Boolean = true, publishedDocument: Document? = null,
+        fenceMetadata: RootFenceMetadata? = null,
     ) {
         val doc = publishedDocument ?: Document(context.definitionContext)
         doc.installIndexedChildren(blocks.asNodeList())
@@ -365,6 +521,7 @@ class IncrementalEngine(
         parsedSource = source
         processedWith = pipeline.processors
         hasDisplayRepairs = _isStreaming
+        rootFenceContinuation = captureRootFenceContinuation(pipeline, newlyProcessed, fenceMetadata)
     }
 
     private fun reuseStreamingBlockInstances(
@@ -388,7 +545,7 @@ class IncrementalEngine(
     ): Node {
         val oldBlock = oldChildren[newBlock.lineRange.startLine] as? FencedCodeBlock ?: return newBlock
 
-        oldBlock.literal = newBlock.literal
+        oldBlock.copyLiteralFrom(newBlock)
         oldBlock.lineRange = newBlock.lineRange
         oldBlock.sourceRange = newBlock.sourceRange
         oldBlock.contentHash = newBlock.contentHash
@@ -440,9 +597,8 @@ class IncrementalEngine(
                 }
             }
             is BlockQuote -> {
-                val children = block.children.toList()
-                if (children.isNotEmpty()) {
-                    val lastChild = children.last()
+                val lastChild = block.children.lastOrNull()
+                if (lastChild != null) {
                     val repaired = autoCloseBlock(lastChild, source, references)
                     if (repaired !== lastChild) {
                         block.replaceChild(lastChild, repaired)
@@ -451,9 +607,8 @@ class IncrementalEngine(
                 block
             }
             is ListBlock, is ListItem, is CustomContainer -> {
-                val children = block.children.toList()
-                if (children.isNotEmpty()) {
-                    val lastChild = children.last()
+                val lastChild = block.children.lastOrNull()
+                if (lastChild != null) {
                     val repaired = autoCloseBlock(lastChild, source, references)
                     if (repaired !== lastChild) {
                         block.replaceChild(lastChild, repaired)
@@ -500,10 +655,7 @@ class IncrementalEngine(
         )
         paragraph.sourceRange = heading.sourceRange
         if (content.isNotEmpty()) {
-            val tempDoc = Document()
-            tempDoc.linkDefinitions.putAll(references.linkDefinitions)
-            tempDoc.footnoteDefinitions.putAll(references.footnoteDefinitions)
-            tempDoc.abbreviationDefinitions.putAll(references.abbreviationDefinitions)
+            val tempDoc = Document(references.definitionContext)
             val inlineParser = InlineParser(
                 tempDoc,
                 customEmojiMap,
@@ -523,11 +675,14 @@ class IncrementalEngine(
         if (inlineText.isEmpty()) return
 
         val repairSuffix = InlineAutoCloser.buildRepairSuffix(inlineText)
+        // Keep complete content lazy. Repairing an unchanged cell/paragraph must not
+        // eagerly parse it, or copy definition tables proportional to the document.
+        // Footnote indices remain observable immediately after a streaming append.
+        // Escaped/code-span carets inside brackets can also become footnote references.
+        val numbersFootnotes = references.footnoteDefinitions.isNotEmpty() && '[' in inlineText
+        if (repairSuffix.isEmpty() && !numbersFootnotes) return
         val repairedContent = inlineText + repairSuffix
-        val tempDoc = Document()
-        tempDoc.linkDefinitions.putAll(references.linkDefinitions)
-        tempDoc.footnoteDefinitions.putAll(references.footnoteDefinitions)
-        tempDoc.abbreviationDefinitions.putAll(references.abbreviationDefinitions)
+        val tempDoc = Document(references.definitionContext)
         val inlineParser = InlineParser(tempDoc, customEmojiMap, enableAsciiEmoticons, flavour.enableGfmAutolinks, flavour.enableExtendedInline, flavour.enableEmphasisCoalescing, flavour.enableStrikethrough)
         node.clearChildren()
         inlineParser.parseInlines(repairedContent, node)
@@ -556,19 +711,14 @@ class IncrementalEngine(
     }
 
     private fun autoCloseTableCells(table: Table, source: SourceText, references: Document) {
-        for (child in table.children) {
-            if (child is ContainerNode) {
-                for (row in child.children) {
-                    if (row is TableRow) {
-                        val cells = row.children.toList()
-                        if (cells.isNotEmpty()) {
-                            val lastCell = cells.last()
-                            if (lastCell is TableCell) {
-                                autoCloseInlineContent(lastCell, source, references)
-                            }
-                        }
-                    }
-                }
+        // Preserve display repair for the last cell of every row, including finished rows.
+        // Complete cells keep their existing lazy content and never copy the definition maps.
+        for (section in table.children) {
+            if (section !is ContainerNode) continue
+            for (row in section.children) {
+                if (row !is TableRow) continue
+                val cell = row.children.lastOrNull() as? TableCell ?: continue
+                autoCloseInlineContent(cell, source, references)
             }
         }
     }
@@ -663,7 +813,7 @@ class IncrementalEngine(
                 SourcePosition(0, 0, 0),
                 SourcePosition(
                     source.lineCount - 1,
-                    source.lineContent(source.lineCount - 1).length,
+                    source.length - source.lineStart(source.lineCount - 1),
                     source.length
                 )
             )

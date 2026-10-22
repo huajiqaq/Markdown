@@ -30,6 +30,10 @@ Web 命令检查公共测试的可编译性，不代表已经在浏览器执行�
 - `IncrementalSessionLifecycleTest`：解析、编辑、流开始、取消、结束和诊断的一致性。
 - `IncrementalAlgorithmContractTest`、JVM 分配增长测试：稳定前缀扩大后的实际重解析范围和分配增长。
 - `FencedCodeStreamingPublicationContractTest`：已提交流式快照的代码正文以及原有缓冲边界。
+- `InlineLinearScanRegressionTest`：失败匹配的确定性扫描量、分隔符语义及局部脚注编号计数。
+- `SourceTextChunkedLineTest`、`LazyFencedCodeLiteralTest`：长行片段、历史源码、EOF 及延迟正文公开读写。
+- `RootFenceAppendContractTest`、`StreamingTailWorkContractTest`：开放围栏追加与保守回退、修复内容及惰性边界。
+- `GrowingBlockAllocationScalingTest`：连续 512 / 4,096 次追加的累计分配增长；主动读取每次完整 String 的输出成本单独测量。
 
 ## 极端输入压力测试
 

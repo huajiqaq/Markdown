@@ -1393,9 +1393,7 @@ class BlockParser(
             is ContainerNode -> {
                 // 对容器节点，递归设置其直接子节点的 lazy 解析
                 // 注意：这里直接访问内部子节点列表，不触发子节点的 lazy 解析
-                for (child in node.children.toList()) {
-                    setupLazyInlineParsing(child, inlineParser)
-                }
+                node.forEachMaterializedChild { child -> setupLazyInlineParsing(child, inlineParser) }
             }
             else -> {}
         }

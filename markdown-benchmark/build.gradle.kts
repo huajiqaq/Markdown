@@ -129,7 +129,7 @@ val runPerformanceGateBenchmarks by tasks.registering(JavaExec::class) {
 
 tasks.register<JavaExec>("performanceGate") {
     group = "verification"
-    description = "Fails when parser latency, throughput, allocation, or peak heap exceed baseline budgets."
+    description = "Checks iteration-mean latency percentiles, derived throughput, allocation and observed peak heap."
     dependsOn(runPerformanceGateBenchmarks)
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.hrm.markdown.benchmark.PerformanceGateMainKt")
@@ -159,4 +159,35 @@ tasks.register<JavaExec>("fullParsingBenchmark") {
     args("com.hrm.markdown.benchmark.FullParseMicrobenchmark.*", "-prof", "gc",
         "-rf", "json", "-rff", results.get().asFile.absolutePath)
     doFirst { results.get().asFile.parentFile.mkdirs() }
+}
+
+tasks.register<JavaExec>("failedInlineScalingBenchmark") {
+    group = "benchmark"
+    description = "Measures fully materialized failed inline scans at increasing input sizes in forked JMH."
+    dependsOn("mainBenchmarkCompile", tasks.named("classes"))
+    classpath = sourceSets["main"].runtimeClasspath +
+        files(performanceGateGeneratedClasses, performanceGateGeneratedResources)
+    mainClass.set("org.openjdk.jmh.Main")
+    val results = layout.buildDirectory.file("reports/failed-inline-scaling/results.json")
+    args("com.hrm.markdown.benchmark.FailedInlineScalingBenchmark.*", "-prof", "gc",
+        "-rf", "json", "-rff", results.get().asFile.absolutePath)
+    providers.gradleProperty("failedInlineChars").orNull?.let { args("-p", "chars=$it") }
+    providers.gradleProperty("failedInlineShapes").orNull?.let { args("-p", "shape=$it") }
+    doFirst { results.get().asFile.parentFile.mkdirs() }
+}
+
+tasks.register<JavaExec>("growingBlockStreamingBenchmark") {
+    group = "benchmark"
+    description = "Measures growing single-block streams, separating buffered input, commits, consumption and finalization."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.hrm.markdown.benchmark.GrowingBlockStreamingBenchmarkKt")
+    jvmArgs("-Xms256m", "-Xmx512m")
+}
+
+// Gradle may schedule independent JavaExec tasks concurrently. Keep measurements on one
+// machine sequential, without making an individual suite depend on running the others.
+tasks.named("fullParsingBenchmark") { mustRunAfter("performanceGate") }
+tasks.named("failedInlineScalingBenchmark") { mustRunAfter("performanceGate", "fullParsingBenchmark") }
+tasks.named("growingBlockStreamingBenchmark") {
+    mustRunAfter("performanceGate", "fullParsingBenchmark", "failedInlineScalingBenchmark")
 }

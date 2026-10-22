@@ -108,9 +108,42 @@ class FencedCodeBlock(
     var fenceChar: Char = '`',
     var fenceLength: Int = 3,
     var fenceIndent: Int = 0,
-    override var literal: String = "",
+    literal: String = "",
     var attributes: Attributes = Attributes(),
 ) : LeafNode() {
+    private var literalValue: String = literal
+    private var literalSource: (() -> String)? = null
+    internal var literalRevision: Long = 0
+        private set
+
+    override var literal: String
+        get() {
+            literalSource?.let { source ->
+                literalValue = source()
+                literalSource = null
+            }
+            return literalValue
+        }
+        set(value) {
+            literalValue = value
+            literalSource = null
+            literalRevision++
+        }
+
+    /** A committed source snapshot stays readable without eagerly flattening its whole body. */
+    internal fun setLazyLiteral(source: () -> String) {
+        literalValue = ""
+        literalSource = source
+        literalRevision++
+    }
+
+    /** Preserve laziness when retaining the public block instance across streaming revisions. */
+    internal fun copyLiteralFrom(other: FencedCodeBlock) {
+        literalValue = other.literalValue
+        literalSource = other.literalSource
+        literalRevision++
+    }
+
     /** highlighted line ranges parsed from `hl_lines` attribute, e.g. "1 3-5" -> [1..1, 3..5] */
     var highlightLines: List<IntRange> = emptyList()
 

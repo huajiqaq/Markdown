@@ -1,89 +1,55 @@
 # Benchmark module guidance
 
-Follow the repository's [AGENTS.md](../AGENTS.md) as well as this module's performance verification
-instructions. This module contains complementary benchmarks and regression checks; publish user-facing
-capabilities and verified results in the root READMEs, and keep execution and budget maintenance here.
+Follow the repository [AGENTS.md](../AGENTS.md). This module owns parser workloads, performance
+regression checks and budget maintenance. Publish user-facing verified results in the root READMEs.
+See [BENCHMARKS.md](BENCHMARKS.md) for scenarios, report formats and revision comparisons.
 
-## Parser gate
+## Common verification
 
-Run the same forked JMH workload used by pull-request CI:
+Run from the repository root, one benchmark process at a time:
 
 ```bash
 ./gradlew :markdown-benchmark:performanceGate
-```
-
-The task runs `ParserMicrobenchmark` in a fresh JVM fork, records a JSON report at
-`markdown-benchmark/build/reports/performance-gate/results.json`, and fails when any scenario
-exceeds the checked-in budgets in `performance-baseline.json`.
-
-The gate checks:
-
-- primary-score p95 latency;
-- throughput derived from average time;
-- `gc.alloc.rate.norm` bytes allocated per operation;
-- the additional peak heap observed during an iteration.
-
-The streaming scenario uses the existing 16-character parser coalescing threshold, flushes on newlines,
-and includes `endStream()` exactly once per measured operation. Longer local
-runs are available through `mainBenchmark`; `ciBenchmark` is a shorter smoke configuration.
-
-## Full-parse shapes
-
-```bash
 ./gradlew :markdown-benchmark:fullParsingBenchmark
-```
-
-This separate forked JMH suite covers a 3,000-line code fence, 3,000 consecutive reference definitions,
-a long multiline paragraph, a document whose inline AST is fully materialized, and a 1,500-row,
-four-column GFM table that exercises metadata traversal while cell content remains lazy. The existing
-`inlineHeavyParse` scenario intentionally retains lazy inline parsing. Input construction is outside
-the measurements. Allocation and latency results are written to `build/reports/full-parsing/results.json`;
-the existing CI gate and its budgets are unchanged. JVM allocation tests separately reject quadratic
-copying as the large block grows from 100 to 1,000 lines.
-
-### Updating budgets
-
-Do not update the baseline from a single noisy run. Use the same JDK, OS image, CPU class, and power
-mode as CI; collect at least three reports; compare profiles/traces; then change only the affected
-budget. Keep enough tolerance for shared-runner variance, and explain the intentional regression or
-optimization in the pull request.
-
-## Incremental scaling
-
-```bash
-./gradlew :markdown-benchmark:incrementalScalingBenchmark --args='--warmups 20 --iterations 40'
 ./gradlew :markdown-benchmark:incrementalScalingBenchmark --args='--warmups 20 --iterations 40 --coalesce 16'
-```
-
-This reports complete append and equal-length replacement latency (median/p95) and thread allocation
-at 100, 1,000 and 10,000 paragraphs, for CommonMark and Extended. Parser setup, String materialization
-and full AST traversal are outside the measured call. Compare revisions using the identical harness,
-JDK, machine and arguments. Timing is observational; the parser's JVM tests separately reject linear
-allocation growth for a fixed-size tail update. See [algorithm and complexity](../markdown-parser/INCREMENTAL_PARSING.md).
-
-`--coalesce 16` matches `LlmStreaming`. Each measured append reaches the threshold and actually commits
-a parse; it does not report the cost of accepting a small buffered chunk as parser latency.
-
-## Compose Macrobenchmark
-
-The `macrobenchmark` module launches a release-like, profileable benchmark Activity and measures the
-real parser/compile/layout/Compose pipeline. It includes cold first display, repeated long-document
-flings, and a long-press drag that selects across visible Markdown blocks.
-
-Run it on a physical Android device:
-
-```bash
+./gradlew :markdown-benchmark:failedInlineScalingBenchmark
+./gradlew -q :markdown-benchmark:growingBlockStreamingBenchmark --args='--revision CANDIDATE_SHA'
 ./gradlew :macrobenchmark:connectedBenchmarkAndroidTest
 ```
 
-Macrobenchmark writes frame/startup metrics, JSON output, and Perfetto traces under
-`macrobenchmark/build/outputs/connected_android_test_additional_output/`. Compare results only on a
-stable device pool; emulator numbers are suitable for functional smoke checks, not performance
-baselines.
+## Measurement rules
 
-## Inline cache telemetry
+- The CI gate uses forked JMH AverageTime. `iterationMeanP95` is the p95 of iteration means,
+  not individual-call tail latency; baseline keys `p95Us` / `maxP95Us` retain their legacy names.
+- Throughput is derived from average time. `gc.alloc.rate.norm` measures bytes/op; observed heap-pool
+  peak delta is neither retained AST size nor process RSS.
+- Keep lazy parsing and fully materialized AST measurements distinct. Input construction and parser
+  setup exclusions depend on the suite; document them when reporting results.
+- Separate buffered receives, actual parse commits, consumption and finalization. Streaming gate
+  batches use 16-character coalescing, newline commits and exactly one `endStream()`.
+- Compare identical workloads, harness, JDK, machine, heap, power mode and arguments. Keep raw reports
+  and revision metadata; observational timing or a passing stress test does not prove complexity.
 
-The renderer's two inline caches report hit, miss, eviction, entry-count, and estimated-byte
-snapshots through `InlineLayoutMetricsSnapshot`. Both caches are bounded by entry count and estimated
-retained bytes, and the common tests exercise width/font-scale churn to prevent an unbounded resize
-working set.
+## Budgets and execution
+
+Do not relax [performance-baseline.json](performance-baseline.json) to make an optimization pass.
+Before justified budget maintenance, collect at least three same-environment reports matching CI's
+JDK, OS image, CPU class and power mode, inspect profiles/traces, and explain the affected budget.
+A single noisy run is insufficient; preserve tolerance for shared-runner variance.
+
+Run benchmark tasks serially. Gradle orders the gate, full-parse, failed-inline and growing-block
+suites when requested together; separate invocations must not overlap. Do not disable JMH's global
+lock or run competing benchmark processes on the same machine.
+
+The gate report is `build/reports/performance-gate/results.json`; other outputs are listed in
+[BENCHMARKS.md](BENCHMARKS.md). New observational suites do not silently redefine gate workloads.
+
+## Android and related checks
+
+Android Macrobenchmark requires a physical device and a stable device pool for comparisons.
+Emulators provide functional smoke checks, not performance baselines. Reports and Perfetto traces:
+`macrobenchmark/build/outputs/connected_android_test_additional_output/`.
+
+Parser correctness, deterministic scan/allocation guards and stress budgets belong in the
+[parser guidance](../markdown-parser/AGENTS.md); algorithm limits are in
+[INCREMENTAL_PARSING.md](../markdown-parser/INCREMENTAL_PARSING.md).

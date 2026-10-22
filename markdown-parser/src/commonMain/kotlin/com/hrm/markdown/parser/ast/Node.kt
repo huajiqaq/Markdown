@@ -7,10 +7,9 @@ import com.hrm.markdown.parser.LineRange
  * 所有 AST 节点的基类。
  * 节点通过父子关系形成树结构。
  *
- * Tree-sitter 风格增量解析支持：
- * - 每个节点携带 [contentHash]，用于快速判断内容是否改变。
- * - 增量解析时，若旧节点与新源文本对应区域的哈希一致，
- *   则直接复用旧子树，无需重新解析。
+ * 增量解析支持：
+ * - [contentHash] 标识内容版本，不承担解析边界正确性的证明。
+ * - 增量引擎依据解析器检查点、精确未变源码和语义依赖条件复用旧子树。
  */
 sealed class Node {
     var sourceRange: SourceRange = SourceRange.EMPTY
@@ -30,7 +29,7 @@ sealed class Node {
 
     /**
      * 内容哈希：基于该节点所覆盖的源文本行内容计算。
-     * 用于增量解析时快速判断节点是否可复用。
+     * 用于内容缓存失效；节点复用还必须满足解析状态和语义依赖条件。
      */
     var contentHash: Long = 0L
 

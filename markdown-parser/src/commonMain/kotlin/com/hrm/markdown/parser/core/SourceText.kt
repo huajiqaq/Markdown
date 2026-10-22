@@ -4,7 +4,7 @@ import com.hrm.markdown.parser.LineRange
 
 /**
  * Normalized, immutable source backed by a persistent AVL tree of physical lines.
- * Edits copy the search paths and changed lines, never the unchanged text or line index.
+ * Edits copy search paths and bounded boundary fragments, sharing unchanged text and line indexes.
  * [content] explicitly materializes (and caches) a flat String; parsing uses line access instead.
  */
 class SourceText private constructor(
@@ -23,12 +23,11 @@ class SourceText private constructor(
     }
 
     /** End offset, including a possible newline. */
-    fun lineEnd(line: Int): Int = lineStart(line) + root.lineAt(line).text.length
+    fun lineEnd(line: Int): Int = lineStart(line) + root.lineAt(line).characters
 
     fun lineContent(line: Int): String {
         require(line in 0 until lineCount) { "Line $line out of range [0, $lineCount)" }
-        val text = root.lineAt(line).text
-        return if (text.endsWith('\n')) text.dropLast(1) else text
+        return root.lineAt(line).contentWithoutNewline()
     }
 
     fun linesContent(startLine: Int, endLine: Int): List<String> =
@@ -42,7 +41,7 @@ class SourceText private constructor(
     operator fun get(index: Int): Char {
         require(index in 0 until length)
         val line = lineAtOffset(index)
-        return root.lineAt(line).text[index - lineStart(line)]
+        return root.lineAt(line).characterAt(index - lineStart(line))
     }
 
     fun substring(startOffset: Int, endOffset: Int): String {
@@ -60,7 +59,7 @@ class SourceText private constructor(
         return root.hashRange(start, end).first
     }
 
-    /** Sequential range traversal: O(log L + visited lines), with early termination. */
+    /** Sequential traversal; edited chunked lines additionally materialize their visited text. */
     internal fun forEachLine(start: Int, end: Int, action: (Int, String, Long) -> Boolean) {
         fun visit(tree: Lines, base: Int): Boolean {
             if (base >= end || base + tree.count <= start) return true
@@ -98,7 +97,7 @@ class SourceText private constructor(
 
         fun appendTo(out: StringBuilder) {
             when (this) {
-                is Line -> out.append(text)
+                is Line -> appendContentTo(out, 0, characters)
                 is Branch -> { left.appendTo(out); right.appendTo(out) }
             }
         }
@@ -106,7 +105,7 @@ class SourceText private constructor(
         fun appendRangeTo(out: StringBuilder, start: Int, end: Int) {
             if (start >= end) return
             when (this) {
-                is Line -> out.append(text, start, end)
+                is Line -> appendContentTo(out, start, end)
                 is Branch -> {
                     if (start < left.characters) left.appendRangeTo(out, start, minOf(end, left.characters))
                     if (end > left.characters) right.appendRangeTo(out, maxOf(0, start - left.characters), end - left.characters)
@@ -126,12 +125,32 @@ class SourceText private constructor(
         }
     }
 
-    private class Line(val text: String) : Lines() {
+    private class Line private constructor(private val flat: String?, private val chunks: TextChunks?) : Lines() {
+        constructor(text: String) : this(text,
+            if (text.length > TextChunks.LEAF_LIMIT) TextChunks.of(text) else null)
+        constructor(chunks: TextChunks?) : this(if (chunks == null) "" else null, chunks)
+
         override val count = 1
-        override val characters = text.length
+        override val characters = flat?.length ?: chunks!!.length
         override val height = 1
         override val power = RANGE_HASH_BASE
-        override val hash: Long = text.fold(FNV_OFFSET_BASIS) { h, c -> (h xor c.code.toLong()) * FNV_PRIME }
+        override val hash: Long = (chunks?.hash ?: TextChunks.hash(flat!!)) xor -3750763034362895579L
+        val text: String get() = flat ?: buildString(characters) { chunks!!.appendTo(this) }
+
+        fun characterAt(index: Int): Char = flat?.get(index) ?: chunks!![index]
+
+        fun appendContentTo(out: StringBuilder, start: Int, end: Int) {
+            if (flat != null) out.append(flat, start, end) else chunks!!.appendTo(out, start, end)
+        }
+
+        fun contentWithoutNewline(): String {
+            val end = if (characters > 0 && characterAt(characters - 1) == '\n') characters - 1 else characters
+            if (flat != null) return if (end == characters) flat else flat.substring(0, end)
+            return buildString(end) { chunks!!.appendTo(this, 0, end) }
+        }
+
+        fun slice(start: Int, end: Int): TextChunks? =
+            if (chunks != null) chunks.slice(start, end) else TextChunks.of(flat!!, start, end)
     }
 
     private class Branch(val left: Lines, val right: Lines) : Lines() {
@@ -143,8 +162,6 @@ class SourceText private constructor(
     }
 
     companion object {
-        private const val FNV_OFFSET_BASIS = -3750763034362895579L
-        private const val FNV_PRIME = 1099511628211L
         private const val RANGE_HASH_BASE = -7046029254386353131L
 
         fun of(input: String): SourceText {
@@ -155,7 +172,7 @@ class SourceText private constructor(
         fun applyEdit(current: SourceText, offset: Int, deleteLength: Int, insertText: String): SourceText =
             applyEditFast(current, offset, deleteLength, insertText)
 
-        /** O(log L + I + A): inserted text I and the two affected boundary lines A. */
+        /** Copies bounded text leaves and tree paths, including for a growing physical line. */
         fun applyEditFast(current: SourceText, offset: Int, deleteLength: Int, insertText: String): SourceText {
             require(offset in 0..current.length) { "offset $offset out of [0, ${current.length}]" }
             require(deleteLength >= 0 && deleteLength <= current.length - offset) {
@@ -165,16 +182,36 @@ class SourceText private constructor(
             if (deleteLength == inserted.length && current.substring(offset, offset + deleteLength) == inserted) return current
             val first = current.lineAtOffset(offset)
             val last = current.lineAtOffset(offset + deleteLength)
-            val firstText = current.root.lineAt(first).text
-            val lastText = current.root.lineAt(last).text
-            val middle = buildString {
-                append(firstText, 0, offset - current.lineStart(first))
-                append(inserted)
-                append(lastText, offset + deleteLength - current.lineStart(last), lastText.length)
-            }
+            val firstLine = current.root.lineAt(first)
+            val lastLine = current.root.lineAt(last)
+            val prefixEnd = offset - current.lineStart(first)
+            val suffixStart = offset + deleteLength - current.lineStart(last)
             val (head, rest) = split(current.root, first)
             val (_, tail) = split(rest, last - first + 1)
-            val changed = fromText(middle, includeFinalLine = last == current.lineCount - 1)
+            val includeFinalLine = last == current.lineCount - 1
+            val changed = if (prefixEnd + inserted.length + lastLine.characters - suffixStart <= TextChunks.LEAF_LIMIT) {
+                val middle = buildString {
+                    firstLine.appendContentTo(this, 0, prefixEnd)
+                    append(inserted)
+                    lastLine.appendContentTo(this, suffixStart, lastLine.characters)
+                }
+                fromText(middle, includeFinalLine)
+            } else {
+                val lines = ArrayList<Line>()
+                var prefix = firstLine.slice(0, prefixEnd)
+                var start = 0
+                for (i in inserted.indices) {
+                    if (inserted[i] == '\n') {
+                        lines.add(Line(TextChunks.join(prefix, TextChunks.of(inserted, start, i + 1))))
+                        prefix = null
+                        start = i + 1
+                    }
+                }
+                val end = TextChunks.join(TextChunks.join(prefix, TextChunks.of(inserted, start)),
+                    lastLine.slice(suffixStart, lastLine.characters))
+                if (end != null || includeFinalLine) lines.add(Line(end))
+                fromLines(lines)
+            }
             return SourceText(join(join(head, changed), tail) ?: Line(""))
         }
 
@@ -200,6 +237,10 @@ class SourceText private constructor(
                 if (text[i] == '\n') { lines.add(Line(text.substring(start, i + 1))); start = i + 1 }
             }
             if (start < text.length || includeFinalLine) lines.add(Line(text.substring(start)))
+            return fromLines(lines)
+        }
+
+        private fun fromLines(lines: List<Line>): Lines? {
             fun build(startIndex: Int, endIndex: Int): Lines? {
                 if (startIndex == endIndex) return null
                 if (endIndex - startIndex == 1) return lines[startIndex]
