@@ -127,7 +127,7 @@ class IncrementalBoundaryRegressionTest {
     }
 
     @Test
-    fun should_boundBlockParsingWork_when_editingOrdinaryTextInLargeDocumentsWithDefinitionMarkers() {
+    fun should_boundBlockParsingWork_when_replacingOrdinaryTextInLargeDocumentsWithDefinitionMarkers() {
         for (paragraphs in listOf(100, 1000)) {
             for (prefix in listOf("ordinary ]: punctuation\n\n", "[ref]: /target\n\n", "[ref]: /target\ntext after definition\n\n")) {
                 val probe = ParsingProbe()
@@ -139,11 +139,13 @@ class IncrementalBoundaryRegressionTest {
                 val last = parser.document.children.last()
                 val offset = source.indexOf("paragraph ${paragraphs / 2}") + 10
                 probe.calls = 0
-                parser.insert(offset, "x")
+                // A custom observer receives absolute positions, so a length-changing edit
+                // legitimately invalidates it. Equal-length replacement isolates definition work.
+                parser.replace(offset, 1, "x")
                 assertTrue(probe.calls in 1..4, "paragraphs=$paragraphs, prefix=$prefix, calls=${probe.calls}")
                 assertSame(first, parser.document.children.first())
                 assertSame(last, parser.document.children.last())
-                assertEditedDocument(parser, source.replaceRange(offset, offset, "x"))
+                assertEditedDocument(parser, source.replaceRange(offset, offset + 1, "x"))
             }
         }
     }

@@ -24,7 +24,6 @@ import com.hrm.markdown.renderer.internal.MarkdownEngineHost
 import com.hrm.markdown.renderer.internal.MarkdownInteractionController
 import com.hrm.markdown.renderer.internal.RendererFacadeState
 import com.hrm.markdown.renderer.internal.compose.ComposeRenderEnvironment
-import com.hrm.markdown.renderer.internal.core.compile.computeSemanticRevision
 import com.hrm.markdown.renderer.internal.layout.engine.EagerMarkdownLayoutSource
 import com.hrm.markdown.renderer.internal.selection.LocalMarkdownSelectionController
 import com.hrm.markdown.renderer.internal.selection.SelectionHandlesHost
@@ -47,7 +46,6 @@ internal fun MarkdownDocumentRenderer(
     enableSelection: Boolean = true,
     directiveRegistry: MarkdownDirectiveRegistry = MarkdownDirectiveRegistry.Empty,
     sourceMap: MarkdownSourceMap = MarkdownSourceMap.Identity,
-    documentRevision: Long = document.contentHash,
     components: MarkdownComponents = MarkdownComponents.Default,
     interactions: MarkdownInteractions = MarkdownInteractions.Default,
 ) {
@@ -65,10 +63,12 @@ internal fun MarkdownDocumentRenderer(
         state.footerItems = if (footer == null) 0 else 1
         state.scrollEnabled = enableScroll
     }
-    // Document is a mutable public AST. A caller may update the same root instance, so reference
-    // equality alone is not a sufficient remember key.
-    val renderDocumentRevision =
-        documentRevision.takeIf { it != 0L } ?: computeSemanticRevision(document)
+    // A parser commit is the only render input. Revision lookup is O(1); no semantic tree scan
+    // runs during composition. Flavour transformations finish before this publication exists.
+    val publication = requireNotNull(document.publication) {
+        "Markdown requires a parser publication; construct custom syntax through MarkdownFlavour"
+    }
+    require(publication.isCurrent) { "Pass the latest MarkdownParser.document to Markdown" }
     ProvideMarkdownStyle(theme) {
         val engineHost = remember { MarkdownEngineHost() }
         val interactionController = remember { MarkdownInteractionController() }
@@ -94,7 +94,8 @@ internal fun MarkdownDocumentRenderer(
         val internalRenderDocument = remember(
             engineHost,
             document,
-            renderDocumentRevision,
+            publication.lineageId,
+            publication.revision,
             compileEnvironment,
         ) {
             engineHost.compile(

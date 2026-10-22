@@ -257,7 +257,11 @@ Markdown(
 - 流式输出期间，未闭合的围栏、数学块和强调标记会获得临时显示补全。
 - 同一显示帧内的多次 token 更新合并为最新文档更新。
 
-通过 `Markdown(document = ...)` 重载，也可以直接渲染自定义 AST。
+通过 `Markdown(document = parser.document)` 渲染解析器当前提交的文档。自定义语法使用
+`MarkdownFlavour`，AST 转换在其后处理器中、文档发布前完成。已发布 AST 只读；修改文本使用解析器的
+`insert`、`delete` 或 `replace`。局部转换只需实现 `BlockPostProcessor.processBlock(block)`：返回原块、替换块，
+或返回 `null` 删除该块，增量更新由引擎自动处理。依赖全文的转换使用 `PostProcessor`。
+保留的 AST 引用是当前视图，不是不可变历史快照；每次更新后应传入解析器最新的文档。
 
 选择文字期间更新正文时，选区端点和正在拖动的手柄都会校正到有效的 UTF-16 字符边界。
 删除选中块会同时清除选区与拖动状态，复制不会使用已经失效的端点。
@@ -521,6 +525,18 @@ val doc = MarkdownParser().parse(input)
 
 // 一键 HTML 渲染
 val html = HtmlRenderer.renderMarkdown(input, flavour = CommonMarkFlavour)
+```
+
+自定义块转换直接接收并返回块，库负责处理增量更新：
+
+```kotlin
+val flavour = object : MarkdownFlavour by CommonMarkFlavour {
+    override val postProcessors = CommonMarkFlavour.postProcessors + BlockPostProcessor { block ->
+        if (block is Heading) block.level = minOf(block.level, 3)
+        block
+    }
+}
+val doc = MarkdownParser(flavour).parse(input)
 ```
 
 ### Compose 安全 HTML

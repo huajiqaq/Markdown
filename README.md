@@ -259,7 +259,13 @@ or cancelling flushes the remaining tail. Code appears as it arrives, including 
 - Unclosed fences, math blocks, and emphasis receive temporary display completion during streaming.
 - Multiple token updates in one display frame are combined into the latest document update.
 
-Use the `Markdown(document = ...)` overload to render a custom AST directly.
+Use `Markdown(document = parser.document)` to render the current parser publication. Build custom
+syntax through `MarkdownFlavour` and perform AST transformations in its processors before publication.
+Published ASTs are read-only; edit text through the parser's `insert`, `delete` or `replace` methods.
+For local transformations, implement `BlockPostProcessor.processBlock(block)`: return the same block,
+a replacement, or `null` to remove it. The engine handles incremental updates automatically; use
+`PostProcessor` for transformations that depend on the whole document. Retained AST references are
+current views, not immutable historical snapshots; pass the latest parser document after each update.
 
 When the document changes during text selection, selection endpoints and active drag handles are
 clamped to valid UTF-16 character boundaries. Removing a selected block clears the selection and
@@ -524,6 +530,18 @@ val doc = MarkdownParser().parse(input)
 
 // One-shot HTML rendering
 val html = HtmlRenderer.renderMarkdown(input, flavour = CommonMarkFlavour)
+```
+
+Custom block transformations receive and return a block; the library handles incremental updates:
+
+```kotlin
+val flavour = object : MarkdownFlavour by CommonMarkFlavour {
+    override val postProcessors = CommonMarkFlavour.postProcessors + BlockPostProcessor { block ->
+        if (block is Heading) block.level = minOf(block.level, 3)
+        block
+    }
+}
+val doc = MarkdownParser(flavour).parse(input)
 ```
 
 ### Safe HTML in Compose

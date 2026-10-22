@@ -2,6 +2,7 @@ package com.hrm.markdown.parser.ast
 
 import com.hrm.markdown.parser.SourceRange
 import com.hrm.markdown.parser.LineRange
+import kotlin.concurrent.Volatile
 
 /**
  * 所有 AST 节点的基类。
@@ -13,16 +14,28 @@ import com.hrm.markdown.parser.LineRange
  */
 sealed class Node {
     var sourceRange: SourceRange = SourceRange.EMPTY
+        set(value) { checkMutation(); field = value }
     var lineRange: LineRange = LineRange(0, 0)
+        set(value) { checkMutation(); field = value }
+    /** Stable within one parser lineage, independent of source coordinates. */
+    var persistentId: Long = 0L
+        internal set
+    internal var mutationOwner: MutationOwner? = null
+        private set
+    @Volatile
+    private var localMutationDepth: Int = 0
+    @Volatile
+    private var localMutationThread: Any? = null
     private var directParent: Node? = null
     private var documentOwner: DocumentOwner? = null
     var parent: Node?
         get() = documentOwner?.document ?: directParent
-        set(value) { documentOwner = null; directParent = value }
+        set(value) { checkMutation(); documentOwner = null; directParent = value }
 
     // Reused root children already shared mutable coordinates across revisions. Share the
     // current root reference too, so publishing a new root does not walk the stable prefix.
     internal fun attachToDocument(owner: DocumentOwner) {
+        checkMutation()
         directParent = null
         documentOwner = owner
     }
@@ -32,6 +45,49 @@ sealed class Node {
      * 用于内容缓存失效；节点复用还必须满足解析状态和语义依赖条件。
      */
     var contentHash: Long = 0L
+        set(value) { checkMutation(); field = value }
+
+    internal fun checkMutation() {
+        check(mutationOwner == null || mutationOwner!!.hasMutationAuthority || hasLocalMutationPermit) {
+            "Published Markdown AST is read-only; edit source through MarkdownParser instead."
+        }
+    }
+
+    /** Only newly built, already materialized nodes are visited at publication. */
+    internal fun seal(owner: MutationOwner, includeChildren: Boolean = true) {
+        if (mutationOwner === owner) return
+        check(mutationOwner == null) { "A published node cannot be adopted by another parser." }
+        mutationOwner = owner
+        if (includeChildren && this is ContainerNode) forEachMaterializedChild { it.seal(owner) }
+    }
+
+    /** Lazy parsing may populate this node, without granting writes to published siblings. */
+    internal fun <T> withLocalMutation(action: () -> T): T {
+        enterSubtreeMutation()
+        try { return action() } finally { leaveSubtreeMutation() }
+    }
+
+    internal val hasLocalMutationPermit: Boolean
+        get() = localMutationDepth > 0 && localMutationThread === currentMutationThread()
+
+    internal fun enterSubtreeMutation() {
+        val thread = currentMutationThread()
+        check(localMutationDepth == 0 || localMutationThread === thread) {
+            "AST subtree mutation authority belongs to a different execution thread."
+        }
+        if (localMutationDepth == 0) localMutationThread = thread
+        localMutationDepth++
+    }
+
+    internal fun leaveSubtreeMutation() {
+        check(localMutationDepth > 0 && localMutationThread === currentMutationThread())
+        localMutationDepth--
+        if (localMutationDepth == 0) localMutationThread = null
+    }
+
+    internal fun sealAttachedChild(child: Node) {
+        if (!hasLocalMutationPermit) mutationOwner?.let(child::seal)
+    }
 
     /**
      * 用于 Compose `key()` 的稳定身份标识。
@@ -62,18 +118,22 @@ sealed class Node {
  */
 sealed class ContainerNode : Node() {
     private var _children: MutableList<Node> = mutableListOf()
+    private var childrenView: List<Node> = immutableListView(_children)
     private var indexedChildren: List<Node>? = null
-    private val childList: List<Node> get() = indexedChildren ?: _children
+    private val childList: List<Node> get() = indexedChildren ?: childrenView
 
     /** Publish a persistent block index without copying every root child. */
     internal fun installIndexedChildren(children: List<Node>) {
+        checkMutation()
         _children = mutableListOf()
-        indexedChildren = children
+        childrenView = immutableListView(_children)
+        indexedChildren = immutableListView(children)
     }
 
     private fun writableChildren(): MutableList<Node> {
         indexedChildren?.let {
             _children = it.toMutableList()
+            childrenView = immutableListView(_children)
             indexedChildren = null
         }
         return _children
@@ -88,6 +148,8 @@ sealed class ContainerNode : Node() {
      * 行内解析器引用。与 [_lazyInlineContent] 配合使用。
      */
     private var _lazyInlineParser: ((String, ContainerNode) -> Unit)? = null
+    private var trustedLazyInlineContent: Boolean = false
+    private var parsingInlineContent: Boolean = false
 
     /**
      * 是否已完成延迟行内解析。
@@ -110,6 +172,7 @@ sealed class ContainerNode : Node() {
      * 设置延迟行内解析内容。
      *
      * 调用后，行内内容不会立即解析，而是在首次访问 [children] 时触发。
+     * 解析器提交时会提前执行扩展提供的回调，以核实完整语义依赖；内置行内解析仍保持惰性。
      * 适用于 Paragraph、Heading、SetextHeading、TableCell、DefinitionTerm 等
      * 需要行内解析的块级节点。
      *
@@ -117,10 +180,29 @@ sealed class ContainerNode : Node() {
      * @param parser 行内解析函数，接收 (content, parent) 并将解析结果追加到 parent
      */
     fun setLazyInlineContent(content: String, parser: (String, ContainerNode) -> Unit) {
+        setLazyInlineContent(content, parser, trusted = false)
+    }
+
+    /** Only built-in inline parsing can preserve deferred dependency-free content at publication. */
+    internal fun setTrustedLazyInlineContent(content: String, parser: (String, ContainerNode) -> Unit) {
+        setLazyInlineContent(content, parser, trusted = true)
+    }
+
+    private fun setLazyInlineContent(content: String, parser: (String, ContainerNode) -> Unit, trusted: Boolean) {
+        checkMutation()
+        check(!parsingInlineContent) { "An inline parser cannot replace its own pending content." }
         _lazyInlineContent = content
         _lazyInlineParser = parser
+        trustedLazyInlineContent = trusted
         _inlineParsed = false
     }
+
+    internal fun materializeUntrustedInlineContent() {
+        if (!trustedLazyInlineContent) ensureInlineParsed()
+    }
+
+    internal val hasUntrustedPendingContent: Boolean
+        get() = !trustedLazyInlineContent && !_inlineParsed && _lazyInlineContent != null
 
     /**
      * 行内内容是否已解析。
@@ -135,59 +217,90 @@ sealed class ContainerNode : Node() {
             _inlineParsed = true
             val content = _lazyInlineContent!!
             val parser = _lazyInlineParser!!
+            val trusted = trustedLazyInlineContent
             _lazyInlineContent = null
             _lazyInlineParser = null
             if (content.isNotEmpty()) {
-                parser(content, this)
+                val owner = mutationOwner
+                parsingInlineContent = true
+                try {
+                    if (!trusted && owner != null) {
+                        owner.withoutMutation { withLocalMutation { parser(content, this) } }
+                    } else {
+                        withLocalMutation { parser(content, this) }
+                    }
+                } finally {
+                    parsingInlineContent = false
+                    if (!hasLocalMutationPermit) {
+                        mutationOwner?.let { owner -> forEachMaterializedChild { it.seal(owner) } }
+                    }
+                }
             }
         }
     }
 
     fun appendChild(child: Node) {
+        checkMutation()
+        requireBlockOrInlineChild(child)
         child.parent = this
         writableChildren().add(child)
+        sealAttachedChild(child)
     }
 
     fun insertChild(index: Int, child: Node) {
+        checkMutation()
+        requireBlockOrInlineChild(child)
         child.parent = this
         writableChildren().add(index, child)
+        sealAttachedChild(child)
     }
 
     fun removeChild(child: Node): Boolean {
+        checkMutation()
         child.parent = null
         return writableChildren().remove(child)
     }
 
     fun removeChildAt(index: Int): Node {
+        checkMutation()
         val child = writableChildren().removeAt(index)
         child.parent = null
         return child
     }
 
     fun replaceChild(old: Node, new: Node) {
+        checkMutation()
+        requireBlockOrInlineChild(new)
         val index = childList.indexOf(old)
         if (index >= 0) {
             old.parent = null
             new.parent = this
             writableChildren()[index] = new
+            sealAttachedChild(new)
         }
     }
 
     fun replaceChildren(startIndex: Int, endIndex: Int, newChildren: List<Node>) {
+        checkMutation()
+        newChildren.forEach(::requireBlockOrInlineChild)
         val children = writableChildren()
         for (i in startIndex until endIndex) children[i].parent = null
         children.subList(startIndex, endIndex).clear()
         newChildren.forEach { it.parent = this }
         children.addAll(startIndex, newChildren)
+        newChildren.forEach(::sealAttachedChild)
     }
 
     fun clearChildren() {
+        checkMutation()
         childList.forEach { it.parent = null }
         _children = mutableListOf()
+        childrenView = immutableListView(_children)
         indexedChildren = null
         // 同时清除 lazy 状态，避免 clear 后重新触发旧的 lazy 解析
         _lazyInlineContent = null
         _lazyInlineParser = null
+        trustedLazyInlineContent = false
         _inlineParsed = false
     }
 
@@ -208,6 +321,34 @@ sealed class ContainerNode : Node() {
 
     /** Returns a mutation-safe snapshot without triggering delayed inline parsing. */
     internal fun materializedChildrenSnapshot(): List<Node> = childList.toList()
+
+    private fun requireBlockOrInlineChild(child: Node) {
+        require(child !is Document) {
+            "Document is only valid as an AST root; return a block or inline node from an extension."
+        }
+    }
+}
+
+/** Resolve extension-supplied lazy trees before publishing their complete semantic dependencies. */
+internal fun materializeUntrustedContent(node: Node) {
+    materializeUntrustedSubtree(node)
+    validateMaterializedUntrustedSubtree(node)
+}
+
+private fun materializeUntrustedSubtree(node: Node) {
+    if (node is ContainerNode) {
+        node.materializeUntrustedInlineContent()
+        node.forEachMaterializedChild(::materializeUntrustedSubtree)
+    }
+}
+
+private fun validateMaterializedUntrustedSubtree(node: Node) {
+    if (node is ContainerNode) {
+        check(!node.hasUntrustedPendingContent) {
+            "An extension rescheduled lazy content in an already visited subtree; lazy callbacks must only populate their supplied container."
+        }
+        node.forEachMaterializedChild(::validateMaterializedUntrustedSubtree)
+    }
 }
 
 /**

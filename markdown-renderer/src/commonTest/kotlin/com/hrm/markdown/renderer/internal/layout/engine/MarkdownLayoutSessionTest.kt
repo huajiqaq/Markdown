@@ -50,10 +50,11 @@ class MarkdownLayoutSessionTest {
                     )
                 }
                 val documents = remember {
-                    val parser = MarkdownParser()
+                    val parser = MarkdownParser(appendCoalesceThreshold = 0)
+                    parser.beginStream()
                     listOf(
-                        host.compile(parser.parse("stable\n\ntail"), facadeState),
-                        host.compile(parser.parse("stable\n\ntail updated"), facadeState),
+                        host.compile(parser.append("stable\n\ntail"), facadeState),
+                        host.compile(parser.append(" updated"), facadeState),
                     )
                 }
                 val registry = remember { DiagramHostRegistry() }

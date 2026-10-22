@@ -100,8 +100,14 @@ object DefaultRenderModelCompiler : RenderModelCompiler {
     override fun compile(
         document: Document,
         environment: RenderCompileEnvironment,
-    ): InternalRenderDocumentModel {
-        val blockNodes = document.children.filter { it !is BlankLine }
+    ): InternalRenderDocumentModel = compileFullDocument(document, environment).model
+
+    internal fun compileFullDocument(
+        document: Document,
+        environment: RenderCompileEnvironment,
+    ): FullRenderCompileResult {
+        require(document.publication?.isCurrent != false) { "An expired document view cannot be compiled" }
+        val blockNodes = document.children
         val context = CompileContext(
             identities = RenderIdentityProvider(document),
             headingNumbers = if (environment.config.enableHeadingNumbering) {
@@ -112,15 +118,15 @@ object DefaultRenderModelCompiler : RenderModelCompiler {
             tocEntries = collectHeadingEntries(document),
             softBreakPolicy = environment.config.softBreakPolicy,
         )
-        val blocks = compileBlocks(blockNodes, context)
-        return InternalRenderDocumentModel(
+        val blocks = RenderBlockSlots.from(blockNodes.map { compileBlock(it, context) })
+        val model = InternalRenderDocumentModel(
             identity = context.identities.identity(document),
             blocks = blocks,
             metadata = InternalRenderDocumentMetadata(
                 footnotes = blocks.mapNotNull { block ->
                     val footnote = block as? FootnoteDefinitionBlockModel ?: return@mapNotNull null
                     footnote.label.takeIf { it.isNotBlank() }?.let { it to footnote.identity }
-                }.toMap(),
+                }.toMap().renderSnapshotMap(),
                 footnoteDefinitions = blocks.mapNotNull { block ->
                     val footnote = block as? FootnoteDefinitionBlockModel ?: return@mapNotNull null
                     FootnoteDefinitionMetadata(
@@ -128,7 +134,7 @@ object DefaultRenderModelCompiler : RenderModelCompiler {
                         index = footnote.index,
                         identity = footnote.identity,
                     )
-                },
+                }.renderSnapshotList(),
                 frontMatter = document.children.filterIsInstance<FrontMatter>().firstOrNull()?.let { frontMatter ->
                     FrontMatterMetadata(
                         format = frontMatter.format,
@@ -141,17 +147,47 @@ object DefaultRenderModelCompiler : RenderModelCompiler {
                         destination = reference.destination,
                         title = reference.title,
                     )
-                },
+                }.renderSnapshotList(),
                 abbreviations = document.abbreviationDefinitions.values.map { abbreviation ->
                     AbbreviationMetadata(
                         abbreviation = abbreviation.abbreviation,
                         fullText = abbreviation.fullText,
                     )
-                },
+                }.renderSnapshotList(),
             ),
+        )
+        return FullRenderCompileResult(model, context.identities.visitedNodes)
+    }
+
+    /** Compile only the inserted publication range; stable document regions are not accessed. */
+    internal fun compileInsertedSlots(
+        document: Document,
+        startIndex: Int,
+        count: Int,
+        environment: RenderCompileEnvironment,
+    ): InsertedRenderCompileResult {
+        val roots = object : AbstractList<Node>() {
+            override val size: Int get() = count
+            override fun get(index: Int): Node {
+                if (index !in 0 until count) throw IndexOutOfBoundsException(index.toString())
+                return document.children[startIndex + index]
+            }
+        }
+        val context = CompileContext(
+            identities = RenderIdentityProvider(document, roots, startIndex),
+            headingNumbers = emptyMap(),
+            tocEntries = emptyList(),
+            softBreakPolicy = environment.config.softBreakPolicy,
+        )
+        return InsertedRenderCompileResult(
+            roots.map { compileBlock(it, context) },
+            context.identities.visitedNodes,
         )
     }
 }
+
+internal data class FullRenderCompileResult(val model: InternalRenderDocumentModel, val visitedNodes: Int)
+internal data class InsertedRenderCompileResult(val slots: List<InternalRenderBlockModel?>, val visitedNodes: Int)
 
 private fun compileBlocks(
     nodes: List<Node>,
@@ -159,7 +195,7 @@ private fun compileBlocks(
 ): List<InternalRenderBlockModel> {
     return nodes.filter { it !is BlankLine }.mapNotNull { node ->
         compileBlock(node, context)
-    }
+    }.renderSnapshotList()
 }
 
 private fun compileBlock(
@@ -271,12 +307,12 @@ private fun compileBlock(
             bulletChar = node.bulletChar,
             delimiter = node.delimiter,
             tight = node.tight,
-            items = node.children.filterIsInstance<ListItem>().map { compileListItem(it, context) },
+            items = node.children.filterIsInstance<ListItem>().map { compileListItem(it, context) }.renderSnapshotList(),
         )
 
         is Table -> TableBlockModel(
             identity = identity,
-            columnAlignments = node.columnAlignments,
+            columnAlignments = node.columnAlignments.renderSnapshotList(),
             rows = buildList {
                 node.children.filterIsInstance<TableHead>().firstOrNull()
                     ?.children?.filterIsInstance<TableRow>()
@@ -298,7 +334,7 @@ private fun compileBlock(
             identity = identity,
             type = node.type,
             title = node.title,
-            cssClasses = node.cssClasses,
+            cssClasses = node.cssClasses.renderSnapshotList(),
             cssId = node.cssId,
             children = compileBlocks(node.children, context),
         )
@@ -311,7 +347,7 @@ private fun compileBlock(
                     width = column.width,
                     children = compileBlocks(column.children, context),
                 )
-            },
+            }.renderSnapshotList(),
         )
 
         is DefinitionList -> DefinitionListBlockModel(
@@ -334,7 +370,7 @@ private fun compileBlock(
                     )
                     else -> null
                 }
-            },
+            }.renderSnapshotList(),
         )
 
         is FootnoteDefinition -> FootnoteDefinitionBlockModel(
@@ -349,7 +385,8 @@ private fun compileBlock(
             entries = context.tocEntries
                 .filter { it.level in node.minDepth..node.maxDepth }
                 .filter { node.excludeIds.isEmpty() || it.id == null || it.id !in node.excludeIds }
-                .let { entries -> if (node.order == "desc") entries.reversed() else entries },
+                .let { entries -> if (node.order == "desc") entries.reversed() else entries }
+                .renderSnapshotList(),
         )
 
         is PageBreak -> PageBreakBlockModel(identity)
@@ -357,7 +394,7 @@ private fun compileBlock(
         is DirectiveBlock -> DirectiveBlockModel(
             identity = identity,
             tagName = node.tagName,
-            args = node.args,
+            args = node.args.renderSnapshotMap(),
             children = compileBlocks(node.children, context),
         )
 
@@ -369,7 +406,7 @@ private fun compileBlock(
                     title = tab.title,
                     children = compileBlocks(tab.children, context),
                 )
-            },
+            }.renderSnapshotList(),
         )
 
         is BibliographyDefinition -> BibliographyDefinitionBlockModel(
@@ -379,7 +416,7 @@ private fun compileBlock(
                     key = entry.key,
                     content = entry.content,
                 )
-            },
+            }.renderSnapshotList(),
         )
 
         is Figure -> FigureBlockModel(
@@ -388,7 +425,7 @@ private fun compileBlock(
             caption = node.caption,
             imageWidth = node.imageWidth,
             imageHeight = node.imageHeight,
-            attributes = node.attributes,
+            attributes = node.attributes.renderSnapshotMap(),
         )
 
         is FrontMatter,
@@ -438,7 +475,7 @@ private fun compileTableRow(
                     context.softBreakPolicy,
                 ),
             )
-        },
+        }.renderSnapshotList(),
     )
 }
 
@@ -447,7 +484,7 @@ private fun collectHeadingEntries(document: Document): List<TocEntryBlockModel> 
     for (child in document.children) {
         collectHeadingEntriesRecursive(child, result)
     }
-    return result
+    return result.renderSnapshotList()
 }
 
 private fun collectHeadingEntriesRecursive(

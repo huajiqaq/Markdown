@@ -1,6 +1,5 @@
 package com.hrm.markdown.renderer.internal.core.compile
 
-import com.hrm.markdown.parser.SourceRange
 import com.hrm.markdown.parser.ast.Abbreviation
 import com.hrm.markdown.parser.ast.Autolink
 import com.hrm.markdown.parser.ast.CitationReference
@@ -125,7 +124,7 @@ private class InlineCompiler(private val softBreakPolicy: MarkdownSoftBreakPolic
                     sink = sink,
                     parentStableId = stableId,
                 )
-                is HtmlLineBreakInlineSource -> sink += TextAtom(identity, "\n", activeMarks)
+                is HtmlLineBreakInlineSource -> sink += snapshotTextAtom(identity, "\n", activeMarks)
                 is HtmlImageInlineSource -> sink += WidgetAtom(
                     identity = identity,
                     widget = ImageWidgetModel(
@@ -135,7 +134,7 @@ private class InlineCompiler(private val softBreakPolicy: MarkdownSoftBreakPolic
                         title = source.title,
                         width = source.width,
                         height = source.height,
-                        attributes = source.attributes,
+                        attributes = source.attributes.renderSnapshotMap(),
                     ),
                 )
                 is HiddenHtmlInlineSource -> Unit
@@ -151,20 +150,20 @@ private class InlineCompiler(private val softBreakPolicy: MarkdownSoftBreakPolic
     ) {
         val identity = nodeIdentity(node, stableId)
         when (node) {
-            is Text -> sink += TextAtom(identity, node.literal, activeMarks)
-            is SoftLineBreak -> sink += TextAtom(identity, if (softBreakPolicy == MarkdownSoftBreakPolicy.LineBreak) "\n" else " ", activeMarks)
-            is HardLineBreak -> sink += TextAtom(identity, "\n", activeMarks)
-            is Emphasis -> compileInlineNodes(node.children, activeMarks + SpanMark("emphasis"), sink, stableId)
-            is StrongEmphasis -> compileInlineNodes(node.children, activeMarks + SpanMark("strong"), sink, stableId)
-            is Strikethrough -> compileInlineNodes(node.children, activeMarks + SpanMark("strikethrough"), sink, stableId)
-            is Highlight -> compileInlineNodes(node.children, activeMarks + SpanMark("highlight"), sink, stableId)
-            is Superscript -> compileInlineNodes(node.children, activeMarks + SpanMark("superscript"), sink, stableId)
-            is Subscript -> compileInlineNodes(node.children, activeMarks + SpanMark("subscript"), sink, stableId)
-            is InsertedText -> compileInlineNodes(node.children, activeMarks + SpanMark("inserted"), sink, stableId)
+            is Text -> sink += snapshotTextAtom(identity, node.literal, activeMarks)
+            is SoftLineBreak -> sink += snapshotTextAtom(identity, if (softBreakPolicy == MarkdownSoftBreakPolicy.LineBreak) "\n" else " ", activeMarks)
+            is HardLineBreak -> sink += snapshotTextAtom(identity, "\n", activeMarks)
+            is Emphasis -> compileInlineNodes(node.children, activeMarks + snapshotSpanMark("emphasis"), sink, stableId)
+            is StrongEmphasis -> compileInlineNodes(node.children, activeMarks + snapshotSpanMark("strong"), sink, stableId)
+            is Strikethrough -> compileInlineNodes(node.children, activeMarks + snapshotSpanMark("strikethrough"), sink, stableId)
+            is Highlight -> compileInlineNodes(node.children, activeMarks + snapshotSpanMark("highlight"), sink, stableId)
+            is Superscript -> compileInlineNodes(node.children, activeMarks + snapshotSpanMark("superscript"), sink, stableId)
+            is Subscript -> compileInlineNodes(node.children, activeMarks + snapshotSpanMark("subscript"), sink, stableId)
+            is InsertedText -> compileInlineNodes(node.children, activeMarks + snapshotSpanMark("inserted"), sink, stableId)
             is StyledText -> {
                 compileInlineNodes(
                     node.children,
-                    activeMarks + SpanMark(
+                    activeMarks + snapshotSpanMark(
                         kind = "styled",
                         payload = buildMap {
                             node.style?.let { put("style", it) }
@@ -181,7 +180,7 @@ private class InlineCompiler(private val softBreakPolicy: MarkdownSoftBreakPolic
             is Link -> {
                 compileInlineNodes(
                     node.children,
-                    activeMarks + SpanMark(
+                    activeMarks + snapshotSpanMark(
                         kind = "link",
                         payload = mapOf(
                             "target" to node.destination,
@@ -194,10 +193,10 @@ private class InlineCompiler(private val softBreakPolicy: MarkdownSoftBreakPolic
             }
 
             is Autolink -> {
-                sink += TextAtom(
+                sink += snapshotTextAtom(
                     identity = identity,
                     text = node.destination,
-                    marks = activeMarks + SpanMark(
+                    marks = activeMarks + snapshotSpanMark(
                         kind = "link",
                         payload = mapOf(
                             "target" to node.destination,
@@ -208,10 +207,10 @@ private class InlineCompiler(private val softBreakPolicy: MarkdownSoftBreakPolic
             }
 
             is WikiLink -> {
-                sink += TextAtom(
+                sink += snapshotTextAtom(
                     identity = identity,
                     text = node.label ?: node.target,
-                    marks = activeMarks + SpanMark(
+                    marks = activeMarks + snapshotSpanMark(
                         kind = "link",
                         payload = mapOf(
                             "target" to node.target,
@@ -241,7 +240,7 @@ private class InlineCompiler(private val softBreakPolicy: MarkdownSoftBreakPolic
                         title = node.title,
                         width = node.imageWidth,
                         height = node.imageHeight,
-                        attributes = node.attributes,
+                        attributes = node.attributes.renderSnapshotMap(),
                     )
                 )
             }
@@ -257,10 +256,10 @@ private class InlineCompiler(private val softBreakPolicy: MarkdownSoftBreakPolic
             }
 
             is FootnoteReference -> {
-                sink += TextAtom(
+                sink += snapshotTextAtom(
                     identity = identity,
                     text = "[${node.index}]",
-                    marks = activeMarks + SpanMark(
+                    marks = activeMarks + snapshotSpanMark(
                         kind = "footnote",
                         payload = mapOf(
                             "label" to node.label,
@@ -271,32 +270,32 @@ private class InlineCompiler(private val softBreakPolicy: MarkdownSoftBreakPolic
             }
 
             is CitationReference -> {
-                sink += TextAtom(
+                sink += snapshotTextAtom(
                     identity = identity,
                     text = "[${node.key}]",
-                    marks = activeMarks + SpanMark(
+                    marks = activeMarks + snapshotSpanMark(
                         kind = "citation",
                         payload = mapOf("key" to node.key),
                     ),
                 )
             }
 
-            is InlineHtml -> sink += TextAtom(identity, node.literal, activeMarks + SpanMark("inline_html"))
-            is HtmlEntity -> sink += TextAtom(identity, node.resolved.ifEmpty { node.literal }, activeMarks)
-            is EscapedChar -> sink += TextAtom(identity, node.literal, activeMarks)
-            is Emoji -> sink += TextAtom(identity, node.unicode ?: node.literal.ifEmpty { ":${node.shortcode}:" }, activeMarks)
+            is InlineHtml -> sink += snapshotTextAtom(identity, node.literal, activeMarks + snapshotSpanMark("inline_html"))
+            is HtmlEntity -> sink += snapshotTextAtom(identity, node.resolved.ifEmpty { node.literal }, activeMarks)
+            is EscapedChar -> sink += snapshotTextAtom(identity, node.literal, activeMarks)
+            is Emoji -> sink += snapshotTextAtom(identity, node.unicode ?: node.literal.ifEmpty { ":${node.shortcode}:" }, activeMarks)
             is Abbreviation -> {
-                sink += TextAtom(
+                sink += snapshotTextAtom(
                     identity = identity,
                     text = node.abbreviation,
-                    marks = activeMarks + SpanMark(
+                    marks = activeMarks + snapshotSpanMark(
                         kind = "abbreviation",
                         payload = mapOf("fullText" to node.fullText),
                     ),
                 )
             }
 
-            is KeyboardInput -> sink += TextAtom(identity, node.literal, activeMarks + SpanMark("kbd"))
+            is KeyboardInput -> sink += snapshotTextAtom(identity, node.literal, activeMarks + snapshotSpanMark("kbd"))
             is Spoiler -> {
                 sink += WidgetAtom(
                     identity = identity,
@@ -318,7 +317,7 @@ private class InlineCompiler(private val softBreakPolicy: MarkdownSoftBreakPolic
                     widget = DirectiveInlineWidgetModel(
                         identity = identity,
                         tagName = node.tagName,
-                        args = node.args,
+                        args = node.args.renderSnapshotMap(),
                         alternateText = buildInlineDirectiveFallbackText(node),
                     ),
                 )
@@ -364,16 +363,6 @@ private class InlineCompiler(private val softBreakPolicy: MarkdownSoftBreakPolic
 
     private fun stableInlineNodeId(node: Node, parentStableId: Long, siblingIndex: Int): Long {
         val typeId = renderIdentityFromText(node::class.simpleName ?: "inline")
-        val range = node.sourceRange
-        if (range != SourceRange.EMPTY && range.length > 0) {
-            return renderIdentityFromValues(
-                parentStableId,
-                typeId,
-                range.start.offset.toLong(),
-                node.lineRange.startLine.toLong(),
-                siblingIndex.toLong(),
-            )
-        }
         return renderIdentityFromValues(parentStableId, typeId, siblingIndex.toLong())
     }
 
@@ -403,3 +392,12 @@ private class InlineCompiler(private val softBreakPolicy: MarkdownSoftBreakPolic
     }
 
 }
+
+private fun snapshotTextAtom(identity: RenderIdentity, text: String, marks: List<SpanMark> = emptyList()): TextAtom =
+    TextAtom(identity, text, if (marks.isEmpty()) emptyList() else marks.map { mark ->
+        val payload = mark.payload.renderSnapshotMap()
+        if (payload === mark.payload) mark else mark.copy(payload = payload)
+    }.renderSnapshotList())
+
+private fun snapshotSpanMark(kind: String, payload: Map<String, String> = emptyMap()): SpanMark =
+    SpanMark(kind, payload.renderSnapshotMap())

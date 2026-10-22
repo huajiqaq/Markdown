@@ -133,13 +133,15 @@ benchmark ordering when requested with the other suites.
 ./gradlew -q :markdown-renderer:renderCompilerScalingBenchmark --args='--revision CANDIDATE_SHA'
 ```
 
-This compiler harness separates `parser-commit` and real `DefaultRenderModelCompiler` cost, including
-identity/revision scans, inline materialization and IR construction. Defaults use already displayed
-inlines; the compiler still rebuilds its model on every update. `--initial displayed,cold` also isolates
+This compiler harness separates `parser-commit` and real compiler cost. `--compiler cold,incremental`
+(the default) compares full `DefaultRenderModelCompiler` reconstruction with a publication-driven
+`RenderCompileSession`. Incremental rows include actual visited-node and compiled-root-block counts.
+Defaults use already displayed inlines; `--initial displayed,cold` also isolates
 the first materialization in a `compile-first-inline-materialization` row. Input/setup, initial display,
 endStream, verification and IR consumption are excluded; stage time and thread allocation go to CSV.
 It does not measure layout or Compose. Preserve its revision/environment metadata when saving stdout.
-Here `cold` means an unmaterialized prefix AST in an already running JVM, not process cold start.
+`--initial cold` means unmaterialized prefix inlines; `--compiler cold` means complete model
+reconstruction on every update (including displayed inlines). Neither means process cold start.
 The default 40 warm samples (five first-materialization samples) provide observational percentiles;
 fixed parameter order and short warmups can retain JIT/GC bias, so repeat fresh processes before comparison.
 Stages share a heap: compiler allocation can trigger a pause in a subsequent parser sample.
@@ -165,10 +167,40 @@ Raw files: `build/reports/growing-block-streaming/structured.csv` and
 observations, not new budgets or worst-case proofs. They expose growing-container and whole-document
 compiler costs; they do not measure layout/Compose. The historical baseline remains unchanged.
 
-The next compiler optimization should first reuse immutable block IR in a bounded per-renderer
-session, then consume trusted snapshots with stable block identities, semantic revisions, changed
-regions and global-dependency versions. Public mutable AST input must retain full semantic validation;
-parser origin alone cannot prove that callers have not changed it. Gate any fast path with full-compile
-semantic equivalence, stable-prefix IR reuse, bounded visited/compiled nodes and allocation growth,
-including stream finalization and global invalidation. Container-level list/table checkpoints follow;
-neither cached IR nor faster parsing alone establishes end-to-end UI performance.
+Publication-driven compilation now consumes verified versioned splices; published ASTs reject external
+writes and IR collections are isolated read-only values. Session tests require cold-compile equivalence,
+stable-prefix IR reuse and bounded visited/compiled nodes; the JVM allocation guard checks a 100-fold
+stable-prefix increase. Skipped versions, environment/global changes rebuild; stale AST views are rejected.
+Container-level list/table checkpoints remain future work; faster compilation alone does not establish
+end-to-end UI performance.
+
+### Publication candidate verification
+
+Revision label `2786347-plus-publication-final`, JDK 21.0.10, macOS/aarch64. Three fresh processes
+alternate compiler order (`cold,incremental`, `incremental,cold`, `cold,incremental`), with
+`--initial displayed,cold`; each displayed case contains 40 measured samples. For a displayed
+10,000-paragraph prefix and a two-character tail update, the observed per-process ranges are:
+
+| Compiler | Median time | Mean allocation per compile | Incremental work |
+|---|---|---|---|
+| Full reconstruction | 52.221–53.869 ms | 39.983 MB | Complete document |
+| Publication splice | 6.083–7.584 µs | 5.699–5.715 kB | 6 visited nodes, 1 compiled root block |
+
+Raw CSVs are `../markdown-renderer/build/reports/render-compiler-scaling/publication-{1,2,3}.csv`.
+These are compiler-stage observations for a fixed small update, not UI latency or guarantees for
+arbitrary edits. Short warmups, a shared heap and GC/JIT effects still limit timing conclusions.
+The separate JVM allocation guard observes 3,680 / 3,928 / 3,768 bytes for 100 / 1,000 / 10,000 stable
+paragraphs, always visiting three nodes; another guard checks slot retention after repeated deletions.
+
+Publication isolation has a parser cost. The unchanged historical gate passes, but measured allocation
+increases relative to the preceding `2786347` verification: full parse 2.906 → 3.203 MB/op (+10.2%),
+inline-heavy 0.573 → 0.617 MB/op (+7.6%), streaming batch 19.472 → 23.279 MB/op (+19.6%). Average
+times in those two runs are respectively 1,139.81 → 1,228.44 µs, 157.31 → 219.38 µs, and
+9,794.90 → 7,222.19 µs. The earlier streaming run contains a large outlier; this single gate pair
+does not establish a timing improvement. Keep the parser overhead visible alongside the compiler gain.
+Layout metadata and selection indexes still traverse all blocks; this change does not remove those costs.
+
+Final verification: 1,070 JVM tests and eight isolated stress tests pass without skips; parser and
+renderer common tests compile for JS/Wasm, and parser sources compile for Android and both iOS arm64
+targets. These platform compilations are not browser or device test execution. The full-parse JMH suite
+also completes; no performance budget is relaxed.

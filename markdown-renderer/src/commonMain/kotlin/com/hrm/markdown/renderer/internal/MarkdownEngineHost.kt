@@ -10,7 +10,8 @@ import com.hrm.markdown.renderer.MarkdownComponents
 import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.internal.compose.DefaultMarkdownComposePainter
 import com.hrm.markdown.renderer.internal.compose.MarkdownComposePainter
-import com.hrm.markdown.renderer.internal.core.compile.DefaultRenderModelCompiler
+import com.hrm.markdown.renderer.internal.core.compile.RenderCompileSession
+import com.hrm.markdown.renderer.internal.core.compile.RenderModelCompiler
 import com.hrm.markdown.renderer.internal.core.compile.RenderCompileEnvironment
 import com.hrm.markdown.renderer.internal.core.compile.RenderConfigSnapshot
 import com.hrm.markdown.renderer.internal.core.model.InternalRenderDocumentModel
@@ -25,7 +26,7 @@ import com.hrm.markdown.renderer.internal.layout.inline.inlineLayoutEpoch
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutDocumentModel
 
 internal class MarkdownEngineHost(
-    private val compiler: DefaultRenderModelCompiler = DefaultRenderModelCompiler,
+    private val compiler: RenderModelCompiler = RenderCompileSession(),
     private val layoutEngine: MarkdownLayoutEngine = DefaultMarkdownLayoutEngine,
     val composePainter: MarkdownComposePainter = DefaultMarkdownComposePainter,
 ) {

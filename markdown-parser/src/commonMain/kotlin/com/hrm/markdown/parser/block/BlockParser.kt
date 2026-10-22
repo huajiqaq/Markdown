@@ -1358,35 +1358,35 @@ class BlockParser(
             is Paragraph -> {
                 val content = reconstructContent(node)
                 node.clearChildren()
-                node.setLazyInlineContent(content) { c, parent ->
+                node.setTrustedLazyInlineContent(content) { c, parent ->
                     inlineParser.parseInlines(c, parent)
                 }
             }
             is Heading -> {
                 val content = reconstructContent(node)
                 node.clearChildren()
-                node.setLazyInlineContent(content) { c, parent ->
+                node.setTrustedLazyInlineContent(content) { c, parent ->
                     inlineParser.parseInlines(c, parent)
                 }
             }
             is SetextHeading -> {
                 val content = reconstructContent(node)
                 node.clearChildren()
-                node.setLazyInlineContent(content) { c, parent ->
+                node.setTrustedLazyInlineContent(content) { c, parent ->
                     inlineParser.parseInlines(c, parent)
                 }
             }
             is TableCell -> {
                 val content = reconstructContent(node)
                 node.clearChildren()
-                node.setLazyInlineContent(content) { c, parent ->
+                node.setTrustedLazyInlineContent(content) { c, parent ->
                     inlineParser.parseInlines(c, parent)
                 }
             }
             is DefinitionTerm -> {
                 val content = reconstructContent(node)
                 node.clearChildren()
-                node.setLazyInlineContent(content) { c, parent ->
+                node.setTrustedLazyInlineContent(content) { c, parent ->
                     inlineParser.parseInlines(c, parent)
                 }
             }

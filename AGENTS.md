@@ -59,8 +59,9 @@ Benchmark commands and baseline maintenance live in [markdown-benchmark/AGENTS.m
 - Entry: `Markdown()` and `MarkdownHtml`; public settings use `MarkdownColors`, `MarkdownTypography`, `MarkdownLayout`, `MarkdownParserConfig`, `MarkdownState`, `MarkdownComponents`, and `MarkdownInteractions`
 - Owns block renderers, inline rendering, theme, image loading, HTML export
 - Compose-specific changes belong here, not in parser/runtime
-- `Markdown(document = ...)` accepts mutable custom ASTs: nodes without source ranges use deterministic
-  tree-path identities, and rendered semantic fields must participate in cache invalidation
+- `Markdown(document = ...)` consumes current parser publications. Flavour transformations finish
+  before publication; published ASTs reject external writes. Render compilation applies verified
+  publication splices and retains immutable IR, with identities independent of source coordinates.
 
 ### `markdown-preview`
 

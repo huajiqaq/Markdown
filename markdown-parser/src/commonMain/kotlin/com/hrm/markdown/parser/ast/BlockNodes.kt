@@ -8,6 +8,15 @@ import com.hrm.markdown.parser.lint.DiagnosticResult
  */
 class Document internal constructor(internal val definitionContext: DefinitionContext) : ContainerNode() {
     constructor() : this(DefinitionContext())
+    /** The current committed view; historical rendering state is isolated in immutable IR. */
+    var publication: DocumentPublication? = null
+        internal set
+    internal var publicationMutationOwner: MutationOwner = MutationOwner()
+        private set
+
+    internal fun inheritMutationOwner(previous: Document) {
+        publicationMutationOwner = previous.publicationMutationOwner
+    }
     /** 解析过程中收集的链接引用定义。 */
     val linkDefinitions: MutableMap<String, LinkReferenceDefinition> get() = definitionContext.links
 
@@ -25,6 +34,7 @@ class Document internal constructor(internal val definitionContext: DefinitionCo
      * 默认为空结果（无诊断信息）。
      */
     var diagnostics: DiagnosticResult = DiagnosticResult()
+        set(value) { checkMutation(); field = value }
 
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitDocument(this)
 }
@@ -35,22 +45,29 @@ class Document internal constructor(internal val definitionContext: DefinitionCo
  * ATX 标题：`# heading` 到 `###### heading`。
  */
 class Heading(
-    var level: Int,
+    level: Int,
 ) : ContainerNode() {
+    var level: Int = level
+        set(value) { checkMutation(); field = value }
+
     /** 来自 `{#id}` 语法的可选自定义 ID。 */
     var customId: String? = null
+        set(value) { checkMutation(); field = value }
 
     /** 解析阶段捕获的原始内容（已去除块级标记如块引用前缀），供行内解析使用。 */
     var rawContent: String? = null
+        set(value) { checkMutation(); field = value }
 
     /** 自动生成的标题 ID（基于标题文本的 slug）。若有 customId 则优先使用。 */
     var autoId: String? = null
+        set(value) { checkMutation(); field = value }
 
     /** 获取最终使用的标题 ID（customId 优先，否则 autoId）。 */
     val id: String? get() = customId ?: autoId
 
     /** 块级属性 `{.class #id key=value}`（由 BlockAttributeProcessor 后处理设置）。 */
-    var blockAttributes: Map<String, String> = emptyMap()
+    var blockAttributes: Map<String, String> = immutableMapCopy(emptyMap())
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
 
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitHeading(this)
 }
@@ -59,19 +76,25 @@ class Heading(
  * Setext 标题：`heading\n===` 或 `heading\n---`。
  */
 class SetextHeading(
-    var level: Int,
+    level: Int,
 ) : ContainerNode() {
+    var level: Int = level
+        set(value) { checkMutation(); field = value }
+
     /** 自动生成的标题 ID（基于标题文本的 slug）。 */
     var autoId: String? = null
+        set(value) { checkMutation(); field = value }
 
     /** parsed heading content (stripped of block-level markers like list prefixes) */
     var rawContent: String? = null
+        set(value) { checkMutation(); field = value }
 
     /** 获取最终使用的标题 ID。 */
     val id: String? get() = autoId
 
     /** 块级属性 `{.class #id key=value}`（由 BlockAttributeProcessor 后处理设置）。 */
-    var blockAttributes: Map<String, String> = emptyMap()
+    var blockAttributes: Map<String, String> = immutableMapCopy(emptyMap())
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
 
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitSetextHeading(this)
 }
@@ -82,9 +105,11 @@ class SetextHeading(
 class Paragraph : ContainerNode() {
     /** 解析阶段捕获的原始内容（已去除块级标记），供行内解析使用。 */
     var rawContent: String? = null
+        set(value) { checkMutation(); field = value }
 
     /** 块级属性 `{.class #id key=value}`（由 BlockAttributeProcessor 后处理设置）。 */
-    var blockAttributes: Map<String, String> = emptyMap()
+    var blockAttributes: Map<String, String> = immutableMapCopy(emptyMap())
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
 
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitParagraph(this)
 }
@@ -93,8 +118,11 @@ class Paragraph : ContainerNode() {
  * 主题分隔线（水平线）：`---`、`***` 或 `___`。
  */
 class ThematicBreak(
-    var char: Char = '-'
+    char: Char = '-'
 ) : LeafNode() {
+    var char: Char = char
+        set(value) { checkMutation(); field = value }
+
     override val literal: String get() = ""
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitThematicBreak(this)
 }
@@ -103,14 +131,32 @@ class ThematicBreak(
  * 围栏代码块：``` 或 ~~~。
  */
 class FencedCodeBlock(
-    var info: String = "",
-    var language: String = "",
-    var fenceChar: Char = '`',
-    var fenceLength: Int = 3,
-    var fenceIndent: Int = 0,
+    info: String = "",
+    language: String = "",
+    fenceChar: Char = '`',
+    fenceLength: Int = 3,
+    fenceIndent: Int = 0,
     literal: String = "",
-    var attributes: Attributes = Attributes(),
+    attributes: Attributes = Attributes(),
 ) : LeafNode() {
+    var info: String = info
+        set(value) { checkMutation(); field = value }
+
+    var language: String = language
+        set(value) { checkMutation(); field = value }
+
+    var fenceChar: Char = fenceChar
+        set(value) { checkMutation(); field = value }
+
+    var fenceLength: Int = fenceLength
+        set(value) { checkMutation(); field = value }
+
+    var fenceIndent: Int = fenceIndent
+        set(value) { checkMutation(); field = value }
+
+    var attributes: Attributes = attributes.copy(classes = immutableListCopy(attributes.classes), pairs = immutableMapCopy(attributes.pairs))
+        set(value) { checkMutation(); field = value.copy(classes = immutableListCopy(value.classes), pairs = immutableMapCopy(value.pairs)) }
+
     private var literalValue: String = literal
     private var literalSource: (() -> String)? = null
     internal var literalRevision: Long = 0
@@ -125,6 +171,7 @@ class FencedCodeBlock(
             return literalValue
         }
         set(value) {
+            checkMutation()
             literalValue = value
             literalSource = null
             literalRevision++
@@ -132,6 +179,7 @@ class FencedCodeBlock(
 
     /** A committed source snapshot stays readable without eagerly flattening its whole body. */
     internal fun setLazyLiteral(source: () -> String) {
+        checkMutation()
         literalValue = ""
         literalSource = source
         literalRevision++
@@ -139,19 +187,23 @@ class FencedCodeBlock(
 
     /** Preserve laziness when retaining the public block instance across streaming revisions. */
     internal fun copyLiteralFrom(other: FencedCodeBlock) {
+        checkMutation()
         literalValue = other.literalValue
         literalSource = other.literalSource
         literalRevision++
     }
 
     /** highlighted line ranges parsed from `hl_lines` attribute, e.g. "1 3-5" -> [1..1, 3..5] */
-    var highlightLines: List<IntRange> = emptyList()
+    var highlightLines: List<IntRange> = immutableListCopy(emptyList())
+        set(value) { checkMutation(); field = immutableListCopy(value) }
 
     /** whether to show line numbers, parsed from `linenums` attribute */
     var showLineNumbers: Boolean = true
+        set(value) { checkMutation(); field = value }
 
     /** starting line number, parsed from `startline` attribute (default 1) */
     var startLineNumber: Int = 1
+        set(value) { checkMutation(); field = value }
 
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitFencedCodeBlock(this)
 }
@@ -160,8 +212,11 @@ class FencedCodeBlock(
  * 缩进代码块：4 个空格或 1 个制表符缩进。
  */
 class IndentedCodeBlock(
-    override var literal: String = ""
+    literal: String = ""
 ) : LeafNode() {
+    override var literal: String = literal
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitIndentedCodeBlock(this)
 }
 
@@ -170,7 +225,8 @@ class IndentedCodeBlock(
  */
 class BlockQuote : ContainerNode() {
     /** 块级属性 `{.class #id key=value}`（由 BlockAttributeProcessor 后处理设置）。 */
-    var blockAttributes: Map<String, String> = emptyMap()
+    var blockAttributes: Map<String, String> = immutableMapCopy(emptyMap())
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
 
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitBlockQuote(this)
 }
@@ -179,14 +235,30 @@ class BlockQuote : ContainerNode() {
  * 列表（有序或无序）。
  */
 class ListBlock(
-    var ordered: Boolean = false,
-    var startNumber: Int = 1,
-    var bulletChar: Char = '-',
-    var delimiter: Char = '.',
-    var tight: Boolean = true
+    ordered: Boolean = false,
+    startNumber: Int = 1,
+    bulletChar: Char = '-',
+    delimiter: Char = '.',
+    tight: Boolean = true
 ) : ContainerNode() {
+    var ordered: Boolean = ordered
+        set(value) { checkMutation(); field = value }
+
+    var startNumber: Int = startNumber
+        set(value) { checkMutation(); field = value }
+
+    var bulletChar: Char = bulletChar
+        set(value) { checkMutation(); field = value }
+
+    var delimiter: Char = delimiter
+        set(value) { checkMutation(); field = value }
+
+    var tight: Boolean = tight
+        set(value) { checkMutation(); field = value }
+
     /** 块级属性 `{.class #id key=value}`（由 BlockAttributeProcessor 后处理设置）。 */
-    var blockAttributes: Map<String, String> = emptyMap()
+    var blockAttributes: Map<String, String> = immutableMapCopy(emptyMap())
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
 
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitListBlock(this)
 }
@@ -195,14 +267,23 @@ class ListBlock(
  * 列表中的单个列表项。
  */
 class ListItem(
-    var markerIndent: Int = 0,
-    var contentIndent: Int = 0
+    markerIndent: Int = 0,
+    contentIndent: Int = 0
 ) : ContainerNode() {
+    var markerIndent: Int = markerIndent
+        set(value) { checkMutation(); field = value }
+
+    var contentIndent: Int = contentIndent
+        set(value) { checkMutation(); field = value }
+
     /** 用于任务列表。 */
     var taskListItem: Boolean = false
+        set(value) { checkMutation(); field = value }
     var checked: Boolean = false
+        set(value) { checkMutation(); field = value }
     /** tracks whether a blank line was seen between block children within this item */
     var containsBlankLine: Boolean = false
+        set(value) { checkMutation(); field = value }
 
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitListItem(this)
 }
@@ -211,9 +292,15 @@ class ListItem(
  * HTML 块（CommonMark 规范中的类型 1-7）。
  */
 class HtmlBlock(
-    var htmlType: Int = 7,
-    override var literal: String = ""
+    htmlType: Int = 7,
+    literal: String = ""
 ) : LeafNode() {
+    var htmlType: Int = htmlType
+        set(value) { checkMutation(); field = value }
+
+    override var literal: String = literal
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitHtmlBlock(this)
 }
 
@@ -221,10 +308,19 @@ class HtmlBlock(
  * 链接引用定义：`[label]: destination "title"`。
  */
 class LinkReferenceDefinition(
-    var label: String = "",
-    var destination: String = "",
-    var title: String? = null
+    label: String = "",
+    destination: String = "",
+    title: String? = null
 ) : LeafNode() {
+    var label: String = label
+        set(value) { checkMutation(); field = value }
+
+    var destination: String = destination
+        set(value) { checkMutation(); field = value }
+
+    var title: String? = title
+        set(value) { checkMutation(); field = value }
+
     override val literal: String get() = ""
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitLinkReferenceDefinition(this)
 }
@@ -233,10 +329,12 @@ class LinkReferenceDefinition(
  * 表格块（GFM 扩展）。
  */
 class Table : ContainerNode() {
-    var columnAlignments: List<Alignment> = emptyList()
+    var columnAlignments: List<Alignment> = immutableListCopy(emptyList())
+        set(value) { checkMutation(); field = immutableListCopy(value) }
 
     /** 块级属性 `{.class #id key=value}`（由 BlockAttributeProcessor 后处理设置）。 */
-    var blockAttributes: Map<String, String> = emptyMap()
+    var blockAttributes: Map<String, String> = immutableMapCopy(emptyMap())
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
 
     enum class Alignment { LEFT, CENTER, RIGHT, NONE }
 
@@ -256,11 +354,18 @@ class TableRow : ContainerNode() {
 }
 
 class TableCell(
-    var alignment: Table.Alignment = Table.Alignment.NONE,
-    var isHeader: Boolean = false
+    alignment: Table.Alignment = Table.Alignment.NONE,
+    isHeader: Boolean = false
 ) : ContainerNode() {
+    var alignment: Table.Alignment = alignment
+        set(value) { checkMutation(); field = value }
+
+    var isHeader: Boolean = isHeader
+        set(value) { checkMutation(); field = value }
+
     /** 单元格的原始文本内容（由解析器在分割表格行时设置）。 */
     var rawContent: String = ""
+        set(value) { checkMutation(); field = value }
 
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitTableCell(this)
 }
@@ -269,9 +374,20 @@ class TableCell(
  * 脚注定义：`[^label]: content`。
  */
 class FootnoteDefinition(
-    var label: String = "",
-    var index: Int = 0
+    label: String = "",
+    index: Int = 0
 ) : ContainerNode() {
+    var label: String = label
+        set(value) { checkMutation(); field = value }
+
+    var index: Int = index
+        set(value) { checkMutation(); field = value }
+
+    /** Numbering is an internal lazy-parser cache, not external document mutation authority. */
+    internal fun assignIndexDuringParsing(value: Int) {
+        withLocalMutation { index = value }
+    }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitFootnoteDefinition(this)
 }
 
@@ -282,8 +398,11 @@ class FootnoteDefinition(
  * 均由 LaTeX 渲染库原生处理，literal 保留完整的 LaTeX 源文本。
  */
 class MathBlock(
-    override var literal: String = ""
+    literal: String = ""
 ) : LeafNode() {
+    override var literal: String = literal
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitMathBlock(this)
 }
 
@@ -306,9 +425,15 @@ class DefinitionDescription : ContainerNode() {
  * 警告/提示块：`> [!NOTE]`、`> [!WARNING]` 等。
  */
 class Admonition(
-    var type: String = "NOTE",
-    var title: String = ""
+    type: String = "NOTE",
+    title: String = ""
 ) : ContainerNode() {
+    var type: String = type
+        set(value) { checkMutation(); field = value }
+
+    var title: String = title
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitAdmonition(this)
 }
 
@@ -316,9 +441,15 @@ class Admonition(
  * 前置元数据块：YAML `---` 或 TOML `+++`。
  */
 class FrontMatter(
-    var format: String = "yaml",
-    override var literal: String = ""
+    format: String = "yaml",
+    literal: String = ""
 ) : LeafNode() {
+    var format: String = format
+        set(value) { checkMutation(); field = value }
+
+    override var literal: String = literal
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitFrontMatter(this)
 }
 
@@ -343,15 +474,19 @@ class TocPlaceholder : LeafNode() {
 
     /** 最小标题深度（默认 1）。 */
     var minDepth: Int = 1
+        set(value) { checkMutation(); field = value }
 
     /** 最大标题深度（默认 6）。 */
     var maxDepth: Int = 6
+        set(value) { checkMutation(); field = value }
 
     /** 要排除的标题 ID 列表。 */
-    var excludeIds: List<String> = emptyList()
+    var excludeIds: List<String> = immutableListCopy(emptyList())
+        set(value) { checkMutation(); field = immutableListCopy(value) }
 
     /** 排序方式："asc"（默认，按文档顺序）或 "desc"（逆序）。 */
     var order: String = "asc"
+        set(value) { checkMutation(); field = value }
 
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitTocPlaceholder(this)
 }
@@ -360,9 +495,15 @@ class TocPlaceholder : LeafNode() {
  * 缩写定义：`*[abbr]: Full Text`。
  */
 class AbbreviationDefinition(
-    var abbreviation: String = "",
-    var fullText: String = ""
+    abbreviation: String = "",
+    fullText: String = ""
 ) : LeafNode() {
+    var abbreviation: String = abbreviation
+        set(value) { checkMutation(); field = value }
+
+    var fullText: String = fullText
+        set(value) { checkMutation(); field = value }
+
     override val literal: String get() = ""
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitAbbreviationDefinition(this)
 }
@@ -381,14 +522,26 @@ class AbbreviationDefinition(
  */
 class CustomContainer(
     /** 容器类型，如 "warning"、"note"、"card" 等 */
-    var type: String = "",
+    type: String = "",
     /** 可选标题（引号内的文本） */
-    var title: String = "",
+    title: String = "",
     /** CSS class 列表，从 `{.class1 .class2}` 中提取 */
-    var cssClasses: List<String> = emptyList(),
+    cssClasses: List<String> = emptyList(),
     /** CSS ID，从 `{#my-id}` 中提取 */
-    var cssId: String? = null,
+    cssId: String? = null,
 ) : ContainerNode() {
+    var type: String = type
+        set(value) { checkMutation(); field = value }
+
+    var title: String = title
+        set(value) { checkMutation(); field = value }
+
+    var cssClasses: List<String> = immutableListCopy(cssClasses)
+        set(value) { checkMutation(); field = immutableListCopy(value) }
+
+    var cssId: String? = cssId
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitCustomContainer(this)
 }
 
@@ -400,10 +553,16 @@ class CustomContainer(
  */
 class DiagramBlock(
     /** 图表类型：如 "mermaid"、"plantuml" */
-    var diagramType: String = "",
+    diagramType: String = "",
     /** 原始图表代码 */
-    override var literal: String = ""
+    literal: String = ""
 ) : LeafNode() {
+    var diagramType: String = diagramType
+        set(value) { checkMutation(); field = value }
+
+    override var literal: String = literal
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitDiagramBlock(this)
 }
 
@@ -432,8 +591,11 @@ class ColumnsLayout : ContainerNode() {
  * @property width 列宽，如 "50%"、"300px"，为空时表示平均分配
  */
 class ColumnItem(
-    var width: String = "",
+    width: String = "",
 ) : ContainerNode() {
+    var width: String = width
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitColumnItem(this)
 }
 
@@ -459,10 +621,16 @@ class PageBreak : LeafNode() {
  */
 class DirectiveBlock(
     /** directive tag name, e.g. "youtube", "include" */
-    var tagName: String = "",
+    tagName: String = "",
     /** positional and keyword arguments */
-    var args: Map<String, String> = emptyMap(),
+    args: Map<String, String> = emptyMap(),
 ) : ContainerNode() {
+    var tagName: String = tagName
+        set(value) { checkMutation(); field = value }
+
+    var args: Map<String, String> = immutableMapCopy(args)
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitDirectiveBlock(this)
 }
 
@@ -490,8 +658,11 @@ class TabBlock : ContainerNode() {
  * @property title 标签页标题
  */
 class TabItem(
-    var title: String = "",
+    title: String = "",
 ) : ContainerNode() {
+    var title: String = title
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitTabItem(this)
 }
 
@@ -503,7 +674,7 @@ class TabItem(
  */
 class BibliographyDefinition : ContainerNode() {
     /** 所有文献条目：key → BibEntry */
-    val entries: MutableMap<String, BibEntry> = mutableMapOf()
+    val entries: MutableMap<String, BibEntry> = GuardedMutableMap(::checkMutation)
 
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitBibliographyDefinition(this)
 }
@@ -528,28 +699,52 @@ data class BibEntry(
  */
 class Figure(
     /** 图片 URL */
-    var imageUrl: String = "",
+    imageUrl: String = "",
     /** 图片标题（figcaption），通常来自 alt 文本 */
-    var caption: String = "",
+    caption: String = "",
     /** 图片宽度（像素），null 表示未指定 */
-    var imageWidth: Int? = null,
+    imageWidth: Int? = null,
     /** 图片高度（像素），null 表示未指定 */
-    var imageHeight: Int? = null,
+    imageHeight: Int? = null,
     /** 自定义属性映射 */
-    var attributes: Map<String, String> = emptyMap(),
+    attributes: Map<String, String> = emptyMap(),
 ) : LeafNode() {
+    var imageUrl: String = imageUrl
+        set(value) { checkMutation(); field = value }
+
+    var caption: String = caption
+        set(value) { checkMutation(); field = value }
+
+    var imageWidth: Int? = imageWidth
+        set(value) { checkMutation(); field = value }
+
+    var imageHeight: Int? = imageHeight
+        set(value) { checkMutation(); field = value }
+
+    var attributes: Map<String, String> = immutableMapCopy(attributes)
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
+
     override val literal: String get() = caption
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitFigure(this)
 }
 
 /** Shared by range-parser inline closures and the published root of the same revision. */
 internal class DefinitionContext {
-    var links: MutableMap<String, LinkReferenceDefinition> = mutableMapOf()
+    var links: GuardedMutableMap<String, LinkReferenceDefinition> = GuardedMutableMap()
         private set
-    var footnotes: MutableMap<String, FootnoteDefinition> = mutableMapOf()
+    var footnotes: GuardedMutableMap<String, FootnoteDefinition> = GuardedMutableMap()
         private set
-    var abbreviations: MutableMap<String, AbbreviationDefinition> = mutableMapOf()
+    var abbreviations: GuardedMutableMap<String, AbbreviationDefinition> = GuardedMutableMap()
         private set
+
+    fun seal(owner: MutationOwner) {
+        links.seal(owner)
+        footnotes.seal(owner)
+        abbreviations.seal(owner)
+    }
+
+    fun <T> withReadOnlyDefinitions(action: () -> T): T =
+        links.withReadOnly { footnotes.withReadOnly { abbreviations.withReadOnly(action) } }
 
     // Called only after proving no definitions changed. Definition edits build a fresh context.
     fun inherit(unchanged: DefinitionContext) {

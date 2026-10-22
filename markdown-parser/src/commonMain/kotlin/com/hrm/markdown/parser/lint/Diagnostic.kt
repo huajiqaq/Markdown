@@ -1,6 +1,8 @@
 package com.hrm.markdown.parser.lint
 
 import com.hrm.markdown.parser.SourcePosition
+import com.hrm.markdown.parser.ast.immutableListView
+import com.hrm.markdown.parser.ast.MutationOwner
 
 /**
  * 诊断信息的严重级别。
@@ -87,9 +89,18 @@ data class Diagnostic(
  */
 class DiagnosticResult {
     private val _diagnostics = mutableListOf<Diagnostic>()
+    private val diagnosticsView = immutableListView(_diagnostics)
+    private var mutationOwner: MutationOwner? = null
+
+    internal fun sealForDocument(owner: MutationOwner) {
+        check(mutationOwner == null || mutationOwner === owner) {
+            "Published diagnostics cannot be adopted by another parser."
+        }
+        mutationOwner = owner
+    }
 
     /** 所有诊断信息（按行号排序）。 */
-    val diagnostics: List<Diagnostic> get() = _diagnostics
+    val diagnostics: List<Diagnostic> get() = diagnosticsView
 
     /** 错误级别的诊断数量。 */
     val errorCount: Int get() = _diagnostics.count { it.severity == DiagnosticSeverity.ERROR }
@@ -104,15 +115,18 @@ class DiagnosticResult {
     val hasErrors: Boolean get() = errorCount > 0
 
     fun add(diagnostic: Diagnostic) {
+        mutationOwner?.checkMutation()
         _diagnostics.add(diagnostic)
     }
 
     fun addAll(diagnostics: Collection<Diagnostic>) {
+        mutationOwner?.checkMutation()
         _diagnostics.addAll(diagnostics)
     }
 
     /** 按行号排序。 */
     fun sort() {
+        mutationOwner?.checkMutation()
         _diagnostics.sortWith(compareBy({ it.line }, { it.column }))
     }
 

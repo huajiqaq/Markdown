@@ -16,7 +16,6 @@ import com.hrm.diagram.core.theme.DiagramTheme
 import com.hrm.latex.renderer.model.LatexConfig
 import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.parser.log.HLog
-import com.hrm.markdown.renderer.internal.core.compile.computeSemanticRevision
 import com.hrm.markdown.runtime.MarkdownDirectivePipeline
 import com.hrm.markdown.runtime.MarkdownDirectivePlugin
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
@@ -122,10 +121,11 @@ fun Markdown(
 /**
  * 显示调用方提供的 Markdown [Document]。
  *
- * 调用方负责解析源码、执行插件输入转换，以及在更新 AST 后触发重组。本重载直接渲染文档，
+ * 调用方通过解析器或自定义 Flavour 构建文档，并在提交新文档后触发重组。已发布的 AST 只读，
+ * 后处理器在解析提交前完成转换。本重载直接渲染文档，
  * [directivePlugins] 用于提供指令渲染器。应用默认外观可通过 [ProvideMarkdownDefaults] 设置，实例参数优先。
  *
- * @param document 要显示的已解析 Markdown 文档。文档更新后需触发重组，以显示最新内容。
+ * @param document 解析器已提交的 Markdown 文档。传入新的提交后需触发重组。
  * @param modifier 应用于 Markdown 容器的 [Modifier]，可用于设置尺寸、内边距和布局位置。
  * @param colors 正文、标题、链接、表格等 Markdown 元素的颜色。默认由 [MarkdownDefaults.colors] 提供，
  * 继承作用域设置，未设置时跟随系统明暗主题。代码、公式和图表使用各自的颜色配置。
@@ -199,7 +199,6 @@ fun Markdown(
         sourceMap = MarkdownSourceMap.Identity,
         components = components,
         interactions = interactions,
-        documentRevision = computeSemanticRevision(document),
     )
 }
 

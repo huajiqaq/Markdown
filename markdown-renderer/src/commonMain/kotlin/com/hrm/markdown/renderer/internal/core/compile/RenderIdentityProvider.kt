@@ -1,76 +1,80 @@
 package com.hrm.markdown.renderer.internal.core.compile
 
-import com.hrm.markdown.parser.SourceRange
 import com.hrm.markdown.parser.ast.*
 import com.hrm.markdown.renderer.internal.core.identity.RenderIdentity
 import com.hrm.markdown.renderer.internal.core.identity.renderIdentityFromText
 import com.hrm.markdown.renderer.internal.core.identity.renderIdentityFromValues
 import com.hrm.markdown.renderer.internal.core.identity.renderIdentityMix
-import com.hrm.markdown.renderer.internal.core.identity.renderIdentitySeed
 
-/**
- * A document-scoped source of render identities.
- *
- * Stable identity and semantic revision deliberately have different inputs:
- * - parsed nodes use their source start and structural parent as stable identity, so an active
- *   streaming tail keeps its identity while its end range grows;
- * - synthetic/custom nodes without a source range use their deterministic tree path;
- * - semantic revision covers every rendered field and the complete child subtree.
- */
-internal class RenderIdentityProvider(document: Document) {
+/** Identities are source independent: published root identity plus structural child paths. */
+internal class RenderIdentityProvider(
+    private val document: Document,
+    rootNodes: List<Node> = document.children,
+    firstRootIndex: Int = 0,
+) {
+    internal var visitedNodes: Int = 1
+        private set
+
     private val stableIds = mutableMapOf<Node, Long>()
     private val semanticRevisions = mutableMapOf<Node, Long>()
 
     init {
-        assignStableIds(
-            node = document,
-            parentStableId = renderIdentityFromText("render-document-root"),
-            siblingIndex = 0,
-        )
+        val documentId = documentStableId()
+        stableIds[document] = documentId
+        rootNodes.forEachIndexed { index, child ->
+            val typeId = renderIdentityFromText(child::class.simpleName ?: "node")
+            val rootId = if (child.persistentId != 0L) {
+                renderIdentityFromValues(documentId, typeId, 0L, child.persistentId)
+            } else {
+                renderIdentityFromValues(documentId, typeId, 1L, (firstRootIndex + index).toLong())
+            }
+            assignStableIds(child, rootId)
+        }
     }
 
     fun identity(node: Node): RenderIdentity {
+        if (node === document && document.publication != null) return publishedDocumentIdentity(document)
         val stableId = stableId(node)
-        val contentRevision = renderIdentityFromValues(stableId, semanticRevision(node))
-        return RenderIdentity(
-            stableId = stableId,
-            contentRevision = contentRevision,
-            layoutRevision = contentRevision,
-            paintRevision = 0L,
-        )
+        val revision = renderIdentityFromValues(stableId, semanticRevision(node))
+        return RenderIdentity(stableId, revision, revision, 0L)
     }
 
     fun stableId(node: Node): Long = stableIds[node]
-        ?: error("Node is outside the document identity scope: ${node::class.simpleName}")
+        ?: error("Node is outside the compilation scope: ${node::class.simpleName}")
 
     fun semanticRevision(node: Node): Long = semanticRevisions.getOrPut(node) {
         computeSemanticRevision(node) { child -> semanticRevision(child) }
     }
 
-    private fun assignStableIds(
-        node: Node,
-        parentStableId: Long,
-        siblingIndex: Int,
-    ) {
-        val typeId = renderIdentityFromText(node::class.simpleName ?: "node")
-        val range = node.sourceRange
-        val stableId = when {
-            node is Document -> renderIdentityFromValues(parentStableId, typeId)
-            range != SourceRange.EMPTY -> renderIdentityFromValues(
-                parentStableId,
-                typeId,
-                range.start.offset.toLong(),
-                node.lineRange.startLine.toLong(),
-            )
-            else -> renderIdentityFromValues(parentStableId, typeId, siblingIndex.toLong())
-        }
+    private fun assignStableIds(node: Node, stableId: Long) {
+        visitedNodes++
         stableIds[node] = stableId
         if (node is ContainerNode) {
             node.children.forEachIndexed { index, child ->
-                assignStableIds(child, stableId, index)
+                assignStableIds(
+                    child,
+                    renderIdentityFromValues(
+                        stableId,
+                        renderIdentityFromText(child::class.simpleName ?: "node"),
+                        index.toLong(),
+                    ),
+                )
             }
         }
     }
+}
+
+private fun documentStableId(): Long = renderIdentityFromValues(
+    renderIdentityFromText("render-document-root"),
+    renderIdentityFromText("Document"),
+)
+
+internal fun publishedDocumentIdentity(document: Document): RenderIdentity {
+    val publication = requireNotNull(document.publication) { "A render session requires a published document" }
+    require(publication.isCurrent) { "An expired document view cannot provide a current render identity" }
+    val stableId = renderIdentityFromValues(documentStableId(), publication.lineageId.identityKey)
+    val revision = renderIdentityFromValues(stableId, publication.revision, document.contentHash)
+    return RenderIdentity(stableId, revision, revision, 0L)
 }
 
 /** Canonical fallback revision for custom/synthetic AST nodes whose contentHash is zero. */
@@ -171,7 +175,7 @@ private fun computeSemanticRevision(
         is Emoji -> acc.mixText(node.shortcode).mixText(node.unicode)
         is StyledText -> acc.mixMap(node.attributes)
         is Abbreviation -> acc.mixText(node.abbreviation).mixText(node.fullText)
-        is DirectiveInline -> acc.mixText(node.tagName).mixMap(node.args)
+        is DirectiveInline -> acc.mixText(node.tagName).mixOrderedMap(node.args)
         is CitationReference -> acc.mixText(node.key)
         is WikiLink -> acc.mixText(node.target).mixText(node.label)
         is RubyText -> acc.mixText(node.base).mixText(node.annotation)
@@ -225,10 +229,15 @@ private fun Long.mixRanges(values: List<IntRange>): Long {
 
 private fun Long.mixEntries(values: Map<String, BibEntry>): Long {
     var next = renderIdentityMix(this, values.size.toLong())
-    for (key in values.keys.sorted()) {
-        val entry = values.getValue(key)
+    for ((key, entry) in values) {
         next = next.mixText(key).mixText(entry.key).mixText(entry.content)
     }
+    return next
+}
+
+private fun Long.mixOrderedMap(values: Map<String, String>): Long {
+    var next = renderIdentityMix(this, values.size.toLong())
+    for ((key, value) in values) next = next.mixText(key).mixText(value)
     return next
 }
 

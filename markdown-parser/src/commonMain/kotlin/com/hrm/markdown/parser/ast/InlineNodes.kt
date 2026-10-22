@@ -6,8 +6,11 @@ package com.hrm.markdown.parser.ast
  * 纯文本内容。
  */
 class Text(
-    override var literal: String = ""
+    literal: String = ""
 ) : LeafNode() {
+    override var literal: String = literal
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitText(this)
 }
 
@@ -32,6 +35,7 @@ class HardLineBreak : LeafNode() {
  */
 class Emphasis : ContainerNode() {
     var delimiter: Char = '*'
+        set(value) { checkMutation(); field = value }
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitEmphasis(this)
 }
 
@@ -40,6 +44,7 @@ class Emphasis : ContainerNode() {
  */
 class StrongEmphasis : ContainerNode() {
     var delimiter: Char = '*'
+        set(value) { checkMutation(); field = value }
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitStrongEmphasis(this)
 }
 
@@ -54,8 +59,11 @@ class Strikethrough : ContainerNode() {
  * 行内代码：`` `code` ``。
  */
 class InlineCode(
-    override var literal: String = ""
+    literal: String = ""
 ) : LeafNode() {
+    override var literal: String = literal
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitInlineCode(this)
 }
 
@@ -67,11 +75,20 @@ class InlineCode(
  * - `[text](url){download="file.pdf"}` 下载属性
  */
 class Link(
-    var destination: String = "",
-    var title: String? = null,
+    destination: String = "",
+    title: String? = null,
     /** 自定义属性映射，如 rel, target, download, class, id 等 */
-    var attributes: Map<String, String> = emptyMap(),
+    attributes: Map<String, String> = emptyMap(),
 ) : ContainerNode() {
+    var destination: String = destination
+        set(value) { checkMutation(); field = value }
+
+    var title: String? = title
+        set(value) { checkMutation(); field = value }
+
+    var attributes: Map<String, String> = immutableMapCopy(attributes)
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
+
     /** CSS class 列表 */
     val cssClasses: List<String>
         get() = attributes["class"]?.split(" ")?.filter { it.isNotEmpty() } ?: emptyList()
@@ -93,15 +110,30 @@ class Link(
  * - `![alt](url){.rounded #img1 loading=lazy align=right}` 自定义属性
  */
 class Image(
-    var destination: String = "",
-    var title: String? = null,
+    destination: String = "",
+    title: String? = null,
     /** 图片宽度（像素），null 表示未指定 */
-    var imageWidth: Int? = null,
+    imageWidth: Int? = null,
     /** 图片高度（像素），null 表示未指定 */
-    var imageHeight: Int? = null,
+    imageHeight: Int? = null,
     /** 自定义属性映射，如 class, id, loading, align 等 */
-    var attributes: Map<String, String> = emptyMap(),
+    attributes: Map<String, String> = emptyMap(),
 ) : ContainerNode() {
+    var destination: String = destination
+        set(value) { checkMutation(); field = value }
+
+    var title: String? = title
+        set(value) { checkMutation(); field = value }
+
+    var imageWidth: Int? = imageWidth
+        set(value) { checkMutation(); field = value }
+
+    var imageHeight: Int? = imageHeight
+        set(value) { checkMutation(); field = value }
+
+    var attributes: Map<String, String> = immutableMapCopy(attributes)
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
+
     /** CSS class 列表（从 attributes 或 `.class` 语法提取） */
     val cssClasses: List<String>
         get() = attributes["class"]?.split(" ")?.filter { it.isNotEmpty() } ?: emptyList()
@@ -117,10 +149,19 @@ class Image(
  * 自动链接：`<url>` 或 `<email>`。
  */
 class Autolink(
-    var destination: String = "",
-    var isEmail: Boolean = false,
-    var rawText: String = ""
+    destination: String = "",
+    isEmail: Boolean = false,
+    rawText: String = ""
 ) : LeafNode() {
+    var destination: String = destination
+        set(value) { checkMutation(); field = value }
+
+    var isEmail: Boolean = isEmail
+        set(value) { checkMutation(); field = value }
+
+    var rawText: String = rawText
+        set(value) { checkMutation(); field = value }
+
     override val literal: String get() = rawText.ifEmpty { destination }
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitAutolink(this)
 }
@@ -129,8 +170,11 @@ class Autolink(
  * 行内 HTML：`<tag>`、`</tag>`、`<!-- comment -->` 等。
  */
 class InlineHtml(
-    override var literal: String = ""
+    literal: String = ""
 ) : LeafNode() {
+    override var literal: String = literal
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitInlineHtml(this)
 }
 
@@ -138,9 +182,15 @@ class InlineHtml(
  * HTML 实体：`&amp;`、`&#123;`、`&#x1F4A9;`。
  */
 class HtmlEntity(
-    override var literal: String = "",
-    var resolved: String = ""
+    literal: String = "",
+    resolved: String = ""
 ) : LeafNode() {
+    override var literal: String = literal
+        set(value) { checkMutation(); field = value }
+
+    var resolved: String = resolved
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitHtmlEntity(this)
 }
 
@@ -148,8 +198,11 @@ class HtmlEntity(
  * 转义字符：`\*`、`\[` 等。
  */
 class EscapedChar(
-    override var literal: String = ""
+    literal: String = ""
 ) : LeafNode() {
+    override var literal: String = literal
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitEscapedChar(this)
 }
 
@@ -157,9 +210,15 @@ class EscapedChar(
  * 脚注引用：`[^label]`。
  */
 class FootnoteReference(
-    var label: String = "",
-    var index: Int = 0
+    label: String = "",
+    index: Int = 0
 ) : LeafNode() {
+    var label: String = label
+        set(value) { checkMutation(); field = value }
+
+    var index: Int = index
+        set(value) { checkMutation(); field = value }
+
     override val literal: String get() = label
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitFootnoteReference(this)
 }
@@ -168,8 +227,11 @@ class FootnoteReference(
  * 行内数学公式：`$...$` 或 `$$...$$`。
  */
 class InlineMath(
-    override var literal: String = ""
+    literal: String = ""
 ) : LeafNode() {
+    override var literal: String = literal
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitInlineMath(this)
 }
 
@@ -210,11 +272,18 @@ class InsertedText : ContainerNode() {
  * - ASCII 表情自动转换：`:)` → 😊（由解析器在扫描阶段处理）
  */
 class Emoji(
-    var shortcode: String = "",
-    override var literal: String = ""
+    shortcode: String = "",
+    literal: String = ""
 ) : LeafNode() {
+    var shortcode: String = shortcode
+        set(value) { checkMutation(); field = value }
+
+    override var literal: String = literal
+        set(value) { checkMutation(); field = value }
+
     /** Unicode 字符（若映射成功） */
     var unicode: String? = null
+        set(value) { checkMutation(); field = value }
 
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitEmoji(this)
 }
@@ -227,8 +296,11 @@ class Emoji(
  */
 class StyledText(
     /** 自定义属性映射，如 class, style, id 等 */
-    var attributes: Map<String, String> = emptyMap(),
+    attributes: Map<String, String> = emptyMap(),
 ) : ContainerNode() {
+    var attributes: Map<String, String> = immutableMapCopy(attributes)
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
+
     /** CSS class 列表 */
     val cssClasses: List<String>
         get() = attributes["class"]?.split(" ")?.filter { it.isNotEmpty() } ?: emptyList()
@@ -248,9 +320,15 @@ class StyledText(
  * 缩写：在正文中出现的缩写词，关联到 AbbreviationDefinition。
  */
 class Abbreviation(
-    var abbreviation: String = "",
-    var fullText: String = ""
+    abbreviation: String = "",
+    fullText: String = ""
 ) : LeafNode() {
+    var abbreviation: String = abbreviation
+        set(value) { checkMutation(); field = value }
+
+    var fullText: String = fullText
+        set(value) { checkMutation(); field = value }
+
     override val literal: String get() = abbreviation
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitAbbreviation(this)
 }
@@ -259,8 +337,11 @@ class Abbreviation(
  * 键盘按键：`<kbd>text</kbd>`。
  */
 class KeyboardInput(
-    override var literal: String = ""
+    literal: String = ""
 ) : LeafNode() {
+    override var literal: String = literal
+        set(value) { checkMutation(); field = value }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitKeyboardInput(this)
 }
 
@@ -271,10 +352,16 @@ class KeyboardInput(
  */
 class DirectiveInline(
     /** directive tag name */
-    var tagName: String = "",
+    tagName: String = "",
     /** positional and keyword arguments */
-    var args: Map<String, String> = emptyMap(),
+    args: Map<String, String> = emptyMap(),
 ) : LeafNode() {
+    var tagName: String = tagName
+        set(value) { checkMutation(); field = value }
+
+    var args: Map<String, String> = immutableMapCopy(args)
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
+
     override val literal: String get() = tagName
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitDirectiveInline(this)
 }
@@ -287,8 +374,11 @@ class DirectiveInline(
  */
 class CitationReference(
     /** 引用键，如 "smith2020" */
-    var key: String = "",
+    key: String = "",
 ) : LeafNode() {
+    var key: String = key
+        set(value) { checkMutation(); field = value }
+
     override val literal: String get() = key
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitCitationReference(this)
 }
@@ -311,10 +401,16 @@ class Spoiler : ContainerNode() {
  */
 class WikiLink(
     /** 链接目标（页面名称），如 "my-note" */
-    var target: String = "",
+    target: String = "",
     /** 显示文本，如果为 null 则使用 target */
-    var label: String? = null,
+    label: String? = null,
 ) : LeafNode() {
+    var target: String = target
+        set(value) { checkMutation(); field = value }
+
+    var label: String? = label
+        set(value) { checkMutation(); field = value }
+
     override val literal: String get() = label ?: target
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitWikiLink(this)
 }
@@ -327,10 +423,16 @@ class WikiLink(
  */
 class RubyText(
     /** 基础文本（被注音的文字） */
-    var base: String = "",
+    base: String = "",
     /** 注音文本（标注在上方的文字） */
-    var annotation: String = "",
+    annotation: String = "",
 ) : LeafNode() {
+    var base: String = base
+        set(value) { checkMutation(); field = value }
+
+    var annotation: String = annotation
+        set(value) { checkMutation(); field = value }
+
     override val literal: String get() = base
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitRubyText(this)
 }

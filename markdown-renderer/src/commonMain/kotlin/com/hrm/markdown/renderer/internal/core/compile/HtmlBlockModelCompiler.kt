@@ -245,7 +245,7 @@ internal object HtmlBlockModelCompiler {
             }
         }
         if (!flushInline()) return null
-        return result
+        return result.renderSnapshotList()
     }
 
     private fun compileListElement(
@@ -290,7 +290,7 @@ internal object HtmlBlockModelCompiler {
             bulletChar = if (ordered) '1' else '-',
             delimiter = '.',
             tight = true,
-            items = items,
+            items = items.renderSnapshotList(),
         )
     }
 

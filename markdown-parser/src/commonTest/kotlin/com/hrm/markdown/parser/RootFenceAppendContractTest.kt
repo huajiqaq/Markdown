@@ -11,6 +11,7 @@ import com.hrm.markdown.parser.streaming.semanticSnapshot
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFails
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -192,7 +193,7 @@ class RootFenceAppendContractTest {
     }
 
     @Test
-    fun should_restoreSourceDerivedFields_when_publicFenceAstIsMutatedBeforeAppend() {
+    fun should_rejectUntrackedMutations_when_aFenceHasBeenPublished() {
         val mutations: List<Pair<String, (FencedCodeBlock) -> Unit>> = listOf(
             "fence character" to { it.fenceChar = '~' },
             "fence length" to { it.fenceLength = 100 },
@@ -220,10 +221,9 @@ class RootFenceAppendContractTest {
             engine.append(initial)
             engine.append("continued\n") // Check the stamp retained after a fast commit too.
             val block = engine.document.children.filterIsInstance<FencedCodeBlock>().single()
-            mutate(block)
+            assertFails(label) { mutate(block) }
             engine.append(chunk)
             val context = "$label chunk=$chunk"
-            assertTrue(engine.lastUpdate.parsedLines > 2, "$context ${engine.lastUpdate}")
             val source = initial + "continued\n" + chunk
             val fresh = MarkdownParser().apply { beginStream(); append(source) }
             assertEquals(fresh.document.semanticSnapshot(), engine.document.semanticSnapshot(), context)

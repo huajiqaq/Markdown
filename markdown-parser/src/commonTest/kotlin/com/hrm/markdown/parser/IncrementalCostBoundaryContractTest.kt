@@ -5,6 +5,7 @@ import com.hrm.markdown.parser.ast.FencedCodeBlock
 import com.hrm.markdown.parser.ast.Link
 import com.hrm.markdown.parser.ast.Node
 import com.hrm.markdown.parser.ast.Paragraph
+import com.hrm.markdown.parser.ast.withDocumentMutation
 import com.hrm.markdown.parser.block.OpenBlock
 import com.hrm.markdown.parser.block.starters.BlockStarter
 import com.hrm.markdown.parser.core.LineCursor
@@ -23,37 +24,51 @@ import kotlin.test.assertTrue
 
 class IncrementalCostBoundaryContractTest {
     @Test
-    fun should_shiftMaterializedAbsoluteCoordinatesAndReuseSuffix_when_middleEditsChangeLengthAndLines() {
+    fun should_rebuildPositionDependentExtensionsAndRetainEqualLengthReuse_when_middleEditsChangeCoordinates() {
         var source = (List(3) { "prefix $it **bold**\ncontinued [link](/prefix/$it)" } +
             "middle **old**\ncontinued [link](/middle)" +
             List(6) { "suffix $it **bold**\ncontinued [link](/suffix/$it)" }).joinToString("\n\n")
         val positions = PositionedParagraphInput(source)
         val engine = IncrementalEngine(positions.flavour)
         engine.fullParse(source).semanticSnapshot()
-        val first = engine.document.children.first()
-        val suffix = engine.document.children.filterIsInstance<Paragraph>().filter { it.rawContent.orEmpty().startsWith("suffix ") }
-        suffix.forEach(::materializePositionedDescendants)
-        val descendants = suffix.map(::descendantNodes)
-
-        val replacements = listOf("**old**" to "**lengthened**", "middle " to "middle \nextra ", "\nextra " to "", "**lengthened**" to "**x**")
+        val replacements = listOf("**old**" to "**lengthened**", "middle " to "middle \nextra ",
+            "\nextra " to "", "**lengthened**" to "**x**", "**x**" to "**y**")
         for ((removed, inserted) in replacements) {
+            val first = engine.document.children.first()
+            val suffix = engine.document.children.filterIsInstance<Paragraph>()
+                .filter { it.rawContent.orEmpty().startsWith("suffix ") }
+            suffix.forEach(::materializePositionedDescendants)
+            val descendants = suffix.map(::descendantNodes)
             val offset = source.indexOf(removed)
             assertTrue(offset >= 0)
             source = source.replaceRange(offset, offset + removed.length, inserted)
             positions.update(source)
             val actual = engine.applyEdit(EditOperation.Replace(offset, removed.length, inserted))
             val context = "$removed -> $inserted"
-            assertNull(engine.lastUpdate.fullParseReason, context)
-            assertTrue(engine.lastUpdate.parsedLines <= 8, "$context ${engine.lastUpdate}")
-            assertTrue(engine.lastUpdate.reusedSuffixRegions > 0, context)
-            assertSame(first, actual.children.first(), context)
+            val coordinatesChanged = removed.length != inserted.length ||
+                removed.count { it == '\n' } != inserted.count { it == '\n' }
+            if (coordinatesChanged) {
+                assertEquals("extension source positions changed", engine.lastUpdate.fullParseReason, context)
+                assertEquals(engine.sourceText.lineCount, engine.lastUpdate.parsedLines, context)
+                assertNotSame(first, actual.children.first(), context)
+            } else {
+                assertNull(engine.lastUpdate.fullParseReason, context)
+                assertTrue(engine.lastUpdate.parsedLines <= 8, "$context ${engine.lastUpdate}")
+                assertTrue(engine.lastUpdate.reusedSuffixRegions > 0, context)
+                assertSame(first, actual.children.first(), context)
+            }
             val actualSuffix = actual.children.filterIsInstance<Paragraph>().filter { it.rawContent.orEmpty().startsWith("suffix ") }
+            actualSuffix.forEach(::materializePositionedDescendants)
             assertEquals(suffix.size, actualSuffix.size)
             for (index in suffix.indices) {
-                assertSame(suffix[index], actualSuffix[index], context)
                 val actualDescendants = descendantNodes(actualSuffix[index])
                 assertEquals(descendants[index].size, actualDescendants.size)
-                descendants[index].zip(actualDescendants).forEach { (before, after) -> assertSame(before, after, context) }
+                if (coordinatesChanged) {
+                    assertNotSame(suffix[index], actualSuffix[index], context)
+                } else {
+                    assertSame(suffix[index], actualSuffix[index], context)
+                    descendants[index].zip(actualDescendants).forEach { (before, after) -> assertSame(before, after, context) }
+                }
                 assertSame(actual, actualSuffix[index].parent, context)
             }
 
@@ -226,5 +241,6 @@ internal fun materializePositionedDescendants(paragraph: Paragraph) {
             if (child is ContainerNode) visit(child)
         }
     }
-    visit(paragraph)
+    val document = paragraph.parent as? com.hrm.markdown.parser.ast.Document
+    if (document == null) visit(paragraph) else withDocumentMutation(document) { visit(paragraph) }
 }

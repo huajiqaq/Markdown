@@ -33,10 +33,12 @@ class InlineParser(
     private val enableStrikethrough: Boolean = true,
 ) : BlockParser.InlineParserInterface {
     internal var scanMetrics: InlineScanMetrics? = null
+    /** Only parser-owned lazy recipes may assign numbers in a published definition context. */
+    internal var allowPublishedFootnoteNumbering: Boolean = false
 
     override fun parseInlines(content: String, parent: ContainerNode) {
         if (content.isEmpty()) return
-        val parser = InlineParserInstance(content, document, customEmojiMap, enableAsciiEmoticons, enableGfmAutolinks, enableExtendedInline, enableStrikethrough, scanMetrics)
+        val parser = InlineParserInstance(content, document, customEmojiMap, enableAsciiEmoticons, enableGfmAutolinks, enableExtendedInline, enableStrikethrough, scanMetrics, allowPublishedFootnoteNumbering)
         val nodes = parser.parse()
         for (node in nodes) {
             parent.appendChild(node)
@@ -216,6 +218,7 @@ private class InlineParserInstance(
     private val enableExtendedInline: Boolean = true,
     private val enableStrikethrough: Boolean = true,
     private val scanMetrics: InlineScanMetrics? = null,
+    private val allowPublishedFootnoteNumbering: Boolean = false,
 ) {
     // 链表包装 AST 节点
     private class LLNode(var astNode: Node) {
@@ -1767,7 +1770,8 @@ private class InlineParserInstance(
                     numberedFootnoteCount = count
                     unnumberedFootnoteMultiplicity = multiplicity
                 }
-                def.index = numberedFootnoteCount + 1
+                if (allowPublishedFootnoteNumbering) def.assignIndexDuringParsing(numberedFootnoteCount + 1)
+                else def.index = numberedFootnoteCount + 1
                 // Public maps may contain several labels pointing to the same
                 // definition. Preserve values.count semantics for those aliases.
                 numberedFootnoteCount += unnumberedFootnoteMultiplicity!!.remove(def)!!

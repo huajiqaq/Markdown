@@ -9,6 +9,7 @@
 - 只有根状态、源码后缀和跨块依赖均满足复用条件时才复用后缀；定义变动及未知全局后处理器需要完整刷新。
 - `LlmStreaming` 保持 16 字符合并阈值、换行提前提交、结束或取消刷新尾部。未闭合代码围栏的当前内容必须在每次已提交快照中可见。
 - 优化全量路径时同时检查增量重解析范围和分配增长，不把缓冲接收成本当作实际解析耗时。
+- Flavour 在构建阶段修改 AST；发布后拒绝外部写入。`DocumentPublication` 提供版本及根区间替换，稳定块使用独立于源码位置的 `persistentId`。局部转换实现 `BlockPostProcessor.processBlock`，不能改写已发布前缀或全局定义；调用方不负责维护版本或变更范围。
 - 详细算法、复杂度边界及历史测量见 [INCREMENTAL_PARSING.md](INCREMENTAL_PARSING.md)；语法支持清单见 [PARSER_COVERAGE_ANALYSIS.md](PARSER_COVERAGE_ANALYSIS.md)。
 
 ## 常规验证
@@ -35,6 +36,7 @@ Web 命令检查公共测试的可编译性，不代表已经在浏览器执行�
 - `RootFenceAppendContractTest`、`StreamingTailWorkContractTest`：开放围栏追加与保守回退、修复内容及惰性边界。
 - `GrowingBlockAllocationScalingTest`：连续 512 / 4,096 次追加的累计分配增长；主动读取每次完整 String 的输出成本单独测量。
 - `IncrementalCostBoundaryContractTest`、`IncrementalPositionedEditScalingTest`：绝对坐标后缀平移、定义失效、超长围栏关闭及定位节点等长编辑的分配增长。
+- `DocumentPublicationContractTest`、`PublishedAstMutationContractTest`：提交版本、块替换、插件写入阶段及集合／懒解析的封存边界。
 
 ## 极端输入压力测试
 
