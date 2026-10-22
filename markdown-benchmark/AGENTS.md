@@ -37,7 +37,7 @@ Before justified budget maintenance, collect at least three same-environment rep
 JDK, OS image, CPU class and power mode, inspect profiles/traces, and explain the affected budget.
 A single noisy run is insufficient; preserve tolerance for shared-runner variance.
 
-Run benchmark tasks serially. Gradle orders the gate, full-parse, failed-inline and growing-block
+Run benchmark tasks serially. Gradle orders gate, full-parse, failed-inline, SampleTime and growing-block
 suites when requested together; separate invocations must not overlap. Do not disable JMH's global
 lock or run competing benchmark processes on the same machine.
 

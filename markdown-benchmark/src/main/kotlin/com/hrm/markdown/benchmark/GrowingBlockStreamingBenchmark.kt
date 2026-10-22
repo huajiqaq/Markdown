@@ -2,8 +2,11 @@ package com.hrm.markdown.benchmark
 
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.ast.FencedCodeBlock
+import com.hrm.markdown.parser.ast.ListBlock
+import com.hrm.markdown.parser.ast.Table
 import com.hrm.markdown.parser.flavour.CommonMarkFlavour
 import com.hrm.markdown.parser.flavour.ExtendedFlavour
+import com.hrm.markdown.parser.flavour.GFMFlavour
 import com.hrm.markdown.parser.flavour.MarkdownFlavour
 import com.sun.management.ThreadMXBean
 import java.lang.management.ManagementFactory
@@ -135,6 +138,12 @@ private fun runGrowingBlockTrial(
     batch.add(batchNanos, allocationDifference(batchBytesBefore, allocatedBytes()))
     // Result consumption and correctness checks are outside all measured envelopes.
     check(parser.currentText() == source)
+    if (source.startsWith(GROWING_TABLE_PREFIX)) {
+        check(finalDocument.children.any { it is Table }) { "The table workload must actually parse as a table" }
+    }
+    if (source.startsWith("- item with ")) {
+        check(finalDocument.children.any { it is ListBlock }) { "The list workload must actually parse as a list" }
+    }
     (finalDocument.children.singleOrNull() as? FencedCodeBlock)?.let { code ->
         val body = source.substringAfter('\n')
         check(code.literal == if (body.endsWith('\n')) body else "$body\n")
@@ -162,12 +171,20 @@ private fun printGrowingSamples(prefix: String, operation: String, samples: List
 
 private fun growingNumber(value: Double) = String.format(Locale.ROOT, "%.3f", value)
 
+private const val GROWING_TABLE_PREFIX = "| A | B |\n|---|---|\n"
+
 private fun buildGrowingBlock(shape: String, chars: Int): String {
-    val prefix = if (shape == "open-fence") "```text\n" else ""
+    val prefix = when (shape) {
+        "open-fence" -> "```text\n"
+        "long-table" -> GROWING_TABLE_PREFIX
+        else -> ""
+    }
     val fragment = when (shape) {
         "single-line" -> "ordinary text "
         "multiline-paragraph" -> "ordinary paragraph line\n"
         "open-fence" -> "value 0123456789\n"
+        "long-list" -> "- item with **value**\n"
+        "long-table" -> "| value | **text** |\n"
         else -> error("Unknown growing block shape: $shape")
     }
     return buildString(chars) {
@@ -205,18 +222,23 @@ private data class GrowingBlockOptions(
                 chunkChars = int("--chunk", 8).also { require(it > 0) },
                 coalesceChars = int("--coalesce", 16).also { require(it >= 0) },
                 shapes = strings("--shapes", "single-line,multiline-paragraph,open-fence").also {
-                    require(it.all { shape -> shape in setOf("single-line", "multiline-paragraph", "open-fence") })
+                    require(it.all { shape -> shape in setOf("single-line", "multiline-paragraph", "open-fence", "long-list", "long-table") })
                 },
                 flavours = strings("--flavours", "commonmark,extended").map {
                     it to when (it) {
                         "commonmark" -> CommonMarkFlavour
+                        "gfm" -> GFMFlavour
                         "extended" -> ExtendedFlavour
                         else -> error("Unknown flavour: $it")
                     }
                 },
                 materialize = strings("--materialize", "none,commit").also { require(it.all { mode -> mode == "none" || mode == "commit" }) },
                 revision = values["--revision"] ?: "unrecorded",
-            )
+            ).also { options ->
+                require("long-table" !in options.shapes || options.flavours.none { it.second === CommonMarkFlavour }) {
+                    "long-table requires --flavours gfm,extended (CommonMark does not support tables)"
+                }
+            }
         }
     }
 }

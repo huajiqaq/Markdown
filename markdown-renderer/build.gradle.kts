@@ -89,6 +89,35 @@ kotlin {
     }
 }
 
+// Opt-in benchmark compiled with the JVM test friend path. It never runs as a JUnit test
+// and calls the actual render compiler without creating a window or measuring layout.
+val renderCompilerBenchmarkCompilation =
+    (kotlin.targets.getByName("jvm") as org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTarget)
+        .compilations.getByName("test")
+
+tasks.register<JavaExec>("renderCompilerScalingBenchmark") {
+    group = "benchmark"
+    description = "Measures committed parser updates and the real render compiler at increasing stable-prefix sizes."
+    dependsOn("jvmTestClasses")
+    classpath = files(
+        renderCompilerBenchmarkCompilation.output.allOutputs,
+        renderCompilerBenchmarkCompilation.runtimeDependencyFiles,
+    )
+    mainClass.set("com.hrm.markdown.renderer.internal.core.compile.RenderCompilerScalingBenchmarkKt")
+    javaLauncher.set(project.extensions.getByType<org.gradle.jvm.toolchain.JavaToolchainService>().launcherFor {
+        languageVersion.set(JavaLanguageVersion.of(21))
+    })
+    jvmArgs("-Xms256m", "-Xmx512m")
+    mustRunAfter(
+        ":markdown-benchmark:performanceGate",
+        ":markdown-benchmark:fullParsingBenchmark",
+        ":markdown-benchmark:incrementalScalingBenchmark",
+        ":markdown-benchmark:failedInlineScalingBenchmark",
+        ":markdown-benchmark:parserCallSampleTimeBenchmark",
+        ":markdown-benchmark:growingBlockStreamingBenchmark",
+    )
+}
+
 mavenPublishing {
     publishToMavenCentral(true)
 

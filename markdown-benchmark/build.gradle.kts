@@ -184,10 +184,31 @@ tasks.register<JavaExec>("growingBlockStreamingBenchmark") {
     jvmArgs("-Xms256m", "-Xmx512m")
 }
 
+tasks.register<JavaExec>("parserCallSampleTimeBenchmark") {
+    group = "benchmark"
+    description = "Samples individual fixed-size parser-call latency, with fixture work outside the sampled interval."
+    dependsOn("mainBenchmarkCompile", tasks.named("classes"))
+    classpath = sourceSets["main"].runtimeClasspath +
+        files(performanceGateGeneratedClasses, performanceGateGeneratedResources)
+    mainClass.set("org.openjdk.jmh.Main")
+    val results = layout.buildDirectory.file("reports/parser-call-sample-time/results.json")
+    // Invocation fixtures restore size/AST state; their allocations cannot be attributed to parserCall.
+    // Keep this a latency-only suite: the historical allocation gate remains separate and unchanged.
+    args("com.hrm.markdown.benchmark.ParserCallSampleTimeBenchmark.*", "-bm", "sample", "-tu", "us",
+        "-rf", "json", "-rff", results.get().asFile.absolutePath)
+    providers.gradleProperty("sampleTimeParagraphs").orNull?.let { args("-p", "paragraphs=$it") }
+    providers.gradleProperty("sampleTimeOperations").orNull?.let { args("-p", "operation=$it") }
+    providers.gradleProperty("sampleTimeExistingAst").orNull?.let { args("-p", "existingAst=$it") }
+    doFirst { results.get().asFile.parentFile.mkdirs() }
+}
+
 // Gradle may schedule independent JavaExec tasks concurrently. Keep measurements on one
 // machine sequential, without making an individual suite depend on running the others.
 tasks.named("fullParsingBenchmark") { mustRunAfter("performanceGate") }
 tasks.named("failedInlineScalingBenchmark") { mustRunAfter("performanceGate", "fullParsingBenchmark") }
-tasks.named("growingBlockStreamingBenchmark") {
+tasks.named("parserCallSampleTimeBenchmark") {
     mustRunAfter("performanceGate", "fullParsingBenchmark", "failedInlineScalingBenchmark")
+}
+tasks.named("growingBlockStreamingBenchmark") {
+    mustRunAfter("performanceGate", "fullParsingBenchmark", "failedInlineScalingBenchmark", "parserCallSampleTimeBenchmark")
 }

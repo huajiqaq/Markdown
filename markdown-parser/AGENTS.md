@@ -34,6 +34,7 @@ Web 命令检查公共测试的可编译性，不代表已经在浏览器执行�
 - `SourceTextChunkedLineTest`、`LazyFencedCodeLiteralTest`：长行片段、历史源码、EOF 及延迟正文公开读写。
 - `RootFenceAppendContractTest`、`StreamingTailWorkContractTest`：开放围栏追加与保守回退、修复内容及惰性边界。
 - `GrowingBlockAllocationScalingTest`：连续 512 / 4,096 次追加的累计分配增长；主动读取每次完整 String 的输出成本单独测量。
+- `IncrementalCostBoundaryContractTest`、`IncrementalPositionedEditScalingTest`：绝对坐标后缀平移、定义失效、超长围栏关闭及定位节点等长编辑的分配增长。
 
 ## 极端输入压力测试
 
