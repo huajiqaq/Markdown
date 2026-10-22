@@ -4,6 +4,8 @@ import com.hrm.markdown.parser.SourceRange
 import com.hrm.markdown.parser.LineRange
 import kotlin.concurrent.Volatile
 
+private val EMPTY_NODE_LINE_RANGE = LineRange(0, 0)
+
 /**
  * 所有 AST 节点的基类。
  * 节点通过父子关系形成树结构。
@@ -15,7 +17,7 @@ import kotlin.concurrent.Volatile
 sealed class Node {
     var sourceRange: SourceRange = SourceRange.EMPTY
         set(value) { checkMutation(); field = value }
-    var lineRange: LineRange = LineRange(0, 0)
+    var lineRange: LineRange = EMPTY_NODE_LINE_RANGE
         set(value) { checkMutation(); field = value }
     /** Stable within one parser lineage, independent of source coordinates. */
     var persistentId: Long = 0L
@@ -62,7 +64,7 @@ sealed class Node {
     }
 
     /** Lazy parsing may populate this node, without granting writes to published siblings. */
-    internal fun <T> withLocalMutation(action: () -> T): T {
+    internal inline fun <T> withLocalMutation(action: () -> T): T {
         enterSubtreeMutation()
         try { return action() } finally { leaveSubtreeMutation() }
     }
@@ -86,7 +88,8 @@ sealed class Node {
     }
 
     internal fun sealAttachedChild(child: Node) {
-        if (!hasLocalMutationPermit) mutationOwner?.let(child::seal)
+        val owner = mutationOwner
+        if (owner != null && !hasLocalMutationPermit) child.seal(owner)
     }
 
     /**
@@ -117,26 +120,26 @@ sealed class Node {
  * 通过 [setLazyInlineContent] 设置延迟解析内容，首次访问 [children] 时自动触发。
  */
 sealed class ContainerNode : Node() {
-    private var _children: MutableList<Node> = mutableListOf()
-    private var childrenView: List<Node> = immutableListView(_children)
+    private var _children: MutableList<Node>? = null
+    private var childrenView: List<Node>? = null
     private var indexedChildren: List<Node>? = null
-    private val childList: List<Node> get() = indexedChildren ?: childrenView
+    private val childList: List<Node> get() = indexedChildren ?: _children ?: emptyList()
 
     /** Publish a persistent block index without copying every root child. */
     internal fun installIndexedChildren(children: List<Node>) {
         checkMutation()
-        _children = mutableListOf()
-        childrenView = immutableListView(_children)
-        indexedChildren = immutableListView(children)
+        _children = null
+        childrenView = null
+        indexedChildren = children
     }
 
     private fun writableChildren(): MutableList<Node> {
         indexedChildren?.let {
             _children = it.toMutableList()
-            childrenView = immutableListView(_children)
+            childrenView = null
             indexedChildren = null
         }
-        return _children
+        return _children ?: mutableListOf<Node>().also { _children = it }
     }
 
     /**
@@ -165,7 +168,9 @@ sealed class ContainerNode : Node() {
     val children: List<Node>
         get() {
             ensureInlineParsed()
-            return childList
+            return childrenView ?: immutableListView(indexedChildren ?: writableChildren()).also {
+                childrenView = it
+            }
         }
 
     /**
@@ -232,7 +237,8 @@ sealed class ContainerNode : Node() {
                 } finally {
                     parsingInlineContent = false
                     if (!hasLocalMutationPermit) {
-                        mutationOwner?.let { owner -> forEachMaterializedChild { it.seal(owner) } }
+                        val currentOwner = mutationOwner
+                        if (currentOwner != null) forEachMaterializedChild { it.seal(currentOwner) }
                     }
                 }
             }
@@ -282,20 +288,20 @@ sealed class ContainerNode : Node() {
 
     fun replaceChildren(startIndex: Int, endIndex: Int, newChildren: List<Node>) {
         checkMutation()
-        newChildren.forEach(::requireBlockOrInlineChild)
+        for (child in newChildren) requireBlockOrInlineChild(child)
         val children = writableChildren()
         for (i in startIndex until endIndex) children[i].parent = null
         children.subList(startIndex, endIndex).clear()
         newChildren.forEach { it.parent = this }
         children.addAll(startIndex, newChildren)
-        newChildren.forEach(::sealAttachedChild)
+        for (child in newChildren) sealAttachedChild(child)
     }
 
     fun clearChildren() {
         checkMutation()
         childList.forEach { it.parent = null }
-        _children = mutableListOf()
-        childrenView = immutableListView(_children)
+        _children = null
+        childrenView = null
         indexedChildren = null
         // 同时清除 lazy 状态，避免 clear 后重新触发旧的 lazy 解析
         _lazyInlineContent = null
@@ -316,7 +322,18 @@ sealed class ContainerNode : Node() {
      * [children]，会意外把整个复用子树的行内节点提前解析出来。
      */
     internal inline fun forEachMaterializedChild(action: (Node) -> Unit) {
-        childList.forEach(action)
+        val indexed = indexedChildren
+        if (indexed != null) {
+            // The persistent root index has a linear iterator; indexed reads would cost O(log N).
+            for (child in indexed) action(child)
+        } else {
+            // Builder child storage is an ArrayList. Avoid both a public wrapper and an iterator
+            // for the frequent metadata/sealing walks, including untouched lazy containers.
+            val materialized = _children ?: return
+            var index = 0
+            val size = materialized.size
+            while (index < size) action(materialized[index++])
+        }
     }
 
     /** Returns a mutation-safe snapshot without triggering delayed inline parsing. */

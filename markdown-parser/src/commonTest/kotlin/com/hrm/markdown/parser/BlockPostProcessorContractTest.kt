@@ -12,6 +12,30 @@ import kotlin.test.*
 
 class BlockPostProcessorContractTest {
     @Test
+    fun should_rejectCapturedPublishedOutputBeforeReparenting_when_aBlockCallbackReturnsTheStablePrefix() {
+        var captured: Paragraph? = null
+        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
+            override val postProcessors = listOf(BlockPostProcessor { block -> captured ?: block })
+        }
+        val parser = MarkdownParser(flavour)
+        val source = "prefix\n\ntail"
+        val initial = parser.parse(source)
+        val prefix = initial.children.first() as Paragraph
+        captured = prefix
+        val prefixId = prefix.persistentId
+        val publication = assertNotNull(initial.publication)
+
+        assertFailsWith<IllegalStateException> { parser.insert(source.length, "!") }
+        assertSame(initial, prefix.parent)
+        assertSame(prefix, initial.children.first())
+        assertEquals("prefix", prefix.rawContent)
+        assertEquals(prefixId, prefix.persistentId)
+        assertTrue(publication.isCurrent)
+        assertEquals(initial.children.size, initial.children.map { it.persistentId }.toSet().size)
+        assertFailsWith<IllegalStateException> { prefix.rawContent = "escape" }
+    }
+
+    @Test
     fun should_transformOnlyChangedBlocksAndProtectRetainedNodes_when_stablePrefixGrows() {
         for (prefixSize in listOf(16, 4096)) {
             var visitedParagraphs = 0

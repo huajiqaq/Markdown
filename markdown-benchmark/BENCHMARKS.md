@@ -204,3 +204,49 @@ Final verification: 1,070 JVM tests and eight isolated stress tests pass without
 renderer common tests compile for JS/Wasm, and parser sources compile for Android and both iOS arm64
 targets. These platform compilations are not browser or device test execution. The full-parse JMH suite
 also completes; no performance budget is relaxed.
+
+### Publication allocation follow-up
+
+Baseline `4125a99` versus `4125a99-plus-allocation-final`, same JDK 21.0.10 and macOS/aarch64
+machine. Frozen parser artifacts use the same harness and gate arguments: five 500 ms warmups,
+twenty 300 ms measurements, one fork, AverageTime, GC allocation and peak-heap profilers.
+Three fresh processes per revision run serially in baseline/candidate, candidate/baseline,
+baseline/candidate order. Per-process allocation ranges use decimal MB/op; reductions compare
+the corresponding process pairs, rather than unrelated range endpoints.
+
+| Scenario | Baseline MB/op | Candidate MB/op | Paired allocation reduction |
+|---|---|---|---|
+| Full parse | 3.188–3.203 | 2.919–2.950 | 7.5%–8.6% |
+| Inline-heavy, lazy inlines | 0.6171–0.6172 | 0.5589–0.5750 | 6.8%–9.4% |
+| Streaming batch, coalesce 16 | 23.137–23.289 | 19.612–19.675 | 15.0%–15.8% |
+
+All six reports pass the unchanged historical budgets. Average-time ranges are respectively
+1,230.66–1,254.04 → 1,167.14–1,207.49 µs, 166.98–227.70 → 154.72–208.29 µs, and
+7,302.37–7,382.53 → 6,761.23–7,315.32 µs. Timing does not improve in every pair: the second
+inline-heavy pair is 166.98 → 208.29 µs. These short-run JIT/GC states support a repeatable
+allocation reduction, not a general latency improvement claim.
+
+The changes delay unused container/map storage and views, document authority and diagnostics;
+internal publication traverses changed regions directly. Copies reuse only owned immutable
+snapshots, retaining defensive copies for live views and mutable inputs. Public APIs are unchanged.
+Raw gate JSONs and artifact metadata are under `build/reports/publication-allocation/`.
+
+The JVM fixed-work allocation tests add ceilings for the exact fixtures: 1,000 lazy paragraphs
+including parser construction ≤2.75 MB, and 128 actual 16-character tail commits ≤2.20 MB for
+both lazy and displayed prefixes. Input/setup, initial display, final consumption and endStream
+are excluded. Every commit's revision and source length are verified. Final JVM observations are
+2,249,528 B and 1,981,560 B respectively; ceilings allow JIT variation and are not portable
+per-document limits. Existing growth checks and historical budgets are unchanged.
+
+Consumption is checked separately: the two-fork full-parse suite observes fully materialized inline
+allocation 1.833 → 1.619 MB/op (−11.7%) and table metadata 4.609 → 3.958 MB/op (−14.1%). Long code,
+long paragraphs and consecutive definitions remain slightly lower in allocation (0.02%–0.11%).
+These are one suite report per revision, not three paired timing comparisons. The real compiler
+follow-up still visits six nodes and compiles one root for a displayed 10,000-paragraph prefix;
+one process observes 6.042 µs median and 5,523 B/compile. Layout/Compose remain outside this measure.
+
+The final Gradle gate and full-parse suite both pass. Final verification includes 1,083 JVM tests,
+eight isolated stress checks, parser/renderer JS and Wasm test compilation, and parser Android/iOS
+arm64 compilation. No device or browser execution is implied. Corresponding reports, including
+`candidate-full.json`, `candidate-official-gate.json` and `candidate-compiler.csv`, are retained in
+`build/reports/publication-allocation/`.

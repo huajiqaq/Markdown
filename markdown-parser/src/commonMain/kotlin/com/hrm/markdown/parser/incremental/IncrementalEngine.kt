@@ -87,7 +87,7 @@ class IncrementalEngine(
 
     private var updatingDocument = false
 
-    private fun <T> mutateDocument(action: () -> T): T {
+    private inline fun <T> mutateDocument(action: () -> T): T {
         check(!updatingDocument) { "A parser callback cannot recursively update the same MarkdownParser" }
         updatingDocument = true
         try { return withDocumentMutation(_document, action) } finally { updatingDocument = false }
@@ -349,6 +349,9 @@ class IncrementalEngine(
                 val output = withoutDocumentMutation(previousDocument) {
                     withSubtreeMutation(block) {
                         processor.processBlock(block).also { output ->
+                            check(output == null || output.mutationOwner == null || output.hasLocalMutationPermit) {
+                                "BlockPostProcessor must return its input subtree or a new node, not another published block."
+                            }
                             if (output != null) materializeUntrustedContent(output)
                         }
                     }
@@ -598,17 +601,19 @@ class IncrementalEngine(
         val doc = publishedDocument ?: Document(context.definitionContext)
         doc.inheritMutationOwner(_document)
         doc.installIndexedChildren(blocks.asNodeList())
-        newlyProcessed.forEachRegion { it.nodes.forEach { node -> node.attachToDocument(owner) } }
+        doc.persistentId = _document.persistentId.takeIf { splice != null && it != 0L } ?: nextPersistentId++
+        newlyProcessed.forEachRegion { region ->
+            region.nodes.forEach { node ->
+                node.attachToDocument(owner)
+                if (splice == null || node.persistentId == 0L) node.persistentId = nextPersistentId++
+            }
+        }
         owner.document = doc
         if (publishedDocument == null) setDocumentRanges(doc, source)
         if (runLint) pipeline.processors.filterIsInstance<LintingPostProcessor>().forEach { it.process(doc) }
         lintingProcessor?.let {
             if (pipeline.processors.none { processor -> processor === it }) it.process(doc)
             doc.diagnostics = it.result
-        }
-        doc.persistentId = _document.persistentId.takeIf { splice != null && it != 0L } ?: nextPersistentId++
-        newlyProcessed.forEachRegion { region ->
-            region.nodes.forEach { node -> if (splice == null || node.persistentId == 0L) node.persistentId = nextPersistentId++ }
         }
         doc.publication = DocumentPublication(
             lineageId = publicationLineage,
@@ -625,7 +630,11 @@ class IncrementalEngine(
         processedWith = pipeline.processors
         hasDisplayRepairs = _isStreaming
         rootFenceContinuation = captureRootFenceContinuation(pipeline, newlyProcessed)
-        doc.sealPublication(newlyProcessed.asNodeList())
+        // Walk the replacement regions directly: the public persistent List iterator uses
+        // a sequence coroutine and is unnecessary for this internal publication pass.
+        val mutationOwner = doc.publicationMutationOwner
+        newlyProcessed.forEachRegion { region -> region.nodes.forEach { it.seal(mutationOwner) } }
+        doc.sealPublication(emptyList())
     }
 
     private data class PublicationSplice(
@@ -644,6 +653,17 @@ class IncrementalEngine(
 
     /** Preserve a block's identity across edits that retain its syntax kind and start line. */
     private fun retainReplacementIdentities(previous: BlockIndex, replacement: BlockIndex) {
+        if (previous.nodeCount == 0 || replacement.nodeCount == 0) return
+        if (previous.nodeCount == 1 && replacement.nodeCount == 1) {
+            // Typing in a single tail block needs neither a line-to-list map nor boxed ID set.
+            val node = replacement.asNodeList()[0]
+            if (node.persistentId != 0L) return
+            val old = previous.asNodeList()[0]
+            if (old.lineRange.startLine == node.lineRange.startLine && old::class == node::class) {
+                node.persistentId = old.persistentId
+            }
+            return
+        }
         val oldNodes = mutableMapOf<Int, MutableList<Node>>()
         val assignedIds = mutableSetOf<Long>()
         replacement.forEachRegion { region ->

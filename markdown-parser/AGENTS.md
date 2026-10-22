@@ -37,6 +37,8 @@ Web 命令检查公共测试的可编译性，不代表已经在浏览器执行�
 - `GrowingBlockAllocationScalingTest`：连续 512 / 4,096 次追加的累计分配增长；主动读取每次完整 String 的输出成本单独测量。
 - `IncrementalCostBoundaryContractTest`、`IncrementalPositionedEditScalingTest`：绝对坐标后缀平移、定义失效、超长围栏关闭及定位节点等长编辑的分配增长。
 - `DocumentPublicationContractTest`、`PublishedAstMutationContractTest`：提交版本、块替换、插件写入阶段及集合／懒解析的封存边界。
+- `ContainerChildrenViewContractTest`、`AstCollectionPublicationOptimizationTest`：按需创建集合后，保留视图可见性、可变输入隔离、不可变快照复用及写入保护；JVM 并发测试检查集合视图与权限隔离。
+- `ParserPublicationAllocationBudgetTest`：1,000 段惰性全量解析，以及稳定前缀下 128 次真实尾部提交的固定分配上限；初始显示、最终消费及结束单独排除，并核对每次提交版本与源码长度。
 
 ## 极端输入压力测试
 

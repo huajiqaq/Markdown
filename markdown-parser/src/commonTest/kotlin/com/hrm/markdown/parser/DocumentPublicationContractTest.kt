@@ -17,11 +17,31 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class DocumentPublicationContractTest {
+    @Test
+    fun should_retainSingleBlockIdentityOnlyForMatchingSyntax_when_editsChangeOneRootBlock() {
+        val parser = MarkdownParser(CommonMarkFlavour)
+        val initial = parser.parse("text")
+        val documentId = initial.persistentId
+        val paragraphId = initial.children.single().persistentId
+        assertNotEquals(documentId, paragraphId)
+
+        val edited = parser.replace(0, 4, "next")
+        assertEquals(documentId, edited.persistentId)
+        assertEquals(paragraphId, edited.children.single().persistentId)
+
+        val heading = parser.replace(0, 4, "# next")
+        assertTrue(heading.children.single() is Heading)
+        assertNotEquals(paragraphId, heading.children.single().persistentId)
+        assertNotEquals(documentId, heading.children.single().persistentId)
+        assertFailsWith<IllegalStateException> { (heading.children.single() as Heading).level = 6 }
+    }
+
     @Test
     fun should_describeAnExactSpliceAndRetainBlockIdentities_when_replacingAnEqualLengthMiddleParagraph() {
         val parser = MarkdownParser(CommonMarkFlavour)

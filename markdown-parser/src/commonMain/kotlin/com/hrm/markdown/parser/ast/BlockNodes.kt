@@ -11,11 +11,16 @@ class Document internal constructor(internal val definitionContext: DefinitionCo
     /** The current committed view; historical rendering state is isolated in immutable IR. */
     var publication: DocumentPublication? = null
         internal set
-    internal var publicationMutationOwner: MutationOwner = MutationOwner()
-        private set
+    private var ownedMutationOwner: MutationOwner? = null
+    internal val publicationMutationOwner: MutationOwner
+        get() = ownedMutationOwner ?: MutationOwner().also { ownedMutationOwner = it }
 
     internal fun inheritMutationOwner(previous: Document) {
-        publicationMutationOwner = previous.publicationMutationOwner
+        ownedMutationOwner = previous.publicationMutationOwner
+    }
+
+    internal fun sealDiagnostics(owner: MutationOwner) {
+        diagnosticResult?.sealForDocument(owner)
     }
     /** 解析过程中收集的链接引用定义。 */
     val linkDefinitions: MutableMap<String, LinkReferenceDefinition> get() = definitionContext.links
@@ -33,8 +38,14 @@ class Document internal constructor(internal val definitionContext: DefinitionCo
      * 解析完成后此字段包含检测到的语法问题（错误、警告、建议）。
      * 默认为空结果（无诊断信息）。
      */
-    var diagnostics: DiagnosticResult = DiagnosticResult()
-        set(value) { checkMutation(); field = value }
+    private var diagnosticResult: DiagnosticResult? = null
+    var diagnostics: DiagnosticResult
+        get() = diagnosticResult ?: DiagnosticResult().also { result ->
+            // Empty diagnostics stay allocation-free until a caller actually requests them.
+            mutationOwner?.let { result.sealForDocument(it) }
+            diagnosticResult = result
+        }
+        set(value) { checkMutation(); diagnosticResult = value }
 
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitDocument(this)
 }
@@ -137,7 +148,7 @@ class FencedCodeBlock(
     fenceLength: Int = 3,
     fenceIndent: Int = 0,
     literal: String = "",
-    attributes: Attributes = Attributes(),
+    attributes: Attributes = emptyAstAttributes,
 ) : LeafNode() {
     var info: String = info
         set(value) { checkMutation(); field = value }
@@ -154,8 +165,8 @@ class FencedCodeBlock(
     var fenceIndent: Int = fenceIndent
         set(value) { checkMutation(); field = value }
 
-    var attributes: Attributes = attributes.copy(classes = immutableListCopy(attributes.classes), pairs = immutableMapCopy(attributes.pairs))
-        set(value) { checkMutation(); field = value.copy(classes = immutableListCopy(value.classes), pairs = immutableMapCopy(value.pairs)) }
+    var attributes: Attributes = immutableAttributesCopy(attributes)
+        set(value) { checkMutation(); field = immutableAttributesCopy(value) }
 
     private var literalValue: String = literal
     private var literalSource: (() -> String)? = null
@@ -743,7 +754,7 @@ internal class DefinitionContext {
         abbreviations.seal(owner)
     }
 
-    fun <T> withReadOnlyDefinitions(action: () -> T): T =
+    inline fun <T> withReadOnlyDefinitions(action: () -> T): T =
         links.withReadOnly { footnotes.withReadOnly { abbreviations.withReadOnly(action) } }
 
     // Called only after proving no definitions changed. Definition edits build a fresh context.
