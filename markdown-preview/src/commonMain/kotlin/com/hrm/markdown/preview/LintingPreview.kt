@@ -1,5 +1,7 @@
 package com.hrm.markdown.preview
 
+import com.hrm.markdown.parser.MarkdownParserConfig
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -256,7 +258,7 @@ internal val cjkPreviewGroups = listOf(
 @Composable
 private fun LintingDemo(markdown: String, description: String) {
     val parser = remember(markdown) {
-        MarkdownParser(enableLinting = true).also { it.parse(markdown) }
+        MarkdownParser(MarkdownParserConfig(enableLinting = true)).also { it.parse(markdown) }
     }
     val diagnostics = remember(parser) { parser.diagnostics }
 

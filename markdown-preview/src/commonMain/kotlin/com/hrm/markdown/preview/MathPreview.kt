@@ -5,7 +5,7 @@ import androidx.compose.ui.unit.sp
 import com.hrm.latex.renderer.model.LatexConfig
 import com.hrm.latex.renderer.model.LatexTheme
 import com.hrm.markdown.renderer.Markdown
-import com.hrm.markdown.renderer.MarkdownParserConfig
+import com.hrm.markdown.parser.MarkdownParserConfig
 import com.hrm.markdown.renderer.MarkdownDefaults
 
 private val issue31LongMathMarkdown = """

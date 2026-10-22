@@ -214,6 +214,10 @@ when a longer append-only input always preserves the complete previous transform
 declare `Unsupported` to explicitly require isolated full parses. The active mapping back to
 original source offsets is available through `LocalMarkdownSourceMap`.
 
+Treat plugins and transformers as configuration: reuse instances while their behavior stays the same,
+and provide new instances when it changes. Replacing only rendering callbacks preserves the parser
+session; replacing input transformers automatically refreshes parsing and source mappings.
+
 `DirectiveBlockRenderScope` and `DirectiveInlineRenderScope` are snapshot-based.
 Use `scope.directive` as the single structured entry point for directive data.
 For HTML export, `HtmlDirectiveFallback` and `HtmlInlineDirectiveFallback` also receive
@@ -282,7 +286,7 @@ import androidx.compose.ui.unit.dp
 import com.hrm.markdown.renderer.Markdown
 import com.hrm.markdown.renderer.MarkdownBlockSlot
 import com.hrm.markdown.renderer.MarkdownComponents
-import com.hrm.markdown.renderer.MarkdownParserConfig
+import com.hrm.markdown.parser.MarkdownParserConfig
 import com.hrm.markdown.renderer.MarkdownInteractions
 import com.hrm.markdown.renderer.MarkdownSoftBreakPolicy
 
@@ -454,7 +458,7 @@ Use `rememberMarkdownState()` to control scrolling and clear selection. Block in
 Enable once, catch problems everywhere:
 
 ```kotlin
-val parser = MarkdownParser(enableLinting = true)
+val parser = MarkdownParser(MarkdownParserConfig(enableLinting = true))
 val document = parser.parse(markdown)
 
 document.diagnostics.forEach { diagnostic ->
@@ -532,17 +536,36 @@ val doc = MarkdownParser().parse(input)
 val html = HtmlRenderer.renderMarkdown(input, flavour = CommonMarkFlavour)
 ```
 
+`MarkdownParserConfig` lives in `com.hrm.markdown.parser`. Share one configuration across the parser,
+Compose and HTML export:
+
+```kotlin
+import com.hrm.markdown.parser.MarkdownParserConfig
+
+val config = MarkdownParserConfig(flavour = GFMFlavour, enableLinting = true)
+val parser = MarkdownParser(config)
+val document = parser.parse(input)
+Markdown(markdown = input, parserConfig = config)
+val html = MarkdownHtml.render(input, parserConfig = config)
+```
+
+Configuration copies and protects the supplied emoji map; later changes to that map do not change an
+existing parser session. Built-in flavours are immutable configurations. Use `copy` to replace settings
+or `with` to append syntax starters or processors while retaining the other syntax settings.
 Custom block transformations receive and return a block; the library handles incremental updates:
 
 ```kotlin
-val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-    override val postProcessors = CommonMarkFlavour.postProcessors + BlockPostProcessor { block ->
-        if (block is Heading) block.level = minOf(block.level, 3)
-        block
-    }
-}
+val flavour = CommonMarkFlavour.with(BlockPostProcessor { block ->
+    if (block is Heading) block.level = minOf(block.level, 3)
+    block
+})
 val doc = MarkdownParser(flavour).parse(input)
 ```
+
+`BlockPostProcessor` transforms independent blocks, returning the input, a replacement or `null`.
+Use the separate `PostProcessor { document -> ... }` for document-wide transformations. Both run before
+publication; callers manage no revisions, changed ranges or caches. A configuration can be shared by
+independent parsers; stateful extension instances remain responsible for their own concurrency.
 
 ### Safe HTML in Compose
 

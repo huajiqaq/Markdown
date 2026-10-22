@@ -1,5 +1,6 @@
 package com.hrm.markdown.renderer
 
+import com.hrm.markdown.parser.MarkdownParserConfig
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -481,9 +482,7 @@ class MarkdownStreamingLifecycleTest {
                 barriers[HtmlRenderer().render(document)]?.blockOnce()
             }
         }
-        val flavour = object : MarkdownFlavour by ExtendedFlavour {
-            override val postProcessors = ExtendedFlavour.postProcessors + observer
-        }
+        val flavour = ExtendedFlavour.with(observer)
         return MarkdownParserConfig(flavour = flavour)
     }
 

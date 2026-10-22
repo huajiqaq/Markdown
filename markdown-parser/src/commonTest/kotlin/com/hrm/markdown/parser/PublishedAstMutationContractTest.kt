@@ -266,7 +266,11 @@ class PublishedAstMutationContractTest {
     fun should_rejectDocumentReplacements_when_blockExtensionReturnsARoot() {
         val document = Document().also { it.appendChild(Paragraph().also { paragraph -> paragraph.appendChild(Text("text")) }) }
         val processor = BlockPostProcessor { Document() }
-        val error = assertFailsWith<IllegalArgumentException> { processor.process(document) }
+        val error = assertFailsWith<IllegalArgumentException> {
+            com.hrm.markdown.parser.block.postprocessors.PostProcessorRegistry().apply {
+                register(processor)
+            }.processAll(document)
+        }
         assertTrue(error.message.orEmpty().contains("AST root"))
     }
 

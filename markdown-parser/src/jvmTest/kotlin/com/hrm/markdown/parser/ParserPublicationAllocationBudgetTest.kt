@@ -48,7 +48,7 @@ class ParserPublicationAllocationBudgetTest {
         val label = if (displayedPrefix) "tail-displayed-128" else "tail-lazy-128"
         assertBudget(label, TAIL_COMMIT_BUDGET) {
             val input = "$prefix\n\ntail"
-            val parser = MarkdownParser(CommonMarkFlavour, appendCoalesceThreshold = CHUNK.length)
+            val parser = MarkdownParser(MarkdownParserConfig(flavour = CommonMarkFlavour, appendCoalesceThreshold = CHUNK.length))
             parser.beginStream()
             val initial = parser.append(input)
             if (displayedPrefix) initial.children.forEach { (it as Paragraph).children }

@@ -1,5 +1,7 @@
 package com.hrm.markdown.benchmark
 
+import com.hrm.markdown.parser.MarkdownParserConfig
+
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.flavour.CommonMarkFlavour
 import com.hrm.markdown.parser.flavour.ExtendedFlavour
@@ -29,7 +31,7 @@ fun main(args: Array<String>) {
                 val costs = mutableListOf<Long>()
                 val allocations = mutableListOf<Long>()
                 repeat(warmups + iterations) { trial ->
-                    val parser = MarkdownParser(flavour, appendCoalesceThreshold = coalesceThreshold)
+                    val parser = MarkdownParser(MarkdownParserConfig(flavour = flavour, appendCoalesceThreshold = coalesceThreshold))
                     if (scenario == "append") {
                         parser.beginStream(); parser.append(input)
                     } else {

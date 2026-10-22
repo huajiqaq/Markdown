@@ -51,9 +51,9 @@ class ParserMutationIsolationTest {
             }
             block
         }
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-            override val postProcessors = listOf(processor)
-        }
+        val flavour = CommonMarkFlavour.copy(
+            postProcessors = listOf(processor)
+        )
         parser = MarkdownParser(flavour)
         parser.parse("prefix\n\ntail")
         attempt = true

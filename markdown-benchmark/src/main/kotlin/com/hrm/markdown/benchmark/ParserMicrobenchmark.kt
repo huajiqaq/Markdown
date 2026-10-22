@@ -1,5 +1,7 @@
 package com.hrm.markdown.benchmark
 
+import com.hrm.markdown.parser.MarkdownParserConfig
+
 import com.hrm.markdown.parser.MarkdownParser
 import kotlinx.benchmark.Benchmark
 import kotlinx.benchmark.BenchmarkMode
@@ -44,7 +46,7 @@ open class ParserMicrobenchmark {
     open fun inlineHeavyParse() = MarkdownParser().parse(inlineHeavyDocument)
 
     @Benchmark
-    open fun streamingAppendBatch() = MarkdownParser(appendCoalesceThreshold = 16).run {
+    open fun streamingAppendBatch() = MarkdownParser(MarkdownParserConfig(appendCoalesceThreshold = 16)).run {
         beginStream()
         streamingChunks.forEach(::append)
         endStream()

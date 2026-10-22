@@ -1,5 +1,6 @@
 package com.hrm.markdown.renderer.internal.core.compile
 
+import com.hrm.markdown.parser.MarkdownParserConfig
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.ast.CustomContainer
 import com.hrm.markdown.parser.ast.DirectiveBlock
@@ -40,7 +41,7 @@ class RenderCompileSessionTest {
     fun should_compile_only_the_published_tail_and_keep_old_ir_unchanged() {
         var previousVisitedCount: Int? = null
         for (prefixSize in listOf(100, 1000, 10000)) {
-            val parser = MarkdownParser(appendCoalesceThreshold = 0)
+            val parser = MarkdownParser()
             parser.beginStream()
             val initial = parser.append(buildString {
                 repeat(prefixSize) { append("stable **bold** with [link](/target)\n\n") }
@@ -69,7 +70,7 @@ class RenderCompileSessionTest {
 
     @Test
     fun should_reuse_the_same_model_for_buffered_receives() {
-        val parser = MarkdownParser(appendCoalesceThreshold = 16)
+        val parser = MarkdownParser(MarkdownParserConfig(appendCoalesceThreshold = 16))
         parser.beginStream()
         val session = RenderCompileSession()
         val before = session.compile(parser.append("stable\n\ntail tail tail tail"), environment)
@@ -80,7 +81,7 @@ class RenderCompileSessionTest {
 
     @Test
     fun should_fall_back_after_skipped_revisions_changed_environment_or_lineage() {
-        val parser = MarkdownParser(appendCoalesceThreshold = 0)
+        val parser = MarkdownParser()
         parser.beginStream()
         val session = RenderCompileSession()
         session.compile(parser.append("stable\n\ntail"), environment)
@@ -89,7 +90,7 @@ class RenderCompileSessionTest {
         assertEquals(DefaultRenderModelCompiler.compile(document, environment), session.compile(document, environment))
         assertTrue(session.lastUpdate.coldRebuild)
         val changedEnvironment = RenderCompileEnvironment(
-            config = RenderConfigSnapshot(softBreakPolicy = MarkdownSoftBreakPolicy.LineBreak),
+            softBreakPolicy = MarkdownSoftBreakPolicy.LineBreak,
         )
         assertEquals(DefaultRenderModelCompiler.compile(document, changedEnvironment), session.compile(document, changedEnvironment))
         assertTrue(session.lastUpdate.coldRebuild)
@@ -101,10 +102,10 @@ class RenderCompileSessionTest {
 
     @Test
     fun should_rebuild_global_heading_dependencies_and_match_cold_compilation() {
-        val parser = MarkdownParser(appendCoalesceThreshold = 0)
+        val parser = MarkdownParser()
         parser.beginStream()
         val session = RenderCompileSession()
-        val numbered = RenderCompileEnvironment(config = RenderConfigSnapshot(enableHeadingNumbering = true))
+        val numbered = RenderCompileEnvironment(enableHeadingNumbering = true)
         session.compile(parser.append("# First\n\ntext\n\n"), numbered)
         val document = parser.append("## Second\n")
         assertEquals(DefaultRenderModelCompiler.compile(document, numbered), session.compile(document, numbered))
@@ -118,7 +119,7 @@ class RenderCompileSessionTest {
 
     @Test
     fun should_reject_expired_ast_views_and_preserve_their_compiled_ir() {
-        val parser = MarkdownParser(appendCoalesceThreshold = 0)
+        val parser = MarkdownParser()
         parser.beginStream()
         val session = RenderCompileSession()
         val previousView = parser.append("```text\nold body\n")

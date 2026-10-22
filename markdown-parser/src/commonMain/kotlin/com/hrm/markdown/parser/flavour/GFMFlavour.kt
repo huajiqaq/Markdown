@@ -1,7 +1,5 @@
 package com.hrm.markdown.parser.flavour
 
-import com.hrm.markdown.parser.block.postprocessors.PostProcessor
-import com.hrm.markdown.parser.block.starters.BlockStarter
 import com.hrm.markdown.parser.block.starters.TableStarter
 import com.hrm.markdown.parser.block.starters.ThematicBreakStarter
 
@@ -41,7 +39,7 @@ import com.hrm.markdown.parser.block.starters.ThematicBreakStarter
  * """.trimIndent())
  * ```
  */
-object GFMFlavour : MarkdownFlavour {
+val GFMFlavour: MarkdownFlavour = MarkdownFlavour(
 
     /**
      * GFM 块级解析器。
@@ -51,7 +49,7 @@ object GFMFlavour : MarkdownFlavour {
      *
      * GFM spec 0.29 is based on CommonMark 0.29 and retains indented code blocks.
      */
-    override val blockStarters: List<BlockStarter> = buildList {
+    blockStarters = buildList {
         // CommonMark 解析器（保留所有 starters，包括缩进代码块）
         addAll(CommonMarkFlavour.blockStarters)
 
@@ -64,7 +62,7 @@ object GFMFlavour : MarkdownFlavour {
         } else {
             add(TableStarter())
         }
-    }
+    },
 
     /**
      * GFM 后处理器（空列表）。
@@ -72,13 +70,13 @@ object GFMFlavour : MarkdownFlavour {
      * GFM 的任务列表、删除线等特性在解析阶段处理，
      * 不需要额外的后处理器。
      */
-    override val postProcessors: List<PostProcessor> = emptyList()
+    postProcessors = emptyList(),
 
     /**
      * GFM 0.29 collapses redundant nested emphasis.
      * E.g. `****foo****` renders as `<strong>foo</strong>` not `<strong><strong>foo</strong></strong>`.
      */
-    override val enableEmphasisCoalescing: Boolean = true
+    enableEmphasisCoalescing = true,
 
     /**
      * Disable GFM bare-URL autolinks for spec compliance.
@@ -87,7 +85,7 @@ object GFMFlavour : MarkdownFlavour {
      * which explicitly states that bare URLs (without angle brackets) are NOT autolinks.
      * Extended autolink detection (bare http://, www., email) is available via ExtendedFlavour.
      */
-    override val enableGfmAutolinks: Boolean = false
+    enableGfmAutolinks = false,
 
     /**
      * Disable extended inline syntax (highlight ==, insert ++, superscript ^, etc.)
@@ -97,6 +95,6 @@ object GFMFlavour : MarkdownFlavour {
      * Extended inline features like ==highlight== interfere with spec tests
      * (e.g., `====` being parsed as `<mark></mark>` instead of `<p>====</p>`).
      */
-    override val enableExtendedInline: Boolean = false
+    enableExtendedInline = false,
 
-}
+)

@@ -27,9 +27,9 @@ class FlavourPublicationIsolationTest {
                 return null
             }
         }
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-            override val blockStarters = listOf(starter) + CommonMarkFlavour.blockStarters
-        }
+        val flavour = CommonMarkFlavour.copy(
+            blockStarters = listOf(starter) + CommonMarkFlavour.blockStarters
+        )
         val parser = MarkdownParser(flavour)
         val source = "prefix\n\ntail"
         val initial = parser.parse(source)
@@ -54,9 +54,9 @@ class FlavourPublicationIsolationTest {
                 hiddenHeading(block.rawContent.orEmpty())
             } else block
         }
-        val flavour = object : MarkdownFlavour by ExtendedFlavour {
-            override val postProcessors = listOf(processor) + ExtendedFlavour.postProcessors
-        }
+        val flavour = ExtendedFlavour.copy(
+            postProcessors = listOf(processor) + ExtendedFlavour.postProcessors
+        )
         val parser = MarkdownParser(flavour)
         val source = "[TOC]\n\nprefix\n\ntail"
         parser.parse(source)
@@ -83,9 +83,9 @@ class FlavourPublicationIsolationTest {
                 }
             }
         }
-        val flavour = object : MarkdownFlavour by ExtendedFlavour {
-            override val blockStarters = listOf(starter) + ExtendedFlavour.blockStarters
-        }
+        val flavour = ExtendedFlavour.copy(
+            blockStarters = listOf(starter) + ExtendedFlavour.blockStarters
+        )
         val parser = MarkdownParser(flavour)
         val source = "[TOC]\n\nprefix\n\n@hidden tail"
         parser.parse(source)

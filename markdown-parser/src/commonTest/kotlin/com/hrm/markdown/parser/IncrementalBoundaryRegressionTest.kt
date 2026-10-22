@@ -68,7 +68,7 @@ class IncrementalBoundaryRegressionTest {
 
     @Test
     fun should_useUpdatedBoundariesAndDiagnostics_when_appendingAfterEditRemovesEarlierBlocks() {
-        val parser = MarkdownParser(enableLinting = true)
+        val parser = MarkdownParser(MarkdownParserConfig(enableLinting = true))
         parser.parse("a\n\nb\n\n```\nc\n```")
         assertEditedDocument(parser, "```\nc\n```", parser.delete(0, 6))
         assertEditedDocument(parser, "```\nc\n``` tail", parser.applyEdit(EditOperation.Append(" tail")))
@@ -81,7 +81,7 @@ class IncrementalBoundaryRegressionTest {
 
     @Test
     fun should_resolveShadowedDefinition_when_firstMaterializedDefinitionIsChangedThenDeleted() {
-        val parser = MarkdownParser(enableLinting = true)
+        val parser = MarkdownParser(MarkdownParserConfig(enableLinting = true))
         val original = "[read][ref]\n\n[ref]: /old\n\n[ref]: /fallback\n"
         parser.parse(original).semanticSnapshot()
         val offset = original.indexOf("/old")
@@ -98,7 +98,7 @@ class IncrementalBoundaryRegressionTest {
     @Test
     fun should_renumberRemainingFootnotes_when_editRemovesAPreviouslyMaterializedReference() {
         val source = "First[^a], then[^b].\n\n[^a]: Alpha\n\n[^b]: Beta"
-        val parser = MarkdownParser(enableLinting = true)
+        val parser = MarkdownParser(MarkdownParserConfig(enableLinting = true))
         parser.parse(source).semanticSnapshot()
         val offset = source.indexOf("[^a]")
         assertEditedDocument(parser, source.removeRange(offset, offset + 4), parser.delete(offset, 4))
@@ -182,8 +182,8 @@ class IncrementalBoundaryRegressionTest {
                 return null
             }
         }
-        val flavour = object : MarkdownFlavour by ExtendedFlavour {
-            override val blockStarters = listOf(observer) + ExtendedFlavour.blockStarters
-        }
+        val flavour = ExtendedFlavour.copy(
+            blockStarters = listOf(observer) + ExtendedFlavour.blockStarters
+        )
     }
 }

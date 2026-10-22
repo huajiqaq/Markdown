@@ -20,7 +20,7 @@ fun main(args: Array<String>) {
         ?.apply { isThreadAllocatedMemoryEnabled = true }
     val threadId = Thread.currentThread().threadId()
     val allocatedBytes = { allocationBean?.getThreadAllocatedBytes(threadId) ?: -1L }
-    val environment = RenderCompileEnvironment(config = RenderConfigSnapshot(streaming = true))
+    val environment = RenderCompileEnvironment()
 
     println("# benchmark=actual-render-compiler; revision=${options.revision.replace('\n', ' ')}")
     println("# java=${System.getProperty("java.runtime.version")}; vm=${runtime.vmName}; args=${runtime.inputArguments.joinToString(" ")}")
@@ -46,7 +46,7 @@ fun main(args: Array<String>) {
                 RenderCompilerSamples(options.iterations * options.updates)
             }
             repeat(options.warmups + options.iterations) { trial ->
-                val parser = MarkdownParser(CommonMarkFlavour, appendCoalesceThreshold = 0)
+                val parser = MarkdownParser(CommonMarkFlavour)
                 val session = RenderCompileSession()
                 fun compile(document: com.hrm.markdown.parser.ast.Document) =
                     if (compiler == "incremental") session.compile(document, environment)

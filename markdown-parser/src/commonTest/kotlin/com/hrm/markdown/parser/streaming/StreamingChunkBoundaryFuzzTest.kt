@@ -1,5 +1,7 @@
 package com.hrm.markdown.parser.streaming
 
+import com.hrm.markdown.parser.MarkdownParserConfig
+
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.normalizedTestInput
 import com.hrm.markdown.parser.ast.Document
@@ -117,7 +119,7 @@ class StreamingChunkBoundaryFuzzTest {
     }
 
     private fun assertEveryCommittedPrefix(label: String, source: String, chunks: List<String>, threshold: Int) {
-        val parser = MarkdownParser(appendCoalesceThreshold = threshold)
+        val parser = MarkdownParser(MarkdownParserConfig(appendCoalesceThreshold = threshold))
         parser.beginStream()
         val prefix = StringBuilder()
         var normalized = ""
@@ -199,7 +201,7 @@ class StreamingChunkBoundaryFuzzTest {
         for ((label, source) in seeds) {
             val reference = MarkdownParser().apply { beginStream(); append(source) }
             val expected = reference.document.semanticSnapshot()
-            val buffered = MarkdownParser(appendCoalesceThreshold = 16)
+            val buffered = MarkdownParser(MarkdownParserConfig(appendCoalesceThreshold = 16))
             buffered.beginStream()
             for (character in source) {
                 buffered.append(character.toString())

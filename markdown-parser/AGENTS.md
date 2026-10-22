@@ -3,6 +3,13 @@
 同时遵循[仓库 AGENTS.md](../AGENTS.md)。本模块负责 Markdown 到 AST 的块级、行内、方言、
 增量与诊断逻辑，保持无 UI 依赖。新增语法优先使用 `BlockStarter`、`PostProcessor` 或方言配置。
 
+## 配置与扩展
+
+- `MarkdownParserConfig` 是解析器、Compose 与 HTML 的唯一解析配置，构造时封存 Emoji 映射；通过 `copy` 派生，通过 `newParser()` 创建独立会话。
+- `MarkdownFlavour` 是不可变配置，使用 `copy/with` 保留并扩展现有设置；每个实例惰性持有编译计划，不维护全局可变缓存或会话内注册表。
+- `BlockPostProcessor` 与全文 `PostProcessor` 是并列接口，不能由同一实例同时实现。局部扩展无需声明脏区、版本或位置依赖。
+- 引擎与独立完整解析对照共用 `BlockTransformRunner`；撤销外层权限后执行外部回调，检查输出再继承元数据、封存与挂接，禁止重复实现转换顺序。
+
 ## 增量与流式约束
 
 - 完整解析、编辑和流式追加共用检查点与持久化索引；哈希不承担解析边界正确性的证明。
@@ -39,6 +46,7 @@ Web 命令检查公共测试的可编译性，不代表已经在浏览器执行�
 - `DocumentPublicationContractTest`、`PublishedAstMutationContractTest`：提交版本、块替换、插件写入阶段及集合／懒解析的封存边界。
 - `ContainerChildrenViewContractTest`、`AstCollectionPublicationOptimizationTest`：按需创建集合后，保留视图可见性、可变输入隔离、不可变快照复用及写入保护；JVM 并发测试检查集合视图与权限隔离。
 - `ParserPublicationAllocationBudgetTest`：1,000 段惰性全量解析，以及稳定前缀下 128 次真实尾部提交的固定分配上限；初始显示、最终消费及结束单独排除，并核对每次提交版本与源码长度。
+- `MarkdownParserConfigContractTest`、`FlavourCacheTest`：配置快照、派生设置、处理器顺序与独立会话；`BlockTransformRunnerContractTest` 检查惰性回调、定义与发布权限边界。
 
 ## 极端输入压力测试
 

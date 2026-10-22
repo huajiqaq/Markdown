@@ -36,7 +36,7 @@ internal fun LayoutEnvironment.measureInlineBlock(
         style = style,
         epoch = inlineLayoutEpoch,
         theme = markdownTheme,
-        directiveRegistry = compileEnvironment.directiveRegistry,
+        directiveRegistry = directiveRegistry,
         onLinkClick = onLinkClick,
         onFootnoteClick = onFootnoteClick,
         latexMeasurer = latexMeasurer,

@@ -29,18 +29,17 @@ import com.hrm.markdown.parser.streaming.InlineAutoCloser
  * plus S materialized suffix nodes needing coordinate shifts and G
  * invalidated global work (heading IDs/lint/plugins). R may extend to EOF for open containers.
  */
-class IncrementalEngine(
+internal class IncrementalEngine(
     private val flavour: MarkdownFlavour = ExtendedFlavour,
     private val customEmojiMap: Map<String, String> = emptyMap(),
     private val enableAsciiEmoticons: Boolean = false,
-    postProcessors: PostProcessorRegistry? = null,
     private val lintingProcessor: LintingPostProcessor? = null,
     private val appendCoalesceThreshold: Int = 0,
 ) {
     private val flavourCache = FlavourCache.of(flavour)
-    private val postProcessors = postProcessors ?: flavourCache.newPostProcessorRegistry().apply {
-        lintingProcessor?.let(::register)
-    }
+    // 普通会话直接复用方言计划；只有会话专属诊断器需要派生处理器顺序。
+    private val pipeline = Pipeline(if (lintingProcessor == null) flavourCache.sortedPostProcessors else
+        immutableListCopy((flavourCache.sortedPostProcessors + lintingProcessor).sortedBy { it.priority }))
     private var _document = Document()
     private var owner = DocumentOwner(_document)
     private var source = SourceText.of("")
@@ -49,10 +48,8 @@ class IncrementalEngine(
     private var _isStreaming = false
     private var hasDisplayRepairs = false
     private var previousRawChunkEndedWithCarriageReturn = false
-    private var processedWith: List<PostProcessor>? = null
     private var rootFenceContinuation: RootFenceContinuation? = null
     private var publicationLineage = PublicationLineage()
-    private var publicationRevision = 0L
     private var nextPersistentId = 1L
     private val hasBuiltInFenceSyntax = flavour === CommonMarkFlavour || flavour === GFMFlavour ||
         flavour === ExtendedFlavour || flavour === MarkdownExtraFlavour
@@ -120,11 +117,9 @@ class IncrementalEngine(
         owner = DocumentOwner(_document)
         resetPublicationLineage()
         _document.persistentId = nextPersistentId++
-        _document.publication = DocumentPublication(publicationLineage, null, ++publicationRevision,
+        _document.publication = DocumentPublication(publicationLineage, null, ++publicationLineage.currentRevision,
             0, 0, 0, globalDependenciesChanged = true)
-        publicationLineage.currentRevision = publicationRevision
         _document.sealPublication(emptyList())
-        processedWith = null
         rootFenceContinuation = null
         _isStreaming = true
         hasDisplayRepairs = false
@@ -205,9 +200,8 @@ class IncrementalEngine(
         val continuation = rootFenceContinuation ?: return null
         // A custom starter can construct a FencedCodeBlock with different OpenBlock state.
         if (!hasBuiltInFenceSyntax) return null
-        val pipeline = Pipeline(postProcessors.sortedSnapshot())
-        if (processedWith !== pipeline.processors || !pipeline.supportsIncremental ||
-            pipeline.hasBlockProcessors || pipeline.processors.any { it is LintingPostProcessor }) return null
+        if (!pipeline.supportsIncremental ||
+            pipeline.hasBlockProcessors || pipeline.lintingProcessors.isNotEmpty()) return null
         val region = blocks[blocks.size - 1]
         val block = region.nodes.singleOrNull() as? FencedCodeBlock ?: return null
         val old = parsedSource
@@ -248,7 +242,7 @@ class IncrementalEngine(
             hasNumberedReferences = hasNumberedReferences,
         )))
         blocks = prefix + replacement
-        publish(_document, pipeline, replacement,
+        publish(_document, replacement,
             splice = PublicationSplice(prefix.nodeCount, region.nodes.size, replacement.nodeCount))
         lastUpdate = UpdateStats(committedSource.lineCount - firstChangedLine, prefix.size)
         return _document
@@ -279,11 +273,11 @@ class IncrementalEngine(
     }
 
     private fun captureRootFenceContinuation(
-        pipeline: Pipeline, newlyProcessed: BlockIndex,
+        newlyProcessed: BlockIndex,
     ): RootFenceContinuation? {
         if (!_isStreaming || !hasBuiltInFenceSyntax || blocks.size == 0 || newlyProcessed.size == 0 ||
             lintingProcessor != null || !pipeline.supportsIncremental ||
-            pipeline.hasBlockProcessors || pipeline.processors.any { it is LintingPostProcessor }) return null
+            pipeline.hasBlockProcessors || pipeline.lintingProcessors.isNotEmpty()) return null
         val region = newlyProcessed[newlyProcessed.size - 1]
         val block = region.nodes.singleOrNull() as? FencedCodeBlock ?: return null
         // Only the changed tail can establish a new continuation. Cold parsing does no capture.
@@ -295,7 +289,8 @@ class IncrementalEngine(
         return RootFenceContinuation(source, _document, region, block)
     }
 
-    private data class Pipeline(val processors: List<PostProcessor>) {
+    private class Pipeline(val processors: List<AstPostProcessor>) {
+        val lintingProcessors = processors.filterIsInstance<LintingPostProcessor>()
         val hasAttributes = processors.any { it is BlockAttributeProcessor }
         val hasBibliography = processors.any { it is BibliographyProcessor }
         val hasHeadings = processors.any { it is HeadingIdProcessor }
@@ -338,37 +333,17 @@ class IncrementalEngine(
                 }
             }
         }
-        private fun process(processor: PostProcessor, document: Document, previousDocument: Document) {
-            if (processor !is BlockPostProcessor) {
-                processor.process(document)
-                return
+        private fun process(processor: AstPostProcessor, document: Document, previousDocument: Document) {
+            when (processor) {
+                is PostProcessor -> processor.process(document)
+                is BlockPostProcessor -> BlockTransformRunner.process(processor, document, previousDocument)
             }
-            document.inheritMutationOwner(previousDocument)
-            document.definitionContext.seal(previousDocument.publicationMutationOwner)
-            transformDocumentBlocks(document) { block ->
-                val output = withoutDocumentMutation(previousDocument) {
-                    withSubtreeMutation(block) {
-                        processor.processBlock(block).also { output ->
-                            check(output == null || output.mutationOwner == null || output.hasLocalMutationPermit) {
-                                "BlockPostProcessor must return its input subtree or a new node, not another published block."
-                            }
-                            if (output != null) materializeUntrustedContent(output)
-                        }
-                    }
-                }
-                output?.seal(previousDocument.publicationMutationOwner)
-                output
-            }
-            // A callback cannot retain a writable reference into the next committed tree.
-            document.sealPublication(document.children)
         }
     }
 
     private fun update(offset: Int, deleted: Int, inserted: Int, forceTail: Boolean = false): Document {
-        val pipeline = Pipeline(postProcessors.sortedSnapshot())
-        if (blocks.size == 0) return rebuild("initial parse", pipeline)
-        if (processedWith !== pipeline.processors) return rebuild("pipeline changed", pipeline)
-        if (!pipeline.supportsIncremental) return rebuild("document postprocessor", pipeline)
+        if (blocks.size == 0) return rebuild("initial parse")
+        if (!pipeline.supportsIncremental) return rebuild("document postprocessor")
         val old = parsedSource
         val editLine = old.lineAtOffset(offset)
         var first = blocks.indexAtLine(editLine)
@@ -420,21 +395,21 @@ class IncrementalEngine(
             (pipeline.hasBlockProcessors || hasCustomBlockStarters)) {
             // Extensions may render absolute coordinates as text. Updating metadata alone
             // would preserve stale semantics, so position changes invalidate those outputs.
-            return rebuild("extension source positions changed", pipeline)
+            return rebuild("extension source positions changed")
         }
-        if (replaced.hasDefinitions || regions.any { it.hasDefinitions }) return rebuild("definitions changed", pipeline)
+        if (replaced.hasDefinitions || regions.any { it.hasDefinitions }) return rebuild("definitions changed")
         if (pipeline.hasBlockProcessors && pipeline.hasHeadings &&
             (replaced.headingCount != 0 || regions.any { region -> region.nodes.any(::containsHeading) })) {
-            return rebuild("block postprocessor heading dependencies", pipeline)
+            return rebuild("block postprocessor heading dependencies")
         }
         if (_document.footnoteDefinitions.isNotEmpty() &&
-            (replaced.hasNumberedReferences || regions.any { it.hasNumberedReferences })) return rebuild("footnote order changed", pipeline)
+            (replaced.hasNumberedReferences || regions.any { it.hasNumberedReferences })) return rebuild("footnote order changed")
 
         val context = parsed.document
         context.definitionContext.inherit(_document.definitionContext)
         if (_isStreaming && suffix.size == 0) repairTail(regions, context)
         val oldTail = if (_isStreaming) replaced.asNodeList() else emptyList()
-        val prepared = prepareRegions(regions, context, pipeline, oldTail)
+        val prepared = prepareRegions(regions, context, oldTail)
         // The entire suffix is retained. There is no second filtering pass that can drop nodes.
         if (lineDelta != 0 || (offsetDelta != 0 && suffix.hasSourceRanges)) suffix.forEachRegion(onlyPositioned = lineDelta == 0) { region ->
             region.nodes.forEach { it.shiftSubtreeCoordinates(lineDelta, offsetDelta) }
@@ -449,7 +424,7 @@ class IncrementalEngine(
         // Local processors can replace/remove nodes; update only newly parsed leaves.
         val processed = BlockIndex.of(prepared.map { (region, doc) -> region.copy(nodes = doc.children.toList(), hasSourceRanges = doc.children.any(::hasSourceRanges)) })
         if (pipeline.hasBlockProcessors && (replaced.anyGlobalDependency() || processed.anyGlobalDependency())) {
-            return rebuild("block postprocessor global dependencies", pipeline)
+            return rebuild("block postprocessor global dependencies")
         }
         retainReplacementIdentities(replaced, processed)
         val globalDependenciesChanged = headingsChanged ||
@@ -458,14 +433,14 @@ class IncrementalEngine(
         // Removed nodes belong to the old root, not to the owner's next published root.
         // Reused nodes in the replacement are rebound by publish below.
         replaced.forEachRegion { it.nodes.forEach { node -> node.parent = _document } }
-        publish(context, pipeline, processed,
+        publish(context, processed,
             splice = PublicationSplice(prefix.nodeCount, replaced.nodeCount, processed.nodeCount,
                 globalDependenciesChanged))
         lastUpdate = UpdateStats(parsed.endLine - parsedStart, prefix.size, suffix.size)
         return _document
     }
 
-    private fun rebuild(reason: String, pipeline: Pipeline = Pipeline(postProcessors.sortedSnapshot())): Document {
+    private fun rebuild(reason: String): Document {
         resetPublicationLineage()
         val result = withoutDocumentMutation(_document) {
             newBlockParser().parseWithCheckpoints(0, source.lineCount).also {
@@ -479,7 +454,7 @@ class IncrementalEngine(
         // were grouped on raw syntax first; built-in transformations preserve group order.
         val doc = Document(context.definitionContext)
         regions.forEach { region -> region.nodes.forEach(doc::appendChild) }
-        val metadata = regions.map { regionMetadata(it, pipeline) }
+        val metadata = regions.map { regionMetadata(it) }
         setDocumentRanges(doc, source)
         pipeline.processAll(doc, _document, regions)
         if (!pipeline.supportsIncremental) {
@@ -505,13 +480,13 @@ class IncrementalEngine(
             })
         }
         owner = DocumentOwner(_document)
-        publish(context, pipeline, blocks, runLint = false, publishedDocument = doc)
+        publish(context, blocks, runLint = false, publishedDocument = doc)
         lastUpdate = UpdateStats(source.lineCount, fullParseReason = reason)
         return _document
     }
 
     /** Snapshot raw semantic inputs before local processors mutate nodes. */
-    private fun regionMetadata(region: ParseRegion, pipeline: Pipeline): ParsedRegion {
+    private fun regionMetadata(region: ParseRegion): ParsedRegion {
         val headings = mutableListOf<HeadingInput>()
         if (pipeline.hasHeadings) region.nodes.forEach { captureHeadings(it, headings) }
         // Output membership is captured only after postprocessing, before publication.
@@ -522,7 +497,7 @@ class IncrementalEngine(
     }
 
     private fun prepareRegions(
-        regions: List<ParseRegion>, context: Document, pipeline: Pipeline, oldTail: List<Node>,
+        regions: List<ParseRegion>, context: Document, oldTail: List<Node>,
     ): List<Pair<ParsedRegion, Document>> {
         val reusable = oldTail.filter { it is FencedCodeBlock || it is MathBlock }.associateBy { it.lineRange.startLine }
         return regions.map { region ->
@@ -535,7 +510,7 @@ class IncrementalEngine(
             }
             val doc = Document(context.definitionContext)
             nodes.forEach(doc::appendChild)
-            regionMetadata(region, pipeline) to doc
+            regionMetadata(region) to doc
         }
     }
 
@@ -594,7 +569,7 @@ class IncrementalEngine(
     }
 
     private fun publish(
-        context: Document, pipeline: Pipeline, newlyProcessed: BlockIndex,
+        context: Document, newlyProcessed: BlockIndex,
         runLint: Boolean = true, publishedDocument: Document? = null,
         splice: PublicationSplice? = null,
     ) {
@@ -610,26 +585,26 @@ class IncrementalEngine(
         }
         owner.document = doc
         if (publishedDocument == null) setDocumentRanges(doc, source)
-        if (runLint) pipeline.processors.filterIsInstance<LintingPostProcessor>().forEach { it.process(doc) }
+        if (runLint) pipeline.lintingProcessors.forEach { it.process(doc) }
         lintingProcessor?.let {
-            if (pipeline.processors.none { processor -> processor === it }) it.process(doc)
             doc.diagnostics = it.result
         }
+        val baseRevision = publicationLineage.currentRevision
+        val revision = baseRevision + 1
         doc.publication = DocumentPublication(
             lineageId = publicationLineage,
-            baseRevision = if (splice == null) null else publicationRevision,
-            revision = ++publicationRevision,
+            baseRevision = if (splice == null) null else baseRevision,
+            revision = revision,
             startIndex = splice?.startIndex ?: 0,
             removedCount = splice?.removedCount ?: 0,
             insertedCount = splice?.insertedCount ?: blocks.nodeCount,
             globalDependenciesChanged = splice?.globalDependenciesChanged ?: true,
         )
-        publicationLineage.currentRevision = publicationRevision
+        publicationLineage.currentRevision = revision
         _document = doc
         parsedSource = source
-        processedWith = pipeline.processors
         hasDisplayRepairs = _isStreaming
-        rootFenceContinuation = captureRootFenceContinuation(pipeline, newlyProcessed)
+        rootFenceContinuation = captureRootFenceContinuation(newlyProcessed)
         // Walk the replacement regions directly: the public persistent List iterator uses
         // a sequence coroutine and is unnecessary for this internal publication pass.
         val mutationOwner = doc.publicationMutationOwner
@@ -647,7 +622,6 @@ class IncrementalEngine(
     private fun resetPublicationLineage() {
         publicationLineage.alive = false
         publicationLineage = PublicationLineage()
-        publicationRevision = 0L
         nextPersistentId = 1L
     }
 

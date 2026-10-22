@@ -28,7 +28,7 @@ import com.hrm.markdown.parser.core.LineCursor
  * registry.register(MyCustomBlockStarter())
  * ```
  */
-class BlockStarterRegistry {
+internal class BlockStarterRegistry {
     private val starters = mutableListOf<BlockStarter>()
     private var sorted = false
     private var frozen = false

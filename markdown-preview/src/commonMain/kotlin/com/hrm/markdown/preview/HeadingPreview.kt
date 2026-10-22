@@ -2,7 +2,7 @@ package com.hrm.markdown.preview
 
 import androidx.compose.runtime.Composable
 import com.hrm.markdown.renderer.Markdown
-import com.hrm.markdown.renderer.MarkdownParserConfig
+import com.hrm.markdown.parser.MarkdownParserConfig
 
 internal val headingPreviewGroups = listOf(
     PreviewGroup(

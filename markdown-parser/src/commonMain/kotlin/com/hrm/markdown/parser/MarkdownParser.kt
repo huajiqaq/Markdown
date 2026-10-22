@@ -2,13 +2,12 @@ package com.hrm.markdown.parser
 
 import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.parser.core.SourceText
-import com.hrm.markdown.parser.flavour.ExtendedFlavour
 import com.hrm.markdown.parser.flavour.MarkdownFlavour
 import com.hrm.markdown.parser.incremental.EditOperation
+import com.hrm.markdown.parser.incremental.IncrementalEngine
 import com.hrm.markdown.parser.lint.DiagnosticResult
 import com.hrm.markdown.parser.lint.LintingPostProcessor
 import com.hrm.markdown.parser.log.HLog
-import com.hrm.markdown.parser.streaming.StreamingParser
 
 /**
  * Markdown 解析器的主入口。
@@ -55,63 +54,52 @@ import com.hrm.markdown.parser.streaming.StreamingParser
  *
  * ## 语法验证（Linting）
  * ```kotlin
- * val parser = MarkdownParser(enableLinting = true)
+ * val parser = MarkdownParser(MarkdownParserConfig(enableLinting = true))
  * val doc = parser.parse("# Title\n\n### Skipped h2\n\n[^missing]")
  * val diagnostics = parser.diagnostics
  * println(diagnostics) // 输出标题层级跳跃和无效脚注引用的诊断
  * ```
  *
- * @param flavour Markdown 方言，控制支持的语法特性。默认为 [ExtendedFlavour]（包含所有扩展）。
- * @param enableLinting 是否启用语法验证/Linting。默认为 false。
+ * @param config 完整解析、流式追加与编辑共享的不可变配置。
  */
 class MarkdownParser(
-    val flavour: MarkdownFlavour = ExtendedFlavour,
-    /** 自定义 Emoji 别名映射（shortcode → unicode） */
-    val customEmojiMap: Map<String, String> = emptyMap(),
-    /** 是否启用 ASCII 表情自动转换（如 :) → 😊） */
-    val enableAsciiEmoticons: Boolean = false,
-    /** 是否启用语法验证/Linting */
-    val enableLinting: Boolean = false,
-    /**
-     * 流式 [append] 合并阈值（字符数）。0 表示关闭，每次 [append] 立即增量解析（默认）。
-     *
-     * 大于 0 时：未跨换行符且未达阈值的 chunk 会被缓冲，多个小 token 合并为一次解析。
-     * 典型 LLM 流式场景下 32-64 可减少 60-80% 的总流式耗时；代价是"正在写的最后一行"
-     * AST 可能滞后最多该字符数（碰到 `\n` 必定 flush，所以已写完的行不受影响）。
-     */
-    val appendCoalesceThreshold: Int = 0,
+    val config: MarkdownParserConfig = MarkdownParserConfig.Default,
 ) {
-    private val lintingProcessor: LintingPostProcessor? = if (enableLinting) LintingPostProcessor() else null
-    private val streamingParser = StreamingParser(
-        flavour, customEmojiMap, enableAsciiEmoticons, lintingProcessor,
-        appendCoalesceThreshold = appendCoalesceThreshold,
+    constructor(flavour: MarkdownFlavour) : this(MarkdownParserConfig(flavour = flavour))
+
+    private val engine = IncrementalEngine(
+        flavour = config.flavour,
+        customEmojiMap = config.customEmojiMap,
+        enableAsciiEmoticons = config.enableAsciiEmoticons,
+        lintingProcessor = if (config.enableLinting) LintingPostProcessor() else null,
+        appendCoalesceThreshold = config.appendCoalesceThreshold,
     )
     /**
      * 语法验证诊断结果。
      *
-     * 仅在 `enableLinting = true` 时有内容。
+     * 配置 `enableLinting = true` 时自动检测语法问题。
      * 每次 [parse]、[endStream] 或编辑操作后自动更新。
      * 与当前 [document] 保持一致；[beginStream] 清空文档时也清空可见诊断。
      */
     val diagnostics: DiagnosticResult
-        get() = if (enableLinting) document.diagnostics else DiagnosticResult()
+        get() = document.diagnostics
 
     /**
      * 当前文档 AST。每次解析/编辑后更新。
      */
     val document: Document
-        get() = streamingParser.document
+        get() = engine.document
 
     /**
      * 当前源文本。每次解析/编辑后更新。
      */
     val sourceText: SourceText
-        get() = streamingParser.sourceText
+        get() = engine.sourceText
 
     /**
      * 当前是否处于流式接收中。
      */
-    val isStreaming: Boolean get() = streamingParser.isStreaming
+    val isStreaming: Boolean get() = engine.isStreaming
 
     /**
      * 解析完整的 Markdown 输入文本。
@@ -119,7 +107,7 @@ class MarkdownParser(
      */
     fun parse(input: String): Document {
         HLog.i(TAG) { "parse input=${input.length} chars" }
-        return streamingParser.fullParse(input)
+        return engine.fullParse(input)
     }
 
     // ────── 流式解析 API ──────
@@ -129,17 +117,18 @@ class MarkdownParser(
      */
     fun beginStream() {
         HLog.i(TAG, "beginStream")
-        streamingParser.beginStream()
+        engine.beginStream()
     }
 
     /**
      * 追加一段文本（通常是 LLM 的一个 token 或一个 chunk）。
-     * 追加后立即触发增量解析，自动修复未关闭的语法结构。
+     * 默认逐次提交增量解析并修复未关闭的语法；启用合并阈值后，
+     * 遇到换行或累计达到阈值才提交，结束或取消时刷新剩余缓冲。
      *
-     * @return 更新后的 Document
+     * @return 最近一次已提交的文档；仍在缓冲时返回上次文档。
      */
     fun append(chunk: String): Document {
-        return streamingParser.append(chunk)
+        return engine.append(chunk)
     }
 
     /**
@@ -149,7 +138,7 @@ class MarkdownParser(
      */
     fun endStream(): Document {
         HLog.i(TAG, "endStream")
-        return streamingParser.endStream()
+        return engine.endStream()
     }
 
     /**
@@ -158,14 +147,14 @@ class MarkdownParser(
      * @return 当前状态的 Document
      */
     fun abort(): Document {
-        return streamingParser.abort()
+        return engine.abort()
     }
 
     /**
      * 获取当前完整文本。
      */
     fun currentText(): String {
-        return streamingParser.currentText()
+        return engine.currentText()
     }
 
     // ────── 编辑 API（新增） ──────
@@ -179,7 +168,7 @@ class MarkdownParser(
      * @return 更新后的 Document
      */
     fun insert(offset: Int, text: String): Document {
-        return streamingParser.applyEdit(EditOperation.Insert(offset, text))
+        return engine.applyEdit(EditOperation.Insert(offset, text))
     }
 
     /**
@@ -190,7 +179,7 @@ class MarkdownParser(
      * @return 更新后的 Document
      */
     fun delete(offset: Int, length: Int): Document {
-        return streamingParser.applyEdit(EditOperation.Delete(offset, length))
+        return engine.applyEdit(EditOperation.Delete(offset, length))
     }
 
     /**
@@ -202,7 +191,7 @@ class MarkdownParser(
      * @return 更新后的 Document
      */
     fun replace(offset: Int, length: Int, newText: String): Document {
-        return streamingParser.applyEdit(EditOperation.Replace(offset, length, newText))
+        return engine.applyEdit(EditOperation.Replace(offset, length, newText))
     }
 
     /**
@@ -212,7 +201,7 @@ class MarkdownParser(
      * @return 更新后的 Document
      */
     fun applyEdit(edit: EditOperation): Document {
-        return streamingParser.applyEdit(edit)
+        return engine.applyEdit(edit)
     }
 
     companion object {
@@ -222,10 +211,10 @@ class MarkdownParser(
          * 便捷方法：将 Markdown 输入解析为 Document AST。
          *
          * @param input Markdown 文本
-         * @param flavour Markdown 方言，默认为 [ExtendedFlavour]
+         * @param config 不可变解析配置
          */
-        fun parseToDocument(input: String, flavour: MarkdownFlavour = ExtendedFlavour): Document {
-            return MarkdownParser(flavour).parse(input)
+        fun parseToDocument(input: String, config: MarkdownParserConfig = MarkdownParserConfig.Default): Document {
+            return MarkdownParser(config).parse(input)
         }
     }
 }

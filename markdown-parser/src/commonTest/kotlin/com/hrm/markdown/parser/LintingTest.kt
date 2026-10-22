@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
 class LintingTest {
 
     private fun parseWithLinting(input: String): MarkdownParser {
-        val parser = MarkdownParser(enableLinting = true)
+        val parser = MarkdownParser(MarkdownParserConfig(enableLinting = true))
         parser.parse(input)
         return parser
     }
@@ -201,7 +201,7 @@ class LintingTest {
 
     @Test
     fun should_not_produce_diagnostics_when_linting_disabled() {
-        val parser = MarkdownParser(enableLinting = false)
+        val parser = MarkdownParser(MarkdownParserConfig(enableLinting = false))
         parser.parse("""
             # Title
             
@@ -257,7 +257,7 @@ class LintingTest {
 
     @Test
     fun should_attach_diagnostics_to_document() {
-        val parser = MarkdownParser(enableLinting = true)
+        val parser = MarkdownParser(MarkdownParserConfig(enableLinting = true))
         val doc = parser.parse("""
             # Title
             

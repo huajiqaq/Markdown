@@ -46,14 +46,14 @@ internal fun assertNodeCoordinatesEqual(expected: Node, actual: Node, message: S
 
 /** Independent full pipeline: no IncrementalEngine, checkpoints, region grouping or reuse. */
 internal fun referenceDocument(options: MarkdownParser, text: String): Document {
-    val flavour = options.flavour
+    val flavour = options.config.flavour
     val registry = BlockStarterRegistry().apply { flavour.blockStarters.forEach(::register) }
     val doc = BlockParser(SourceText.of(text), registry) { root ->
-        InlineParser(root, options.customEmojiMap, options.enableAsciiEmoticons,
+        InlineParser(root, options.config.customEmojiMap, options.config.enableAsciiEmoticons,
             flavour.enableGfmAutolinks, flavour.enableExtendedInline,
             flavour.enableEmphasisCoalescing, flavour.enableStrikethrough)
     }.parse()
-    val lint = if (options.enableLinting) LintingPostProcessor() else null
+    val lint = if (options.config.enableLinting) LintingPostProcessor() else null
     PostProcessorRegistry().apply {
         flavour.postProcessors.forEach(::register)
         lint?.let(::register)

@@ -10,7 +10,6 @@ import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.renderer.internal.core.compile.DefaultRenderModelCompiler
 import com.hrm.markdown.renderer.internal.core.compile.RenderCompileEnvironment
-import com.hrm.markdown.renderer.internal.core.compile.RenderConfigSnapshot
 import com.hrm.markdown.renderer.internal.selection.buildSelectionIndex
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -23,7 +22,7 @@ class MarkdownSoftBreakTest {
         val document = MarkdownParser().parse("> first\n> **second\n> third**\n> fourth  \n> fifth")
         fun text(policy: MarkdownSoftBreakPolicy): String {
             val rendered = DefaultRenderModelCompiler.compile(document, RenderCompileEnvironment(
-                config = RenderConfigSnapshot(softBreakPolicy = policy),
+                softBreakPolicy = policy,
             ))
             return buildSelectionIndex(rendered.blocks).entries.joinToString("\n") { it.text }
         }

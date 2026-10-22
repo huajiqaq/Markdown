@@ -28,7 +28,7 @@ class GrowingBlockAllocationScalingTest {
     fun should_avoidQuadraticAllocation_when_publishingGrowingRootFenceWithoutReadingLiteral() =
         assertBoundedGrowth("open root fence") { chunks, allocatedBytes ->
             val line = "0123456789abcde\n"
-            val parser = MarkdownParser(CommonMarkFlavour, appendCoalesceThreshold = 16)
+            val parser = MarkdownParser(MarkdownParserConfig(flavour = CommonMarkFlavour, appendCoalesceThreshold = 16))
             parser.beginStream()
             parser.append("```text\n")
             val before = allocatedBytes()

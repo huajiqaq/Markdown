@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 class WcagLintingTest {
 
     private fun parseWithLinting(input: String): MarkdownParser {
-        val parser = MarkdownParser(enableLinting = true)
+        val parser = MarkdownParser(MarkdownParserConfig(enableLinting = true))
         parser.parse(input)
         return parser
     }
@@ -166,7 +166,7 @@ code without language
 
     @Test
     fun should_not_produce_wcag_diagnostics_when_linting_disabled() {
-        val parser = MarkdownParser(enableLinting = false)
+        val parser = MarkdownParser(MarkdownParserConfig(enableLinting = false))
         parser.parse("[click here](https://example.com)")
         val diagnostics = parser.diagnostics
         assertEquals(0, diagnostics.filter(DiagnosticCode.LINK_TEXT_NOT_DESCRIPTIVE).size)

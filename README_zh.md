@@ -212,6 +212,9 @@ class VideoSyntaxTransformer : MarkdownInputTransformer {
 `AppendSafe`；需要强制隔离全量解析时可显式声明 `Unsupported`。当前转换结果到原始输入的源码映射可通过
 `LocalMarkdownSourceMap` 获取。
 
+插件与转换器作为配置使用：行为不变时复用实例，修改行为时提供新实例。
+仅替换插件的渲染回调会保留解析会话；替换输入转换器会自动刷新解析结果及源码映射。
+
 `DirectiveBlockRenderScope` 和 `DirectiveInlineRenderScope` 现在基于 snapshot。
 读取结构化 directive 数据时，请统一使用 `scope.directive` 作为唯一入口。
 HTML 导出侧的 `HtmlDirectiveFallback` 与 `HtmlInlineDirectiveFallback`
@@ -277,7 +280,7 @@ import androidx.compose.ui.unit.dp
 import com.hrm.markdown.renderer.Markdown
 import com.hrm.markdown.renderer.MarkdownBlockSlot
 import com.hrm.markdown.renderer.MarkdownComponents
-import com.hrm.markdown.renderer.MarkdownParserConfig
+import com.hrm.markdown.parser.MarkdownParserConfig
 import com.hrm.markdown.renderer.MarkdownInteractions
 import com.hrm.markdown.renderer.MarkdownSoftBreakPolicy
 
@@ -449,7 +452,7 @@ Markdown(markdown = text, state = state, components = MarkdownComponents(
 一次启用，全局检查：
 
 ```kotlin
-val parser = MarkdownParser(enableLinting = true)
+val parser = MarkdownParser(MarkdownParserConfig(enableLinting = true))
 val document = parser.parse(markdown)
 
 document.diagnostics.forEach { diagnostic ->
@@ -527,17 +530,33 @@ val doc = MarkdownParser().parse(input)
 val html = HtmlRenderer.renderMarkdown(input, flavour = CommonMarkFlavour)
 ```
 
+`MarkdownParserConfig` 位于 `com.hrm.markdown.parser`，解析器、Compose 和 HTML 导出共用同一份配置：
+
+```kotlin
+import com.hrm.markdown.parser.MarkdownParserConfig
+
+val config = MarkdownParserConfig(flavour = GFMFlavour, enableLinting = true)
+val parser = MarkdownParser(config)
+val document = parser.parse(input)
+Markdown(markdown = input, parserConfig = config)
+val html = MarkdownHtml.render(input, parserConfig = config)
+```
+
+配置会复制并保护传入的 Emoji 映射，之后修改原始映射不会改变已有解析会话。
+内置 Flavour 是不可变配置；使用 `copy` 替换配置项，或使用 `with` 追加语法、处理器，其余语法设置自动保留。
 自定义块转换直接接收并返回块，库负责处理增量更新：
 
 ```kotlin
-val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-    override val postProcessors = CommonMarkFlavour.postProcessors + BlockPostProcessor { block ->
-        if (block is Heading) block.level = minOf(block.level, 3)
-        block
-    }
-}
+val flavour = CommonMarkFlavour.with(BlockPostProcessor { block ->
+    if (block is Heading) block.level = minOf(block.level, 3)
+    block
+})
 val doc = MarkdownParser(flavour).parse(input)
 ```
+
+`BlockPostProcessor` 处理独立块，返回原块、替换块或 `null`；依赖全文的转换使用独立的
+`PostProcessor { document -> ... }`。两者均在发布前运行，调用方无需维护版本、变更范围或缓存。
+同一配置可以供多个独立解析器使用；有状态的扩展实例应由扩展自身管理并发。
 
 ### Compose 安全 HTML
 

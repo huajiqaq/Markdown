@@ -2,6 +2,7 @@ package com.hrm.markdown.parser.block.postprocessors
 
 import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.parser.ast.Node
+import com.hrm.markdown.parser.ast.immutableListCopy
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
@@ -23,15 +24,23 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  * ```
  */
 @OptIn(ExperimentalAtomicApi::class)
-class PostProcessorRegistry {
+internal class PostProcessorRegistry(
+    processors: List<AstPostProcessor> = emptyList(),
+    alreadySorted: Boolean = false,
+) {
+    init { processors.forEach { it.requireSingleScope() } }
+
     private data class State(
-        val processors: List<PostProcessor>,
-        val sortedProcessors: List<PostProcessor>?,
+        val processors: List<AstPostProcessor>,
+        val sortedProcessors: List<AstPostProcessor>?,
     )
 
-    private val state = AtomicReference(State(processors = emptyList(), sortedProcessors = null))
+    private val state = immutableListCopy(processors).let { initial ->
+        AtomicReference(State(processors = initial, sortedProcessors = if (alreadySorted) initial else null))
+    }
 
-    fun register(processor: PostProcessor) {
+    fun register(processor: AstPostProcessor) {
+        processor.requireSingleScope()
         updateState { current ->
             current.copy(
                 processors = current.processors + processor,
@@ -40,8 +49,9 @@ class PostProcessorRegistry {
         }
     }
 
-    fun registerAll(vararg processors: PostProcessor) {
+    fun registerAll(vararg processors: AstPostProcessor) {
         if (processors.isEmpty()) return
+        processors.forEach { it.requireSingleScope() }
         val additions = processors.toList()
         updateState { current ->
             current.copy(
@@ -62,11 +72,14 @@ class PostProcessorRegistry {
     fun processAll(document: Document) {
         val snapshot = sortedSnapshot()
         for (processor in snapshot) {
-            processor.process(document)
+            when (processor) {
+                is PostProcessor -> processor.process(document)
+                is BlockPostProcessor -> BlockTransformRunner.process(processor, document)
+            }
         }
     }
 
-    internal fun sortedSnapshot(): List<PostProcessor> {
+    internal fun sortedSnapshot(): List<AstPostProcessor> {
         while (true) {
             val current = state.load()
             current.sortedProcessors?.let { return it }

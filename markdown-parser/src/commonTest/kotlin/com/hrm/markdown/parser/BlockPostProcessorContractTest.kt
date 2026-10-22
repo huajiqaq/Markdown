@@ -14,9 +14,9 @@ class BlockPostProcessorContractTest {
     @Test
     fun should_rejectCapturedPublishedOutputBeforeReparenting_when_aBlockCallbackReturnsTheStablePrefix() {
         var captured: Paragraph? = null
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-            override val postProcessors = listOf(BlockPostProcessor { block -> captured ?: block })
-        }
+        val flavour = CommonMarkFlavour.copy(
+            postProcessors = listOf(BlockPostProcessor { block -> captured ?: block })
+        )
         val parser = MarkdownParser(flavour)
         val source = "prefix\n\ntail"
         val initial = parser.parse(source)
@@ -53,9 +53,9 @@ class BlockPostProcessorContractTest {
                 }
                 block
             }
-            val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-                override val postProcessors = listOf(processor)
-            }
+            val flavour = CommonMarkFlavour.copy(
+                postProcessors = listOf(processor)
+            )
             val source = buildString {
                 repeat(prefixSize) { append("paragraph $it\n\n") }
                 append("tail")
@@ -89,9 +89,9 @@ class BlockPostProcessorContractTest {
                 else -> block
             }
         }
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-            override val postProcessors = listOf(processor)
-        }
+        val flavour = CommonMarkFlavour.copy(
+            postProcessors = listOf(processor)
+        )
         val parser = MarkdownParser(flavour)
         val source = "keep\n\ndrop\n\nreplace"
         val initial = parser.parse(source)
@@ -116,9 +116,9 @@ class BlockPostProcessorContractTest {
                 }
             } else block
         }
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-            override val postProcessors = listOf(processor, HeadingIdProcessor())
-        }
+        val flavour = CommonMarkFlavour.copy(
+            postProcessors = listOf(processor, HeadingIdProcessor())
+        )
         val parser = MarkdownParser(flavour)
         val source = "same\n\nsame\n\ntail"
         parser.parse(source)
@@ -131,11 +131,11 @@ class BlockPostProcessorContractTest {
 
     @Test
     fun should_rejectReferenceDefinitionCreation_when_aBlockCallbackRequiresDocumentWideSemantics() {
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-            override val postProcessors = listOf(BlockPostProcessor {
+        val flavour = CommonMarkFlavour.copy(
+            postProcessors = listOf(BlockPostProcessor {
                 FootnoteDefinition("new").apply { appendChild(Paragraph()) }
             })
-        }
+        )
         assertFailsWith<IllegalArgumentException> { MarkdownParser(flavour).parse("ordinary") }
     }
 
@@ -155,9 +155,9 @@ class BlockPostProcessorContractTest {
             }
             block
         }
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-            override val postProcessors = listOf(processor)
-        }
+        val flavour = CommonMarkFlavour.copy(
+            postProcessors = listOf(processor)
+        )
         val parser = MarkdownParser(flavour)
         val source = "[ref]: /target\n\nfirst\n\ntail"
         published = parser.parse(source)

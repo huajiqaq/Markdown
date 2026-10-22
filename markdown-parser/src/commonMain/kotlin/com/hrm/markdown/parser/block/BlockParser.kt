@@ -39,7 +39,7 @@ import com.hrm.markdown.parser.core.SourceText
  * val parser = BlockParser(source, registry = starters) { doc -> InlineParser(doc) }
  * ```
  */
-class BlockParser(
+class BlockParser internal constructor(
     private val source: SourceText,
     internal val registry: BlockStarterRegistry? = null,
     private val inlineParserFactory: ((Document) -> InlineParserInterface)? = null

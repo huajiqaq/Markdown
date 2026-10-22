@@ -1,5 +1,6 @@
 package com.hrm.markdown.renderer
 
+import com.hrm.markdown.parser.MarkdownParserConfig
 import com.hrm.markdown.parser.flavour.ExtendedFlavour
 import kotlin.test.Test
 import kotlin.test.assertEquals

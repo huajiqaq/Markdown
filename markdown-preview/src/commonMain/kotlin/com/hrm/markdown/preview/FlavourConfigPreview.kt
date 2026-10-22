@@ -3,7 +3,7 @@ package com.hrm.markdown.preview
 import com.hrm.markdown.parser.flavour.CommonMarkFlavour
 import com.hrm.markdown.parser.flavour.GFMFlavour
 import com.hrm.markdown.renderer.Markdown
-import com.hrm.markdown.renderer.MarkdownParserConfig
+import com.hrm.markdown.parser.MarkdownParserConfig
 
 /**
  * Flavour 配置预览 — 展示不同方言对同一 Markdown 文本的解析差异。

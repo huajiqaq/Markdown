@@ -41,7 +41,7 @@ import com.hrm.markdown.parser.block.starters.*
  * val document = parser.parse("# Hello\n\nWorld")
  * ```
  */
-object CommonMarkFlavour : MarkdownFlavour {
+val CommonMarkFlavour: MarkdownFlavour = MarkdownFlavour(
 
     /**
      * CommonMark 核心块级解析器。
@@ -56,7 +56,7 @@ object CommonMarkFlavour : MarkdownFlavour {
      * 7. 列表项（优先级 500）
      * 8. 缩进代码块（优先级 600，最低）
      */
-    override val blockStarters: List<BlockStarter> = listOf(
+    blockStarters = listOf(
         SetextHeadingStarter(),       // 100
         HeadingStarter(),              // 110
         ThematicBreakStarter(),        // 210
@@ -65,7 +65,7 @@ object CommonMarkFlavour : MarkdownFlavour {
         BlockQuoteStarter(),           // 410
         ListItemStarter(),             // 500
         IndentedCodeBlockStarter(),    // 600
-    )
+    ),
 
     /**
      * CommonMark 后处理器（空列表）。
@@ -73,9 +73,9 @@ object CommonMarkFlavour : MarkdownFlavour {
      * CommonMark 核心规范不需要后处理器，
      * 所有语法都在解析阶段完成。
      */
-    override val postProcessors: List<PostProcessor> = emptyList()
+    postProcessors = emptyList(),
 
-    override val enableGfmAutolinks: Boolean = false
-    override val enableExtendedInline: Boolean = false
-    override val enableStrikethrough: Boolean = false
-}
+    enableGfmAutolinks = false,
+    enableExtendedInline = false,
+    enableStrikethrough = false,
+)

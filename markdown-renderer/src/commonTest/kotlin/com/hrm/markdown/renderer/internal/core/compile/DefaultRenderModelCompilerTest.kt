@@ -81,7 +81,7 @@ class DefaultRenderModelCompilerTest {
 
     @Test
     fun should_keep_active_streaming_tail_identity_when_only_its_end_grows() {
-        val parser = MarkdownParser(appendCoalesceThreshold = 0)
+        val parser = MarkdownParser()
         parser.beginStream()
         val before = DefaultRenderModelCompiler.compile(
             parser.append("stable\n\ntail"),

@@ -224,9 +224,9 @@ internal class PositionedParagraphInput(source: String) {
         }
     }
 
-    val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-        override val blockStarters = listOf(coordinates) + CommonMarkFlavour.blockStarters
-    }
+    val flavour = CommonMarkFlavour.copy(
+        blockStarters = listOf(coordinates) + CommonMarkFlavour.blockStarters
+    )
 }
 
 /** Descendants start inside an already-positioned block, so the index knows shifts are needed. */

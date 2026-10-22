@@ -13,7 +13,6 @@ import com.hrm.markdown.renderer.internal.compose.MarkdownComposePainter
 import com.hrm.markdown.renderer.internal.core.compile.RenderCompileSession
 import com.hrm.markdown.renderer.internal.core.compile.RenderModelCompiler
 import com.hrm.markdown.renderer.internal.core.compile.RenderCompileEnvironment
-import com.hrm.markdown.renderer.internal.core.compile.RenderConfigSnapshot
 import com.hrm.markdown.renderer.internal.core.model.InternalRenderDocumentModel
 import com.hrm.markdown.renderer.internal.layout.engine.DefaultMarkdownLayoutEngine
 import com.hrm.markdown.renderer.internal.layout.engine.LayoutEnvironment
@@ -136,7 +135,7 @@ internal class MarkdownEngineHost(
         layoutDirection = layoutDirection,
         textMeasurer = textMeasurer,
         latexMeasurer = latexMeasurer,
-        compileEnvironment = facadeState.toCompileEnvironment(),
+        directiveRegistry = facadeState.directiveRegistry,
         latexConfig = facadeState.config.latexConfig,
         diagramHostRegistry = diagramHostRegistry,
         codeBlockHeaderHeightPx = with(density) { components.codeBlockHeader?.height?.roundToPx()?.toFloat() ?: 0f },
@@ -155,13 +154,7 @@ internal class MarkdownEngineHost(
     )
 }
 
-internal fun RendererFacadeState.toCompileEnvironment(): RenderCompileEnvironment {
-    return RenderCompileEnvironment(
-        config = RenderConfigSnapshot(
-            enableHeadingNumbering = config.enableHeadingNumbering,
-            streaming = isStreaming,
-            softBreakPolicy = config.softBreakPolicy,
-        ),
-        directiveRegistry = directiveRegistry,
-    )
-}
+internal fun RendererFacadeState.toCompileEnvironment(): RenderCompileEnvironment = RenderCompileEnvironment(
+    enableHeadingNumbering = config.enableHeadingNumbering,
+    softBreakPolicy = config.softBreakPolicy,
+)

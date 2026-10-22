@@ -1,5 +1,7 @@
 package com.hrm.markdown.benchmark
 
+import com.hrm.markdown.parser.MarkdownParserConfig
+
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.ast.ContainerNode
 import com.hrm.markdown.parser.ast.Node
@@ -82,7 +84,7 @@ private data class LlmIterationResult(
 )
 
 private fun runOneIteration(chunks: List<String>, coalesce: Int = 0): LlmIterationResult {
-    val parser = MarkdownParser(appendCoalesceThreshold = coalesce)
+    val parser = MarkdownParser(MarkdownParserConfig(appendCoalesceThreshold = coalesce))
     val appendNs = LongArray(chunks.size)
     lateinit var finalDoc: Node
     val total = measureNanoTime {

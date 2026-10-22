@@ -6,11 +6,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.hrm.markdown.parser.MarkdownParser
+import com.hrm.markdown.parser.MarkdownParserConfig
 import com.hrm.markdown.parser.ast.Document
-import com.hrm.markdown.parser.flavour.MarkdownFlavour
 import com.hrm.markdown.runtime.MarkdownDirectivePipeline
-import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 import com.hrm.markdown.runtime.MarkdownSourceMap
 import com.hrm.markdown.runtime.MarkdownTransformResult
 import kotlinx.coroutines.Dispatchers
@@ -28,10 +26,9 @@ internal fun rememberStreamingDocument(
     markdown: String,
     isStreaming: Boolean,
     parserConfig: MarkdownParserConfig = MarkdownParserConfig.Default,
-    runtimePipeline: MarkdownDirectivePipeline = remember { MarkdownDirectivePipeline(MarkdownDirectiveRegistry.Empty) },
+    runtimePipeline: MarkdownDirectivePipeline = MarkdownDirectivePipeline.Empty,
 ): StreamingMarkdownSnapshot? {
-    val parserOptions = parserConfig.parserOptions()
-    val parser = remember(parserOptions) { parserOptions.newParser() }
+    val parser = remember(parserConfig) { parserConfig.newParser() }
     var snapshotState by remember(parser, runtimePipeline) {
         mutableStateOf(StreamingMarkdownState())
     }
@@ -54,14 +51,13 @@ internal fun rememberStreamingDocument(
             endStream = parser::endStream,
             parse = { value ->
                 withContext(Dispatchers.Default) {
-                    // Full parses own a disposable parser. Cancellation can leave a synchronous
-                    // parse running, but it can no longer race with the stateful streaming parser.
-                    parserOptions.newParser().parse(value)
+                    // 每次全量解析使用独立解析器。取消后同步解析可能仍会运行，
+                    // 但不会再与持有状态的流式解析器争用同一会话。
+                    parserConfig.newParser().parse(value)
                 }
             }
         )
-        // Document and source map describe one transformed input revision and must become visible
-        // atomically; publishing them through separate Compose states can briefly pair revisions.
+        // 文档与源码映射对应同一输入版本，必须同时发布；分别写入 Compose 状态会短暂混用版本。
         snapshotState = StreamingMarkdownState(documentState, transformed.sourceMap)
     }
 
@@ -80,32 +76,12 @@ internal data class StreamingMarkdownSnapshot(
     val sourceMap: MarkdownSourceMap,
 )
 
-internal data class MarkdownParserOptions(
-    val flavour: MarkdownFlavour,
-    val customEmojiMap: Map<String, String>,
-    val enableAsciiEmoticons: Boolean,
-    val enableLinting: Boolean,
-    val appendCoalesceThreshold: Int,
-) {
-    fun newParser() = MarkdownParser(
-        flavour = flavour,
-        customEmojiMap = customEmojiMap,
-        enableAsciiEmoticons = enableAsciiEmoticons,
-        enableLinting = enableLinting,
-        appendCoalesceThreshold = appendCoalesceThreshold,
-    )
-}
-
-internal fun MarkdownParserConfig.parserOptions() = MarkdownParserOptions(
-    flavour, customEmojiMap.toMap(), enableAsciiEmoticons, enableLinting, appendCoalesceThreshold,
-)
-
 internal data class StreamingDocumentState<T>(
-    /** 已提交给流式解析器的原始 Markdown，用于验证下一次更新确实是 append-only。 */
+    /** 已提交给流式解析器的 Markdown，用于验证后续输入是否仅在尾部追加。 */
     val streamedMarkdown: String = "",
     val document: T? = null,
     val wasStreaming: Boolean = false,
-    /** Null means no non-streaming revision has been parsed yet; empty Markdown is still a revision. */
+    /** null 表示尚未解析过非流式版本；空 Markdown 也是有效版本。 */
     val lastNonStreamingMarkdown: String? = null,
 )
 
@@ -131,7 +107,7 @@ internal suspend fun <T> updateStreamingDocumentState(
 
     if (isStreaming) {
         if (!markdown.startsWith(nextState.streamedMarkdown)) {
-            // retry / clear / replace 不是 append-only；原会话已经不可复用，原子地重启。
+            // 重试、清空或替换并非纯追加；原会话已不可复用，需要整体重启。
             beginStream()
             nextState = nextState.copy(
                 streamedMarkdown = "",

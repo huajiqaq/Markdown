@@ -74,7 +74,7 @@ import com.hrm.markdown.parser.block.starters.*
  * """.trimIndent())
  * ```
  */
-object ExtendedFlavour : MarkdownFlavour {
+val ExtendedFlavour: MarkdownFlavour = MarkdownFlavour(
 
     /**
      * 扩展版块级解析器。
@@ -97,7 +97,7 @@ object ExtendedFlavour : MarkdownFlavour {
      * 13. 定义描述（520）
      * 14. 缩进代码块（600，在定义列表/脚注内部自动让步）
      */
-    override val blockStarters: List<BlockStarter> = listOf(
+    blockStarters = listOf(
         FrontMatterStarter(),          // 10
         SetextHeadingStarter(),        // 100
         HeadingStarter(),              // 110
@@ -115,7 +115,7 @@ object ExtendedFlavour : MarkdownFlavour {
         FootnoteDefinitionStarter(),   // 510
         DefinitionDescriptionStarter(), // 520
         IndentedCodeBlockStarter(),    // 600（在定义列表/脚注内部自动让步）
-    )
+    ),
 
     /**
      * 扩展版后处理器。
@@ -129,7 +129,7 @@ object ExtendedFlavour : MarkdownFlavour {
      * 6. HTML 过滤（400）
      * 7. Figure 转换（450）
      */
-    override val postProcessors: List<PostProcessor> = listOf(
+    postProcessors = listOf(
         HeadingIdProcessor(),          // 100
         BlockAttributeProcessor(),     // 150
         BibliographyProcessor(),       // 180
@@ -138,6 +138,6 @@ object ExtendedFlavour : MarkdownFlavour {
         ColumnsLayoutProcessor(),      // 350
         HtmlFilterProcessor(),         // 400
         FigureProcessor(),             // 450
-    )
+    ),
 
-}
+)

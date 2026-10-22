@@ -42,10 +42,10 @@ Benchmark commands and baseline maintenance live in [markdown-benchmark/AGENTS.m
 
 ### `markdown-parser`
 
-- Entry: `MarkdownParser`
+- Entry: `MarkdownParser`; parser, Compose and HTML share `com.hrm.markdown.parser.MarkdownParserConfig`
 - Owns block parsing, inline parsing, flavours, incremental parsing, diagnostics
 - Keep it UI-free
-- Prefer new syntax via `BlockStarter`, `PostProcessor`, or flavour config
+- Prefer new syntax via `BlockStarter`, `BlockPostProcessor`, `PostProcessor`, or immutable flavour config
 
 ### `markdown-runtime`
 
@@ -62,6 +62,8 @@ Benchmark commands and baseline maintenance live in [markdown-benchmark/AGENTS.m
 - `Markdown(document = ...)` consumes current parser publications. Flavour transformations finish
   before publication; published ASTs reject external writes. Render compilation applies verified
   publication splices and retains immutable IR, with identities independent of source coordinates.
+- Input-transformer identity controls parser state; renderer callbacks control layout/rendering.
+  IR compilation depends only on heading numbering and soft-break policy, not streaming state.
 
 ### `markdown-preview`
 
@@ -156,6 +158,6 @@ requires a physical device and is documented in the benchmark module's AGENTS.md
   - `com.hrm.markdown.renderer`
   - `com.hrm.markdown.preview`
 - AST nodes are sealed; `ContainerNode` supports lazy inline parsing
-- `stableKey` is line-based and used for Compose stability
+- Published blocks use `persistentId` for render identity; custom nodes without positions use tree paths
 - `contentHash` is for incremental reuse, not UI identity
 - Test naming: `should_expectedBehavior_when_condition`

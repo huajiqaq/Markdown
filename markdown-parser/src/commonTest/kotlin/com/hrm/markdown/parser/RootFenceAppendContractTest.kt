@@ -143,9 +143,9 @@ class RootFenceAppendContractTest {
                 document.children.filterIsInstance<FencedCodeBlock>().forEach { it.literal += "processed" }
             }
         }
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-            override val postProcessors = listOf(processor)
-        }
+        val flavour = CommonMarkFlavour.copy(
+            postProcessors = listOf(processor)
+        )
         val custom = IncrementalEngine(flavour)
         custom.beginStream()
         custom.append("```\n")

@@ -1,13 +1,13 @@
 package com.hrm.markdown.renderer
 
 import com.hrm.markdown.parser.MarkdownParser
+import com.hrm.markdown.parser.MarkdownParserConfig
 import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.parser.html.HtmlDirectiveBlockSnapshot
 import com.hrm.markdown.parser.html.HtmlDirectiveInlineSnapshot
 import com.hrm.markdown.parser.html.HtmlRenderer
 import com.hrm.markdown.runtime.DirectiveBlockSnapshot
 import com.hrm.markdown.runtime.DirectiveInlineSnapshot
-import com.hrm.markdown.runtime.MarkdownDirectivePipeline
 import com.hrm.markdown.runtime.MarkdownDirectivePlugin
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 
@@ -25,19 +25,12 @@ object MarkdownHtml {
         softBreakPolicy: MarkdownSoftBreakPolicy = MarkdownSoftBreakPolicy.Space,
     ): String {
         val registry = MarkdownDirectiveRegistry(directivePlugins)
-        val normalized = MarkdownDirectivePipeline(registry).transform(markdown).markdown
+        val normalized = registry.inputPipeline.transform(markdown).markdown
+        val document = MarkdownParser(parserConfig).parse(normalized)
 
-        val parser = MarkdownParser(
-            flavour = parserConfig.flavour,
-            customEmojiMap = parserConfig.customEmojiMap,
-            enableAsciiEmoticons = parserConfig.enableAsciiEmoticons,
-            enableLinting = parserConfig.enableLinting,
-        )
-        val document = parser.parse(normalized)
-
-        return render(
+        return renderDocument(
             document = document,
-            directivePlugins = directivePlugins,
+            registry = registry,
             softBreak = softBreak ?: softBreakPolicy.htmlSoftBreak(xhtml),
             escapeHtml = escapeHtml,
             xhtml = xhtml,
@@ -53,8 +46,18 @@ object MarkdownHtml {
         softBreakPolicy: MarkdownSoftBreakPolicy = MarkdownSoftBreakPolicy.Space,
     ): String {
         val registry = MarkdownDirectiveRegistry(directivePlugins)
+        return renderDocument(document, registry, softBreak ?: softBreakPolicy.htmlSoftBreak(xhtml), escapeHtml, xhtml)
+    }
+
+    private fun renderDocument(
+        document: Document,
+        registry: MarkdownDirectiveRegistry,
+        softBreak: String,
+        escapeHtml: Boolean,
+        xhtml: Boolean,
+    ): String {
         val renderer = HtmlRenderer(
-            softBreak = softBreak ?: softBreakPolicy.htmlSoftBreak(xhtml),
+            softBreak = softBreak,
             escapeHtml = escapeHtml,
             xhtml = xhtml,
             directiveBlockFallback = { snapshot: HtmlDirectiveBlockSnapshot ->

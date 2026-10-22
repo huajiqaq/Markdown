@@ -50,7 +50,7 @@ class MarkdownLayoutSessionTest {
                     )
                 }
                 val documents = remember {
-                    val parser = MarkdownParser(appendCoalesceThreshold = 0)
+                    val parser = MarkdownParser()
                     parser.beginStream()
                     listOf(
                         host.compile(parser.append("stable\n\ntail"), facadeState),

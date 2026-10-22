@@ -24,7 +24,7 @@ class MarkdownDirectivePipelineTest {
                 MarkdownSourceMap.Segmented.Segment(0, output.length, 2, input.length - 2),
             )))
         }
-        val result = MarkdownDirectivePipeline(MarkdownDirectiveRegistry(listOf(trim, strip)))
+        val result = MarkdownDirectiveRegistry(listOf(trim, strip)).inputPipeline
             .transform("raw:  **go**  ")
 
         assertEquals(listOf("strip:raw:  **go**  ", "trim:  **go**  "), calls)

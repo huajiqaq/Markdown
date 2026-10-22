@@ -29,7 +29,7 @@ class IncrementalEditDifferentialTest {
                 for ((seed, includeAppends) in listOf(17, 83, 2026).flatMap { listOf(it to false, it to true) }) {
                     val random = Random(seed)
                     var source = normalizedTestInput(original)
-                    val parser = MarkdownParser(flavour = flavour, enableLinting = true)
+                    val parser = MarkdownParser(MarkdownParserConfig(flavour = flavour, enableLinting = true))
                     parser.parse(source)
                     val history = mutableListOf<String>()
                     repeat(32) { step ->

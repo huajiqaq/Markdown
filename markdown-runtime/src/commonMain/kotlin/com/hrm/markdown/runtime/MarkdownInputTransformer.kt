@@ -4,6 +4,8 @@ package com.hrm.markdown.runtime
  * Markdown 输入转换器。
  *
  * 用于把外部自定义语法转换成官方 directive 语法，避免污染 parser。
+ * 行为不变时复用同一实例；行为改变时提供新实例。转换链按实例和声明的流式契约识别输入处理配置，
+ * 不受指令渲染回调替换影响。
  */
 interface MarkdownInputTransformer {
     val id: String

@@ -76,7 +76,7 @@ class DocumentPublicationContractTest {
 
     @Test
     fun should_preservePublicationUntilCommit_when_streamingChunksAreBuffered() {
-        val parser = MarkdownParser(CommonMarkFlavour, appendCoalesceThreshold = 16)
+        val parser = MarkdownParser(MarkdownParserConfig(flavour = CommonMarkFlavour, appendCoalesceThreshold = 16))
         parser.beginStream()
         val initial = parser.append("prefix\n\ntail")
         val previous = assertNotNull(initial.publication)
@@ -169,9 +169,9 @@ class DocumentPublicationContractTest {
                 paragraphs.firstOrNull()?.blockAttributes = mapOf("blocks" to paragraphs.size.toString())
             }
         }
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-            override val postProcessors = listOf(processor)
-        }
+        val flavour = CommonMarkFlavour.copy(
+            postProcessors = listOf(processor)
+        )
         val parser = MarkdownParser(flavour)
         val initial = parser.parse("first")
         assertEquals("processed:first", ((initial.children.single() as ContainerNode).children.single() as Text).literal)

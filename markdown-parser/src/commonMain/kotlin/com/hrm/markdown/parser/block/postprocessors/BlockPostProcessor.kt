@@ -1,64 +1,15 @@
 package com.hrm.markdown.parser.block.postprocessors
 
-import com.hrm.markdown.parser.LineRange
-import com.hrm.markdown.parser.SourceRange
-import com.hrm.markdown.parser.ast.*
+import com.hrm.markdown.parser.ast.Node
 
 /**
- * Transforms independent Markdown blocks, including their complete child trees.
+ * 转换独立的 Markdown 块及其完整子树。
  *
- * Return the supplied block after editing it, a replacement node, or null to remove it.
- * The parser automatically revisits changed blocks. A callback must produce its result
- * from the supplied block; document-wide transformations belong in [PostProcessor].
- * Published nodes remain read-only. Replacement nodes inherit missing source coordinates
- * from the supplied block, so callers do not need to maintain parser metadata.
- * Blocks containing reference definitions are left unchanged. To transform definitions,
- * use [PostProcessor] instead.
+ * 修改后返回输入块，或返回替换节点；返回 null 表示删除该块。
+ * 解析器自动重新处理变化的块。回调应仅根据输入块产生结果，依赖全文的转换使用 [PostProcessor]。
+ * 已发布节点保持只读。替换节点自动从输入块继承缺失的源码坐标，调用方无需维护解析器元数据。
+ * 包含引用定义的块保持原样；需要修改定义时使用 [PostProcessor]。
  */
-fun interface BlockPostProcessor : PostProcessor {
-    override val priority: Int get() = 100
-
+fun interface BlockPostProcessor : AstPostProcessor {
     fun processBlock(block: Node): Node?
-
-    override fun process(document: Document) {
-        transformDocumentBlocks(document, ::processBlock)
-    }
-}
-
-/** Detach inputs so a block callback cannot reach other blocks through its parent. */
-internal fun transformDocumentBlocks(document: Document, transform: (Node) -> Node?) {
-    val inputs = document.children.toList()
-    document.clearChildren()
-    inputs.forEach { original ->
-        materializeUntrustedContent(original)
-        val definitions = definitionNodes(original)
-        if (definitions.isNotEmpty()) {
-            document.appendChild(original)
-            return@forEach
-        }
-        val output = transform(original)
-        require(output != null || definitions.isEmpty()) {
-            "BlockPostProcessor cannot remove reference definitions; use PostProcessor instead."
-        }
-        if (output == null) return@forEach
-        materializeUntrustedContent(output)
-        require(definitionNodes(output) == definitions) {
-            "BlockPostProcessor cannot add or replace reference definitions; use PostProcessor instead."
-        }
-        if (output !== original) {
-            if (output.sourceRange == SourceRange.EMPTY) output.sourceRange = original.sourceRange
-            if (output.lineRange == LineRange(0, 0)) output.lineRange = original.lineRange
-            if (output.contentHash == 0L) output.contentHash = original.contentHash
-        }
-        document.appendChild(output)
-    }
-}
-
-private fun definitionNodes(root: Node): Set<Node> = buildSet {
-    fun visit(node: Node) {
-        if (node is LinkReferenceDefinition || node is FootnoteDefinition ||
-            node is AbbreviationDefinition || node is BibliographyDefinition) add(node)
-        if (node is ContainerNode) node.forEachMaterializedChild(::visit)
-    }
-    visit(root)
 }

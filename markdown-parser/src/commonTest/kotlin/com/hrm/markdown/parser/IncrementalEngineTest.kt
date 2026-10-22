@@ -177,7 +177,7 @@ class IncrementalEngineTest {
 
     @Test
     fun should_flush_coalesced_tail_when_source_is_read_and_stream_is_aborted() {
-        val parser = MarkdownParser(appendCoalesceThreshold = 16)
+        val parser = MarkdownParser(MarkdownParserConfig(appendCoalesceThreshold = 16))
         parser.beginStream()
 
         parser.append("buffered")

@@ -50,7 +50,7 @@ class IncrementalAlgorithmContractTest {
                         listOf(EditOperation.Delete(offset, minOf(3, original.length - offset)),
                             EditOperation.Replace(offset, minOf(2, original.length - offset), "\r\nX"))
                     for (edit in operations) {
-                        val parser = MarkdownParser(flavour, enableLinting = true)
+                        val parser = MarkdownParser(MarkdownParserConfig(flavour = flavour, enableLinting = true))
                         parser.parse(original).semanticSnapshot()
                         val expected = when (edit) {
                             is EditOperation.Insert -> original.replaceRange(offset, offset, normalizedTestInput(edit.text))
@@ -119,9 +119,9 @@ class IncrementalAlgorithmContractTest {
                 paragraphs.forEach { it.appendChild(Text("processed")) }
             }
         }
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-            override val postProcessors = listOf(processor)
-        }
+        val flavour = CommonMarkFlavour.copy(
+            postProcessors = listOf(processor)
+        )
         val parser = MarkdownParser(flavour)
         var text = "one\n\ntwo"
         parser.parse(text).semanticSnapshot()
@@ -267,7 +267,7 @@ class IncrementalAlgorithmContractTest {
                 document.diagnostics = diagnostics
             }
         }
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour { override val postProcessors = listOf(processor) }
+        val flavour = CommonMarkFlavour.copy( postProcessors = listOf(processor) )
         val parser = MarkdownParser(flavour)
         parser.parse("one")
         assertSame(observed, parser.document)

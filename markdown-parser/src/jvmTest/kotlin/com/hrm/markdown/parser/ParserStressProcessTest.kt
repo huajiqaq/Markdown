@@ -148,7 +148,7 @@ object ParserStressWorker {
             else listOf(CommonMarkFlavour, GFMFlavour, ExtendedFlavour, MarkdownExtraFlavour)
         for (flavour in flavours) {
             val name = "$label/${flavour::class.simpleName}"
-            val parser = MarkdownParser(flavour, appendCoalesceThreshold = 16)
+            val parser = MarkdownParser(MarkdownParserConfig(flavour = flavour, appendCoalesceThreshold = 16))
             phase("$name/full") {
                 val stats = inspect(parser.parse(input), parser.sourceText.lineCount)
                 println("AST $name $stats")

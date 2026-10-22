@@ -27,18 +27,15 @@ import kotlin.test.assertTrue
 /** Compare each committed publication against an independent, uncached renderer compilation. */
 class RenderCompileDifferentialTest {
     private val environment = RenderCompileEnvironment(
-        config = RenderConfigSnapshot(
-            enableHeadingNumbering = true,
-            streaming = true,
-            softBreakPolicy = MarkdownSoftBreakPolicy.LineBreak,
-        ),
+        enableHeadingNumbering = true,
+        softBreakPolicy = MarkdownSoftBreakPolicy.LineBreak,
     )
 
     @Test
     fun should_match_cold_compilation_for_syntax_growth_and_reproducible_structural_edits() {
         for ((flavourName, flavour) in flavours) {
             for (case in cases) {
-                val parser = MarkdownParser(flavour, appendCoalesceThreshold = 0)
+                val parser = MarkdownParser(flavour)
                 val session = RenderCompileSession()
                 parser.beginStream()
                 var source = ""
@@ -85,7 +82,7 @@ class RenderCompileDifferentialTest {
     @Test
     fun should_reuse_unchanged_suffix_ir_after_offset_and_line_shifts_in_every_flavour() {
         for ((flavourName, flavour) in flavours) {
-            val parser = MarkdownParser(flavour, appendCoalesceThreshold = 0)
+            val parser = MarkdownParser(flavour)
             val session = RenderCompileSession()
             val initial = verify(
                 parser.parse("first\n\nmiddle\n\nsuffix one\n\nsuffix two\n"),
@@ -135,10 +132,8 @@ class RenderCompileDifferentialTest {
                     }
                 }
             }
-            val flavour = object : MarkdownFlavour by ExtendedFlavour {
-                override val postProcessors = ExtendedFlavour.postProcessors + extension
-            }
-            val parser = MarkdownParser(flavour, appendCoalesceThreshold = 0)
+            val flavour = ExtendedFlavour.with(extension)
+            val parser = MarkdownParser(flavour)
             val session = RenderCompileSession()
             val source = "[TOC]\n\n# Existing\n\nplain tail"
             verify(parser.parse(source), session, "lazy-$kind/initial")

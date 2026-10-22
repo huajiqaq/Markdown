@@ -79,10 +79,10 @@ class CommonMarkSpecTest {
         for (example in loadSpec()) {
             val expected = MarkdownParser(flavour = CommonMarkFlavour).parse(example.markdown).semanticSnapshot()
             for (singleCharacter in listOf(true, false)) {
-                val parser = MarkdownParser(
+                val parser = MarkdownParser(MarkdownParserConfig(
                     flavour = CommonMarkFlavour,
                     appendCoalesceThreshold = if (singleCharacter) 0 else 16,
-                )
+                ))
                 parser.beginStream()
                 val random = Random(example.example)
                 var offset = 0

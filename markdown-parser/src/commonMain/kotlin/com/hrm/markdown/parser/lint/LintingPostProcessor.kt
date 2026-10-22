@@ -1,5 +1,7 @@
 package com.hrm.markdown.parser.lint
 
+import com.hrm.markdown.parser.MarkdownParserConfig
+
 import com.hrm.markdown.parser.ast.*
 import com.hrm.markdown.parser.block.postprocessors.PostProcessor
 
@@ -20,7 +22,7 @@ import com.hrm.markdown.parser.block.postprocessors.PostProcessor
  *
  * ## 使用方式
  * ```kotlin
- * val parser = MarkdownParser(enableLinting = true)
+ * val parser = MarkdownParser(MarkdownParserConfig(enableLinting = true))
  * val doc = parser.parse(input)
  * val diagnostics = parser.diagnostics
  * diagnostics.diagnostics.forEach { println(it) }

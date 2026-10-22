@@ -8,6 +8,7 @@ import com.hrm.markdown.renderer.internal.core.model.InternalRenderBlockModel
 import com.hrm.markdown.renderer.internal.core.model.InternalRenderDocumentModel
 import com.hrm.markdown.renderer.internal.core.model.TableBlockModel
 import com.hrm.markdown.renderer.internal.layout.inline.InlineLayoutEpoch
+import com.hrm.markdown.renderer.internal.layout.inline.ReferentialIdentity
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutBlockModel
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutDocumentMetadata
 import com.hrm.markdown.renderer.internal.layout.model.InternalLayoutDocumentModel
@@ -84,6 +85,7 @@ internal class MarkdownBlockLayoutCache(
     private val maxEntries: Int = 2_048,
 ) {
     private data class Key(
+        val blockIdentity: ReferentialIdentity,
         val stableId: Long,
         val contentRevision: Long,
         val layoutRevision: Long,
@@ -110,6 +112,9 @@ internal class MarkdownBlockLayoutCache(
     ): InternalLayoutBlockModel {
         val componentKinds = if (environment.codeBlockHeaderHeightPx == 0f && environment.tableToolbarHeightPx == 0f) 0 else block.componentKinds()
         val key = Key(
+            // 不可变 IR 的引用同时覆盖目录、标题编号等全文派生语义，以及含这些语义的容器。
+            // 增量拼接保留稳定块的同一引用；下面的版本字段继续承担哈希分布，避免扫描块内容。
+            blockIdentity = ReferentialIdentity.of(block),
             stableId = block.identity.stableId,
             contentRevision = block.identity.contentRevision,
             layoutRevision = block.identity.layoutRevision,

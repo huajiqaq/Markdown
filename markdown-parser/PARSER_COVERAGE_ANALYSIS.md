@@ -613,7 +613,7 @@
 - ✅ ASCII 表情转换可通过 `enableAsciiEmoticons` 开关控制
 - ✅ Emoji AST 节点携带 `unicode` 字段供渲染器直接使用
 
-> **备注**: `STANDARD_EMOJI_MAP` 包含 200+ 标准短代码到 Unicode 的映射。`ASCII_EMOTICON_MAP` 包含 40+ 常见 ASCII 表情。`appendPossibleEmoji()` 和 `appendText()` 分别处理 `:` 前缀和非 `:` 前缀的表情匹配。参数通过 `MarkdownParser` → `StreamingParser` → `IncrementalEngine` → `InlineParser` 链路传递。
+> **备注**: `STANDARD_EMOJI_MAP` 包含 200+ 标准短代码到 Unicode 的映射。`ASCII_EMOTICON_MAP` 包含 40+ 常见 ASCII 表情。`appendPossibleEmoji()` 和 `appendText()` 分别处理 `:` 前缀和非 `:` 前缀的表情匹配。参数统一保存在 `MarkdownParserConfig`，通过 `MarkdownParser` → `IncrementalEngine` → `InlineParser` 链路传递。
 
 #### 剧透/折叠文本（Spoiler，扩展）
 - ✅ `>!spoiler text!<` 剧透文本标记（Discord / Reddit 风格）
@@ -648,7 +648,7 @@
 
 ---
 
-## 20. 流式解析引擎（StreamingParser）
+## 20. 流式解析引擎（MarkdownParser）
 
 ### ✅ 已支持
 
@@ -657,7 +657,7 @@
 - ✅ `append(chunk)` 追加文本块
 - ✅ `endStream()` 结束流式输入（对受影响尾部进行最终解析，无展示修复）
 - ✅ `abort()` 中止流式输入，并提交 coalesce 缓冲中的当前可显示快照
-- ✅ `fullParse(input)` 非流式完整解析（向后兼容）
+- ✅ `parse(input)` 非流式完整解析，与编辑和流式追加共用同一引擎
 
 #### Append-Only 增量解析
 - ✅ 编辑/追加共用根状态检查点算法，完整连续后缀整体复用

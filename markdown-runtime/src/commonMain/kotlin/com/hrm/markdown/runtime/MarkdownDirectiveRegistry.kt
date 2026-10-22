@@ -15,32 +15,16 @@ class MarkdownDirectiveRegistry(
     private val inlineRenderers = LinkedHashMap<String, MarkdownInlineDirectiveRenderer>()
     private val htmlFallbacks = LinkedHashMap<String, HtmlDirectiveFallback>()
     private val htmlInlineFallbacks = LinkedHashMap<String, HtmlInlineDirectiveFallback>()
-    private val transformers = mutableListOf<MarkdownInputTransformer>()
+    /** 输入处理身份不包含渲染回调和 HTML 降级输出。 */
+    val inputPipeline: MarkdownDirectivePipeline
 
-    /** Aggregate streaming contract for the complete transformer pipeline. */
-    val streamingSupport: MarkdownTransformerStreamingSupport
-        get() = when {
-            transformers.any {
-                it.streamingSupport == MarkdownTransformerStreamingSupport.Unsupported
-            } -> MarkdownTransformerStreamingSupport.Unsupported
-            transformers.all {
-                it.streamingSupport == MarkdownTransformerStreamingSupport.AppendSafe
-            } -> MarkdownTransformerStreamingSupport.AppendSafe
-            else -> MarkdownTransformerStreamingSupport.RestartOnRewrite
-        }
-
-    /** Whether transformed revisions may use the stateful streaming parser. */
-    val supportsStreaming: Boolean
-        get() = streamingSupport != MarkdownTransformerStreamingSupport.Unsupported
-
-    /** Whether every transformer proves that parser session restarts are unnecessary. */
-    val supportsStreamingFastPath: Boolean
-        get() = streamingSupport == MarkdownTransformerStreamingSupport.AppendSafe
-
-    val hasTransformers: Boolean
-        get() = transformers.isNotEmpty()
+    val streamingSupport: MarkdownTransformerStreamingSupport get() = inputPipeline.streamingSupport
+    val supportsStreaming: Boolean get() = inputPipeline.supportsStreaming
+    val supportsStreamingFastPath: Boolean get() = inputPipeline.supportsStreamingFastPath
+    val hasTransformers: Boolean get() = inputPipeline.hasTransformers
 
     init {
+        val transformers = mutableListOf<MarkdownInputTransformer>()
         for (plugin in this.directivePlugins) {
             transformers += plugin.inputTransformers
             for ((tagName, renderer) in plugin.blockDirectiveRenderers) {
@@ -68,9 +52,8 @@ class MarkdownDirectiveRegistry(
                 htmlInlineFallbacks[tagName] = fallback
             }
         }
+        inputPipeline = if (transformers.isEmpty()) MarkdownDirectivePipeline.Empty else MarkdownDirectivePipeline(transformers)
     }
-
-    fun inputTransformers(): List<MarkdownInputTransformer> = transformers.toList()
 
     fun findBlockDirectiveRenderer(tagName: String): MarkdownBlockDirectiveRenderer? = blockRenderers[tagName]
 

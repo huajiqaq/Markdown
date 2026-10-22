@@ -14,7 +14,7 @@ import kotlin.test.*
 class IncrementalSessionLifecycleTest {
     @Test
     fun should_clearPreviousDiagnostics_when_beginningANewStream() {
-        val parser = MarkdownParser(enableLinting = true, appendCoalesceThreshold = 16)
+        val parser = MarkdownParser(MarkdownParserConfig(enableLinting = true, appendCoalesceThreshold = 16))
         parser.parse("# Title\n\n### Skipped level\n\ntext[^missing]")
         val previousDiagnostics = parser.diagnostics
         assertTrue(previousDiagnostics.diagnostics.isNotEmpty())
@@ -34,7 +34,7 @@ class IncrementalSessionLifecycleTest {
         for (flavour in listOf(CommonMarkFlavour, GFMFlavour, ExtendedFlavour, MarkdownExtraFlavour)) {
             for (threshold in listOf(0, 16)) for (seed in listOf(17, 83, 2026)) {
                 val random = Random(seed)
-                val parser = MarkdownParser(flavour, enableLinting = true, appendCoalesceThreshold = threshold)
+                val parser = MarkdownParser(MarkdownParserConfig(flavour = flavour, enableLinting = true, appendCoalesceThreshold = threshold))
                 var source = "# Initial\n\nfirst **paragraph**\n\nlast"
                 // Model the received and published inputs separately so buffered updates are observable.
                 var committed = source
@@ -115,7 +115,7 @@ class IncrementalSessionLifecycleTest {
                     assertEquals(source, parser.currentText(), "$context source")
                     assertEquals(source, parser.sourceText.content, "$context sourceText")
                     assertEquals(streaming, parser.isStreaming, "$context mode")
-                    val expected = if (repaired) MarkdownParser(flavour, enableLinting = true).apply {
+                    val expected = if (repaired) MarkdownParser(MarkdownParserConfig(flavour = flavour, enableLinting = true)).apply {
                         beginStream(); append(committed)
                     }.document else referenceDocument(parser, committed)
                     assertEquals(expected.semanticSnapshot(), parser.document.semanticSnapshot(), "$context AST")

@@ -1,5 +1,6 @@
 package com.hrm.markdown.renderer
 
+import com.hrm.markdown.parser.MarkdownParserConfig
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -16,7 +17,6 @@ import com.hrm.diagram.core.theme.DiagramTheme
 import com.hrm.latex.renderer.model.LatexConfig
 import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.parser.log.HLog
-import com.hrm.markdown.runtime.MarkdownDirectivePipeline
 import com.hrm.markdown.runtime.MarkdownDirectivePlugin
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 import com.hrm.markdown.runtime.MarkdownSourceMap
@@ -63,6 +63,8 @@ import com.hrm.markdown.runtime.MarkdownSourceMap
  * 默认使用 [MarkdownParserConfig.Default]。修改解析配置会重新创建解析会话。
  */
 @Composable
+// 插件的值相等不代表回调实例相同；入口必须检查引用，解析和编译仍按各自依赖复用。
+@NonSkippableComposable
 fun Markdown(
     markdown: String,
     modifier: Modifier = Modifier,
@@ -85,8 +87,8 @@ fun Markdown(
     directivePlugins: List<MarkdownDirectivePlugin> = emptyList(),
     parserConfig: MarkdownParserConfig = MarkdownParserConfig.Default,
 ) {
-    val directiveRegistry = remember(directivePlugins) { MarkdownDirectiveRegistry(directivePlugins) }
-    val runtimePipeline = remember(directiveRegistry) { MarkdownDirectivePipeline(directiveRegistry) }
+    val directiveRegistry = rememberDirectiveRegistry(directivePlugins)
+    val runtimePipeline = remember(directiveRegistry.inputPipeline) { directiveRegistry.inputPipeline }
     val effectiveStreaming = isStreaming && runtimePipeline.supportsStreaming
     LaunchedEffect(isStreaming, effectiveStreaming, runtimePipeline) {
         if (isStreaming && !effectiveStreaming) {
@@ -181,7 +183,7 @@ fun Markdown(
     interactions: MarkdownInteractions = MarkdownInteractions.Default,
     directivePlugins: List<MarkdownDirectivePlugin> = emptyList(),
 ) {
-    val directiveRegistry = remember(directivePlugins) { MarkdownDirectiveRegistry(directivePlugins) }
+    val directiveRegistry = rememberDirectiveRegistry(directivePlugins)
     MarkdownDocumentRenderer(
         document = document,
         modifier = modifier,
@@ -200,6 +202,31 @@ fun Markdown(
         components = components,
         interactions = interactions,
     )
+}
+
+@Composable
+@NonSkippableComposable
+private fun rememberDirectiveRegistry(plugins: List<MarkdownDirectivePlugin>): MarkdownDirectiveRegistry =
+    remember { DirectiveRegistryMemo() }.resolve(plugins)
+
+/** 按插件实例与顺序缓存；插件未替换时不创建键、包装对象或列表快照。 */
+private class DirectiveRegistryMemo {
+    private var plugins: List<MarkdownDirectivePlugin> = emptyList()
+    private var registry = MarkdownDirectiveRegistry.Empty
+
+    fun resolve(current: List<MarkdownDirectivePlugin>): MarkdownDirectiveRegistry {
+        if (current.size == plugins.size) {
+            var index = 0
+            while (index < current.size && current[index] === plugins[index]) index++
+            if (index == current.size) return registry
+        }
+        // 独立保存引用，避免调用方复用可变列表时改写上次比较的依据。
+        val snapshot = current.toList()
+        val updated = if (snapshot.isEmpty()) MarkdownDirectiveRegistry.Empty else MarkdownDirectiveRegistry(snapshot)
+        plugins = snapshot
+        registry = updated
+        return registry
+    }
 }
 
 @Composable

@@ -110,13 +110,13 @@ object DefaultRenderModelCompiler : RenderModelCompiler {
         val blockNodes = document.children
         val context = CompileContext(
             identities = RenderIdentityProvider(document),
-            headingNumbers = if (environment.config.enableHeadingNumbering) {
+            headingNumbers = if (environment.enableHeadingNumbering) {
                 computeHeadingNumbers(blockNodes)
             } else {
                 emptyMap()
             },
             tocEntries = collectHeadingEntries(document),
-            softBreakPolicy = environment.config.softBreakPolicy,
+            softBreakPolicy = environment.softBreakPolicy,
         )
         val blocks = RenderBlockSlots.from(blockNodes.map { compileBlock(it, context) })
         val model = InternalRenderDocumentModel(
@@ -177,7 +177,7 @@ object DefaultRenderModelCompiler : RenderModelCompiler {
             identities = RenderIdentityProvider(document, roots, startIndex),
             headingNumbers = emptyMap(),
             tocEntries = emptyList(),
-            softBreakPolicy = environment.config.softBreakPolicy,
+            softBreakPolicy = environment.softBreakPolicy,
         )
         return InsertedRenderCompileResult(
             roots.map { compileBlock(it, context) },

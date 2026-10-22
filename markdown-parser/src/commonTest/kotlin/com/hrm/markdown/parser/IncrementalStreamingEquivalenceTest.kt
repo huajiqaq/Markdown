@@ -15,7 +15,7 @@ class IncrementalStreamingEquivalenceTest {
             for ((sample, feature) in incrementalSyntaxSamples.withIndex()) {
                 val raw = "prefix\n\n$feature\n\nsuffix"
                 for (chunkSize in listOf(1, 7, 31)) for (threshold in listOf(0, 16)) {
-                    val parser = MarkdownParser(flavour, appendCoalesceThreshold = threshold)
+                    val parser = MarkdownParser(MarkdownParserConfig(flavour = flavour, appendCoalesceThreshold = threshold))
                     parser.beginStream()
                     var received = ""
                     var normalized = ""

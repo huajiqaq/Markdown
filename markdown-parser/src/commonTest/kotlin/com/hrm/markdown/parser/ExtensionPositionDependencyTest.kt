@@ -28,9 +28,9 @@ class ExtensionPositionDependencyTest {
             }
             block
         }
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-            override val postProcessors = listOf(processor)
-        }
+        val flavour = CommonMarkFlavour.copy(
+            postProcessors = listOf(processor)
+        )
         val engine = IncrementalEngine(flavour)
         var source = "prefix\n\nmiddle\n\nsuffix"
         engine.fullParse(source)
@@ -65,9 +65,9 @@ class ExtensionPositionDependencyTest {
                 return OpenBlock(MathBlock("$lineIdx:$text"), contentStartLine = lineIdx, lastLineIndex = lineIdx)
             }
         }
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-            override val blockStarters = listOf(starter) + CommonMarkFlavour.blockStarters
-        }
+        val flavour = CommonMarkFlavour.copy(
+            blockStarters = listOf(starter) + CommonMarkFlavour.blockStarters
+        )
         val engine = IncrementalEngine(flavour)
         var source = "prefix\n\n@line middle\n\n@line suffix"
         engine.fullParse(source)

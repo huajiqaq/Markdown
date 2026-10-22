@@ -1,214 +1,150 @@
 package com.hrm.markdown.parser
 
+import com.hrm.markdown.parser.ast.Document
+import com.hrm.markdown.parser.ast.Paragraph
+import com.hrm.markdown.parser.ast.Text
+import com.hrm.markdown.parser.block.OpenBlock
+import com.hrm.markdown.parser.block.postprocessors.AstPostProcessor
+import com.hrm.markdown.parser.block.postprocessors.BlockPostProcessor
 import com.hrm.markdown.parser.block.postprocessors.PostProcessor
 import com.hrm.markdown.parser.block.starters.BlockStarter
+import com.hrm.markdown.parser.core.LineCursor
 import com.hrm.markdown.parser.flavour.*
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
-import kotlin.test.assertNotSame
-import kotlin.test.assertSame
-import kotlin.test.assertTrue
+import com.hrm.markdown.parser.streaming.semanticSnapshot
+import kotlin.test.*
 
-/**
- * Flavour 配置缓存测试。
- */
 class FlavourCacheTest {
-
-    /** 创建一个匿名自定义 Flavour 实例。 */
-    private fun createCustomFlavour(): MarkdownFlavour = object : MarkdownFlavour {
-        override val blockStarters: List<BlockStarter> = CommonMarkFlavour.blockStarters
-        override val postProcessors: List<PostProcessor> = emptyList()
-    }
-
-    // ===== 单例方言的全局缓存 =====
-
     @Test
-    fun should_cache_same_singleton_flavour() {
-        FlavourCache.clearAll()
-        val cache1 = FlavourCache.of(ExtendedFlavour)
-        val cache2 = FlavourCache.of(ExtendedFlavour)
-        assertSame(cache1, cache2, "Same singleton flavour should return same cache instance")
-    }
-
-    @Test
-    fun should_cache_different_singleton_flavours_separately() {
-        FlavourCache.clearAll()
-        val extCache = FlavourCache.of(ExtendedFlavour)
-        val cmCache = FlavourCache.of(CommonMarkFlavour)
-        val gfmCache = FlavourCache.of(GFMFlavour)
-
-        assertEquals(3, FlavourCache.cacheSize)
-        assertTrue(extCache.blockStarters.size > cmCache.blockStarters.size)
-        assertTrue(gfmCache.blockStarters.size >= cmCache.blockStarters.size)
-    }
-
-    @Test
-    fun should_invalidate_singleton_cache() {
-        FlavourCache.clearAll()
-        val cache1 = FlavourCache.of(ExtendedFlavour)
-        assertEquals(1, FlavourCache.cacheSize)
-        FlavourCache.invalidate(ExtendedFlavour)
-        assertEquals(0, FlavourCache.cacheSize)
-        val cache2 = FlavourCache.of(ExtendedFlavour)
-        assertNotSame(cache1, cache2, "Should create new cache after invalidation")
-    }
-
-    @Test
-    fun should_clear_all_singleton_caches() {
-        FlavourCache.clearAll()
-        FlavourCache.of(ExtendedFlavour)
-        FlavourCache.of(CommonMarkFlavour)
-        FlavourCache.of(GFMFlavour)
-        assertEquals(3, FlavourCache.cacheSize)
-        FlavourCache.clearAll()
-        assertEquals(0, FlavourCache.cacheSize)
-    }
-
-    // ===== 自定义方言不进入全局缓存 =====
-
-    @Test
-    fun should_not_cache_custom_flavour_globally() {
-        FlavourCache.clearAll()
-        val custom = createCustomFlavour()
-        FlavourCache.of(custom)
-        assertEquals(0, FlavourCache.cacheSize, "Custom flavour should not enter global cache")
-    }
-
-    @Test
-    fun should_create_new_instance_for_custom_flavour_each_time() {
-        FlavourCache.clearAll()
-        val custom = createCustomFlavour()
-        val cache1 = FlavourCache.of(custom)
-        val cache2 = FlavourCache.of(custom)
-        assertNotSame(cache1, cache2, "Custom flavour should get new instance each time from of()")
-    }
-
-    @Test
-    fun should_not_leak_when_creating_many_custom_flavours() {
-        FlavourCache.clearAll()
-        // 创建大量自定义方言，全局缓存大小不应增长
-        repeat(100) {
-            FlavourCache.of(createCustomFlavour())
+    fun should_reuseOwnedPlan_when_builtinOrCustomFlavourIsReused() {
+        for (flavour in listOf(ExtendedFlavour, CommonMarkFlavour, GFMFlavour, CommonMarkFlavour.copy(enableGfmAutolinks = true))) {
+            val first = FlavourCache.of(flavour)
+            val second = FlavourCache.of(flavour)
+            assertSame(first, second)
+            assertSame(first.blockStarterRegistry, second.blockStarterRegistry)
+            assertSame(first.newPostProcessorRegistry().sortedSnapshot(), second.newPostProcessorRegistry().sortedSnapshot())
         }
-        assertEquals(0, FlavourCache.cacheSize, "Global cache should not grow with custom flavours")
     }
 
     @Test
-    fun should_allow_direct_construction() {
-        val custom = createCustomFlavour()
-        val cache = FlavourCache(custom)
-        assertEquals(CommonMarkFlavour.blockStarters.size, cache.blockStarters.size)
-        assertEquals(0, cache.postProcessors.size)
-        assertTrue(cache.blockStarterRegistry.isFrozen)
+    fun should_isolatePlans_when_distinctConfigurationsAreCreated() {
+        val first = CommonMarkFlavour.copy(enableGfmAutolinks = true)
+        val second = CommonMarkFlavour.copy(enableGfmAutolinks = true)
+        assertNotSame(FlavourCache.of(first), FlavourCache.of(second))
+        assertSame(first.blockStarters, second.blockStarters, "Trusted frozen collections need no second copy")
+        assertSame(first.postProcessors, second.postProcessors)
     }
 
-    // ===== 配置快照行为 =====
+    @Test
+    fun should_preserveConfigurationIdentity_when_copyDoesNotChangeItsInputs() {
+        assertSame(CommonMarkFlavour, CommonMarkFlavour.copy())
+        assertSame(CommonMarkFlavour, CommonMarkFlavour.copy(enableExtendedInline = false))
+        val alternative = CommonMarkFlavour.copy(enableExtendedInline = true)
+        assertNotSame(CommonMarkFlavour, alternative)
+        assertTrue(alternative.enableExtendedInline)
+    }
 
     @Test
-    fun should_cache_block_starters_as_immutable_snapshot() {
-        val starters = CommonMarkFlavour.blockStarters.toMutableList()
-        val original = starters.toList()
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-            override val blockStarters: List<BlockStarter> = starters
+    fun should_rejectAmbiguousScope_when_aProcessorImplementsBothInterfaces() {
+        val processor = object : PostProcessor, BlockPostProcessor {
+            override fun process(document: Document) = Unit
+            override fun processBlock(block: com.hrm.markdown.parser.ast.Node) = block
         }
-        val cache = FlavourCache(flavour)
+        assertFailsWith<IllegalArgumentException> { CommonMarkFlavour.with(processor) }
+    }
 
+    @Test
+    fun should_preserveAllSyntaxSettings_when_copyingOrAppendingExtensions() {
+        val processor = BlockPostProcessor { it }
+        val starter = unusedStarter()
+        val original = MarkdownFlavour(
+            CommonMarkFlavour.blockStarters,
+            enableGfmAutolinks = false,
+            enableExtendedInline = false,
+            enableStrikethrough = false,
+            enableEmphasisCoalescing = true,
+        )
+        for (derived in listOf(original.copy(), original.with(processor), original.with(starter))) {
+            assertFalse(derived.enableGfmAutolinks)
+            assertFalse(derived.enableExtendedInline)
+            assertFalse(derived.enableStrikethrough)
+            assertTrue(derived.enableEmphasisCoalescing)
+        }
+        val source = "# Title\n\n~~literal~~ ==literal=="
+        assertEquals(
+            MarkdownParser(CommonMarkFlavour).parse(source).semanticSnapshot(),
+            MarkdownParser(CommonMarkFlavour.with(processor)).parse(source).semanticSnapshot(),
+        )
+    }
+
+    @Test
+    fun should_snapshotCollections_when_mutableInputsAreChangedBeforePlanCreation() {
+        val starter = unusedStarter()
+        val starters = mutableListOf(starter)
+        val processor = PostProcessor { }
+        val processors = mutableListOf<AstPostProcessor>(processor)
+        val flavour = MarkdownFlavour(starters, processors)
         starters.clear()
-
-        assertEquals(original, cache.blockStarters)
-        assertEquals(original.sortedBy { it.priority }, cache.blockStarterRegistry.allStarters())
-        assertEquals(original.sortedBy { it.priority }, cache.newBlockStarterRegistry().allStarters())
-    }
-
-    @Test
-    fun should_cache_post_processors_as_immutable_snapshot() {
-        val executed = mutableListOf<String>()
-        fun processor(name: String) = object : PostProcessor {
-            override val priority = 0
-            override fun process(document: com.hrm.markdown.parser.ast.Document) { executed += name }
-        }
-        val original = processor("original")
-        val processors = mutableListOf(original)
-        val flavour = object : MarkdownFlavour by CommonMarkFlavour {
-            override val postProcessors: List<PostProcessor> = processors
-        }
-        val cache = FlavourCache(flavour)
-
         processors.clear()
-        processors += processor("replacement")
-        cache.newPostProcessorRegistry().processAll(com.hrm.markdown.parser.ast.Document())
-
-        assertEquals(listOf(original), cache.postProcessors)
-        assertEquals(listOf("original"), executed)
+        assertEquals(listOf(starter), flavour.blockStarters)
+        assertEquals(listOf(processor), flavour.postProcessors)
+        assertEquals(listOf(starter), FlavourCache.of(flavour).blockStarterRegistry.allStarters())
+        assertFails { (flavour.blockStarters as MutableList<BlockStarter>).clear() }
+        assertFails { (flavour.postProcessors as MutableList<AstPostProcessor>).clear() }
     }
 
     @Test
-    fun should_provide_cached_block_starter_registry() {
-        FlavourCache.clearAll()
-        val cache = FlavourCache.of(ExtendedFlavour)
-        val registry1 = cache.blockStarterRegistry
-        val registry2 = cache.blockStarterRegistry
-        assertSame(registry1, registry2, "blockStarterRegistry should be cached within instance")
-        assertNotNull(registry1)
+    fun should_appendBothProcessorScopesInOrder_when_usingWith() {
+        val events = mutableListOf<String>()
+        val global = PostProcessor { events += "global" }
+        val local = BlockPostProcessor { block -> events += "block"; block }
+        val final = PostProcessor { events += "final" }
+        val flavour = CommonMarkFlavour.with(global, local).with(final)
+        assertEquals(listOf(global, local, final), flavour.postProcessors)
+        assertEquals(100, global.priority)
+        assertEquals(100, local.priority)
+        val document = Document().also { it.appendChild(Paragraph().also { p -> p.appendChild(Text("text")) }) }
+        FlavourCache.of(flavour).newPostProcessorRegistry().processAll(document)
+        assertEquals(listOf("global", "block", "final"), events)
     }
 
     @Test
-    fun should_freeze_cached_block_starter_registry() {
-        FlavourCache.clearAll()
-        val cache = FlavourCache.of(ExtendedFlavour)
-        val registry = cache.blockStarterRegistry
-        assertTrue(registry.isFrozen, "Cached registry should be frozen")
-        assertFailsWith<IllegalStateException>("register on frozen registry should throw") {
-            registry.register(CommonMarkFlavour.blockStarters.first())
+    fun should_preserveProcessorPriority_when_compilingTheOwnedPlan() {
+        val events = mutableListOf<String>()
+        val later = PostProcessor { events += "later" }
+        val earlier = object : PostProcessor {
+            override val priority = 0
+            override fun process(document: Document) { events += "earlier" }
         }
+        val flavour = CommonMarkFlavour.with(later, earlier)
+        FlavourCache.of(flavour).newPostProcessorRegistry().processAll(Document())
+        assertEquals(listOf("earlier", "later"), events)
     }
 
     @Test
-    fun should_return_unfrozen_new_block_starter_registry() {
-        FlavourCache.clearAll()
-        val cache = FlavourCache.of(ExtendedFlavour)
-        val newRegistry = cache.newBlockStarterRegistry()
-        assertTrue(!newRegistry.isFrozen, "newBlockStarterRegistry should not be frozen")
-        newRegistry.register(CommonMarkFlavour.blockStarters.first())
+    fun should_protectCompiledRegistry_when_newStartersAreRegistered() {
+        val cache = FlavourCache.of(CommonMarkFlavour)
+        assertTrue(cache.blockStarterRegistry.isFrozen)
+        assertFailsWith<IllegalStateException> { cache.blockStarterRegistry.register(unusedStarter()) }
+        val copy = cache.newBlockStarterRegistry()
+        val originalSize = copy.allStarters().size
+        copy.register(unusedStarter())
+        assertEquals(originalSize + 1, copy.allStarters().size)
+        assertEquals(originalSize, cache.blockStarterRegistry.allStarters().size)
     }
 
     @Test
-    fun should_provide_new_post_processor_registry_each_time() {
-        FlavourCache.clearAll()
-        val cache = FlavourCache.of(ExtendedFlavour)
-        val reg1 = cache.newPostProcessorRegistry()
-        val reg2 = cache.newPostProcessorRegistry()
-        assertTrue(reg1 !== reg2, "newPostProcessorRegistry should return new instances")
+    fun should_keepParserLocalProcessorRegistrations_when_sharingAFlavour() {
+        val cache = FlavourCache.of(CommonMarkFlavour)
+        val first = cache.newPostProcessorRegistry()
+        val second = cache.newPostProcessorRegistry()
+        first.register(PostProcessor { })
+        assertEquals(1, first.sortedSnapshot().size)
+        assertEquals(0, second.sortedSnapshot().size)
     }
 
-    // ===== 集成测试 =====
-
-    @Test
-    fun should_use_cache_in_parser_without_error() {
-        FlavourCache.clearAll()
-        val parser1 = MarkdownParser(ExtendedFlavour)
-        val parser2 = MarkdownParser(ExtendedFlavour)
-        val parser3 = MarkdownParser(ExtendedFlavour)
-
-        val doc1 = parser1.parse("# Hello")
-        val doc2 = parser2.parse("## World")
-        val doc3 = parser3.parse("### Test")
-
-        assertEquals(1, (doc1.children.first() as com.hrm.markdown.parser.ast.Heading).level)
-        assertEquals(2, (doc2.children.first() as com.hrm.markdown.parser.ast.Heading).level)
-        assertEquals(3, (doc3.children.first() as com.hrm.markdown.parser.ast.Heading).level)
-    }
-
-    @Test
-    fun should_work_with_custom_flavour_in_parser() {
-        FlavourCache.clearAll()
-        val custom = createCustomFlavour()
-        val parser = MarkdownParser(custom)
-        val doc = parser.parse("# Hello")
-        assertTrue(doc.children.isNotEmpty())
-        // 全局缓存不会增长（custom 不在注册单例集合中）
-        assertEquals(0, FlavourCache.cacheSize, "Custom flavour parser should not pollute global cache")
+    private fun unusedStarter(): BlockStarter = object : BlockStarter {
+        override val priority = 700
+        override val canInterruptParagraph = false
+        override fun tryStart(cursor: LineCursor, lineIdx: Int, tip: OpenBlock): OpenBlock? = null
     }
 }

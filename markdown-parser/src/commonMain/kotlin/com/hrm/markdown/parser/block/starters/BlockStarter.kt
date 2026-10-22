@@ -7,7 +7,7 @@ import com.hrm.markdown.parser.core.LineCursor
  * 块级开启器接口。
  *
  * 每个 BlockStarter 实现负责检测并创建一种块级节点。
- * 通过 [BlockStarterRegistry] 注册制管理，支持插件化扩展。
+ * 通过 `flavour.with(starter)` 添加到不可变方言配置。
  *
  * 设计原则：
  * - 单一职责：每个实现只处理一种块类型

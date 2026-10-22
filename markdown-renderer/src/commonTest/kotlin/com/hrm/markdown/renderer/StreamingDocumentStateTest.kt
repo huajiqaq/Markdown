@@ -1,6 +1,5 @@
 package com.hrm.markdown.renderer
 
-import com.hrm.markdown.runtime.MarkdownDirectivePipeline
 import com.hrm.markdown.runtime.MarkdownDirectivePlugin
 import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 import com.hrm.markdown.runtime.MarkdownInputTransformer
@@ -28,7 +27,7 @@ class StreamingDocumentStateTest {
             override val id: String = "default-rewrite"
             override val inputTransformers: List<MarkdownInputTransformer> = listOf(transformer)
         }
-        val pipeline = MarkdownDirectivePipeline(MarkdownDirectiveRegistry(listOf(plugin)))
+        val pipeline = MarkdownDirectiveRegistry(listOf(plugin)).inputPipeline
         val calls = mutableListOf<String>()
         val partial = pipeline.transform("custom{").markdown
         val initial = updateStreamingDocumentState(

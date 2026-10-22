@@ -1,5 +1,7 @@
 package com.hrm.markdown.benchmark
 
+import com.hrm.markdown.parser.MarkdownParserConfig
+
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.parser.ast.Paragraph
@@ -70,7 +72,7 @@ open class ParserCallSampleTimeBenchmark {
         replacement = "X"
         require(source[editOffset] != 'X' && source[editOffset] != 'Y')
 
-        parser = MarkdownParser(CommonMarkFlavour, appendCoalesceThreshold = 16)
+        parser = MarkdownParser(MarkdownParserConfig(flavour = CommonMarkFlavour, appendCoalesceThreshold = 16))
         if (appendMode) {
             parser.beginStream()
             parser.append(source)

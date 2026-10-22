@@ -203,7 +203,8 @@ internal fun buildInlineLayoutBlockFromResult(
     val contentTop = top + insets.top
     val contentWidth = (width - insets.left - insets.right).coerceAtLeast(0f)
     val layout = inlineLayoutRuntime.flowLayout(
-        identity = identity,
+        // 断行依赖最终行内内容；标题编号等派生内容已计入模型版本，外层 AST 块版本可能不变。
+        identity = model.identity,
         inlineResult = inlineResult,
         style = style,
         epoch = inlineLayoutEpoch,

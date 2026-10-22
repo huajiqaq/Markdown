@@ -16,10 +16,10 @@ class RenderCompileAllocationScalingTest {
         if (!bean.isThreadAllocatedMemorySupported) return
         bean.isThreadAllocatedMemoryEnabled = true
         val threadId = Thread.currentThread().threadId()
-        val environment = RenderCompileEnvironment(config = RenderConfigSnapshot(streaming = true))
+        val environment = RenderCompileEnvironment()
         var expectedVisits: Int? = null
         val allocations = listOf(100, 1000, 10000).map { paragraphs ->
-            val parser = MarkdownParser(appendCoalesceThreshold = 0)
+            val parser = MarkdownParser()
             parser.beginStream()
             val initial = parser.append(buildString {
                 repeat(paragraphs) { append("stable **bold** with [link](/target)\n\n") }
@@ -64,7 +64,7 @@ class RenderCompileAllocationScalingTest {
     @Test
     fun should_retainOnlyCurrentRootSlots_when_manyPublishedBlocksAreRepeatedlyDeleted() {
         val block = "stable **bold** with [link](/target)\n\n"
-        val parser = MarkdownParser(appendCoalesceThreshold = 0)
+        val parser = MarkdownParser()
         val session = RenderCompileSession()
         val environment = RenderCompileEnvironment()
         session.compile(parser.parse(block.repeat(2048) + "tail"), environment)

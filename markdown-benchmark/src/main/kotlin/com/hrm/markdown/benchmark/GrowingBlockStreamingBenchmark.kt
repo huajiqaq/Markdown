@@ -1,5 +1,7 @@
 package com.hrm.markdown.benchmark
 
+import com.hrm.markdown.parser.MarkdownParserConfig
+
 import com.hrm.markdown.parser.MarkdownParser
 import com.hrm.markdown.parser.ast.FencedCodeBlock
 import com.hrm.markdown.parser.ast.ListBlock
@@ -92,7 +94,7 @@ private fun runGrowingBlockTrial(
     materialize: String,
     allocatedBytes: () -> Long,
 ): GrowingTrial {
-    val parser = MarkdownParser(flavour, appendCoalesceThreshold = coalesce)
+    val parser = MarkdownParser(MarkdownParserConfig(flavour = flavour, appendCoalesceThreshold = coalesce))
     parser.beginStream()
     val samples = GrowingOperation.entries.associateWith { operation ->
         GrowingSamples(if (operation == GrowingOperation.EndStream || operation == GrowingOperation.ConsumeEnd) 1 else chunks.size)

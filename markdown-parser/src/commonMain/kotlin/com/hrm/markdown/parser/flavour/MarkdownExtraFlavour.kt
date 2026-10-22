@@ -44,7 +44,7 @@ import com.hrm.markdown.parser.block.starters.*
  * """.trimIndent())
  * ```
  */
-object MarkdownExtraFlavour : MarkdownFlavour {
+val MarkdownExtraFlavour: MarkdownFlavour = MarkdownFlavour(
 
     /**
      * block starters for PHP Markdown Extra.
@@ -57,7 +57,7 @@ object MarkdownExtraFlavour : MarkdownFlavour {
      * does not include: FrontMatter, CustomContainer, MathBlock,
      * PageBreak, DirectiveBlock.
      */
-    override val blockStarters: List<BlockStarter> = listOf(
+    blockStarters = listOf(
         SetextHeadingStarter(),        // 100
         HeadingStarter(),              // 110
         TableStarter(),                // 200
@@ -69,7 +69,7 @@ object MarkdownExtraFlavour : MarkdownFlavour {
         FootnoteDefinitionStarter(),   // 510
         DefinitionDescriptionStarter(), // 520
         IndentedCodeBlockStarter(),    // 600
-    )
+    ),
 
     /**
      * post processors for PHP Markdown Extra.
@@ -81,15 +81,15 @@ object MarkdownExtraFlavour : MarkdownFlavour {
      *
      * does not include: DiagramProcessor, ColumnsLayoutProcessor.
      */
-    override val postProcessors: List<PostProcessor> = listOf(
+    postProcessors = listOf(
         HeadingIdProcessor(),          // 100
         BlockAttributeProcessor(),     // 150
         AbbreviationProcessor(),       // 200
-    )
+    ),
 
     /** gfm autolinks are not part of PHP Markdown Extra */
-    override val enableGfmAutolinks: Boolean = false
+    enableGfmAutolinks = false,
 
     /** extended inline syntax (math, emoji, highlight, etc.) is not part of PHP Markdown Extra */
-    override val enableExtendedInline: Boolean = false
-}
+    enableExtendedInline = false,
+)

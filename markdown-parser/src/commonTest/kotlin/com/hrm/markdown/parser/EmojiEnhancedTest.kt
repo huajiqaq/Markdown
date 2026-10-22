@@ -59,9 +59,9 @@ class EmojiEnhancedTest {
 
     @Test
     fun should_support_custom_emoji_mapping() {
-        val parser = MarkdownParser(
+        val parser = MarkdownParser(MarkdownParserConfig(
             customEmojiMap = mapOf("my-emoji" to "🦄")
-        )
+        ))
         val doc = parser.parse(":my-emoji:")
         val para = doc.children.first()
         assertIs<Paragraph>(para)
@@ -74,9 +74,9 @@ class EmojiEnhancedTest {
 
     @Test
     fun should_prioritize_custom_over_standard() {
-        val parser = MarkdownParser(
+        val parser = MarkdownParser(MarkdownParserConfig(
             customEmojiMap = mapOf("smile" to "🌟")
-        )
+        ))
         val doc = parser.parse(":smile:")
         val para = doc.children.first()
         assertIs<Paragraph>(para)
@@ -87,7 +87,7 @@ class EmojiEnhancedTest {
 
     @Test
     fun should_parse_ascii_emoticon_smiley() {
-        val parser = MarkdownParser(enableAsciiEmoticons = true)
+        val parser = MarkdownParser(MarkdownParserConfig(enableAsciiEmoticons = true))
         val doc = parser.parse("hello :)")
         val para = doc.children.first()
         assertIs<Paragraph>(para)
@@ -99,7 +99,7 @@ class EmojiEnhancedTest {
 
     @Test
     fun should_parse_ascii_emoticon_grin() {
-        val parser = MarkdownParser(enableAsciiEmoticons = true)
+        val parser = MarkdownParser(MarkdownParserConfig(enableAsciiEmoticons = true))
         val doc = parser.parse("nice :D")
         val para = doc.children.first()
         assertIs<Paragraph>(para)

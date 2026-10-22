@@ -1,11 +1,6 @@
 package com.hrm.markdown.renderer.internal.layout.inline
 
 import androidx.compose.ui.text.TextStyle
-import com.hrm.markdown.parser.block.postprocessors.PostProcessor
-import com.hrm.markdown.parser.block.starters.BlockStarter
-import com.hrm.markdown.parser.flavour.CommonMarkFlavour
-import com.hrm.markdown.parser.flavour.MarkdownFlavour
-import com.hrm.markdown.renderer.MarkdownParserConfig
 import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -41,10 +36,8 @@ class InlineFlowLayoutCacheTest {
 
     @Test
     fun should_notReuseLayout_when_epochValuesHaveSameHashCode() {
-        val firstFlavour = CollidingFlavour()
-        val secondFlavour = CollidingFlavour()
-        val firstConfig = MarkdownParserConfig(flavour = firstFlavour)
-        val secondConfig = MarkdownParserConfig(flavour = secondFlavour)
+        val firstConfig = HashCountingValue(hash = 7)
+        val secondConfig = HashCountingValue(hash = 7)
         val collaborator = ReferentialIdentity.of(Any())
         val firstEpoch = testEpoch(firstConfig, collaborator)
         val secondEpoch = testEpoch(secondConfig, collaborator)
@@ -96,7 +89,7 @@ class InlineFlowLayoutCacheTest {
     }
 
     private fun testEpoch(
-        config: MarkdownParserConfig = MarkdownParserConfig.Default,
+        config: Any = Unit,
         collaborator: ReferentialIdentity = ReferentialIdentity.of(Any()),
     ): InlineLayoutEpoch = InlineLayoutEpoch(
         themeIdentity = StructuralIdentity.of(ResolvedMarkdownStyle()),
@@ -109,13 +102,6 @@ class InlineFlowLayoutCacheTest {
         onLinkClickIdentity = collaborator,
         onFootnoteClickIdentity = collaborator,
     )
-
-    private class CollidingFlavour : MarkdownFlavour {
-        override val blockStarters: List<BlockStarter> = CommonMarkFlavour.blockStarters
-        override val postProcessors: List<PostProcessor> = emptyList()
-
-        override fun hashCode(): Int = 7
-    }
 
     private class HashCountingValue(
         var hash: Int,

@@ -627,7 +627,7 @@ private fun layoutInlineBlock(
         width = width,
         insets = insets,
         theme = environment.markdownTheme,
-        directiveRegistry = environment.compileEnvironment.directiveRegistry,
+        directiveRegistry = environment.directiveRegistry,
         latexMeasurer = environment.latexMeasurer,
         density = environment.density,
         textMeasurer = environment.textMeasurer,

@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrm.markdown.renderer.Markdown
 import com.hrm.markdown.renderer.rememberMarkdownState
-import com.hrm.markdown.renderer.MarkdownParserConfig
+import com.hrm.markdown.parser.MarkdownParserConfig
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 

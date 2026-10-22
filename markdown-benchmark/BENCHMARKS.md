@@ -250,3 +250,37 @@ eight isolated stress checks, parser/renderer JS and Wasm test compilation, and 
 arm64 compilation. No device or browser execution is implied. Corresponding reports, including
 `candidate-full.json`, `candidate-official-gate.json` and `candidate-compiler.csv`, are retained in
 `build/reports/publication-allocation/`.
+
+### Immutable configuration and cache dependency refactor
+
+Baseline `4f39550` versus `4f39550-plus-api-refactor`, using the same JDK, machine, default JVM
+ergonomics and gate arguments as above. Three fresh processes per revision run serially in
+baseline/candidate, candidate/baseline, baseline/candidate order. Frozen baseline artifacts are
+isolated from the candidate build. Generated JMH harnesses, profilers and gate checks match;
+constructor calls are mechanically migrated to the new configuration API in the same measurement
+positions. Results include public API construction costs, rather than isolating the core algorithm.
+
+| Scenario | Baseline MB/op range | Candidate MB/op range | Paired allocation change |
+|---|---|---|---|
+| Full parse | 2.929–2.942 | 2.920–2.948 | −0.51% to +0.65% |
+| Inline-heavy, lazy inlines | 0.5685–0.5750 | 0.5736–0.5737 | −0.24% to +0.90% |
+| Streaming batch, coalesce 16 | 19.648–19.696 | 19.562–19.615 | −0.58% to −0.17% |
+
+All six reports pass the unchanged historical budgets. Allocation stays within 1% of the preceding
+implementation in these fixtures. Average-time ranges are 1,101.17–1,164.85 → 1,103.49–1,226.53 µs,
+151.77–202.84 → 193.28–214.63 µs, and 6,378.88–6,564.80 → 6,378.31–6,553.87 µs. Individual pairs
+move in both directions; these observations do not establish a general latency improvement.
+No workload, coalescing policy or performance budget is weakened.
+
+Fixed-work JVM allocation checks observe 2,249,392 B for 1,000 lazy paragraphs and 1,979,512 B for
+128 actual tail commits, for both lazy and displayed prefixes. The existing 2.75 MB / 2.20 MB
+ceilings and measurement exclusions remain unchanged. Final functional verification passes 1,106
+JVM tests and eight isolated stress checks without failures or skips. Parser/renderer tests compile
+for JS/Wasm; parser sources compile for Android and both iOS arm64 targets. These are compilation
+checks, not browser or device execution. Raw reports and artifact metadata are retained under
+`build/reports/parser-refactor/`.
+
+The final official Gradle gate and five-shape, two-fork full-parse suite also complete successfully.
+The real compiler still visits six nodes and compiles one root for a displayed 10,000-paragraph
+prefix: one process observes 6.125 µs median and 5,523 B per warm compile. First inline materialization
+and cold compilation remain separate rows. This compiler measure excludes layout and Compose.

@@ -9,7 +9,7 @@ import kotlin.test.assertSame
 class FencedCodeStreamingPublicationContractTest {
     @Test
     fun should_publishCodeAtExistingBoundaries_when_coalescingSixteenCharacters() {
-        val parser = MarkdownParser(CommonMarkFlavour, appendCoalesceThreshold = 16)
+        val parser = MarkdownParser(MarkdownParserConfig(flavour = CommonMarkFlavour, appendCoalesceThreshold = 16))
         parser.beginStream()
         val initial = parser.append("```kotlin\n")
         val block = initial.children.filterIsInstance<FencedCodeBlock>().single()
@@ -36,7 +36,7 @@ class FencedCodeStreamingPublicationContractTest {
     @Test
     fun should_flushBufferedCode_when_streamEndsOrIsCancelledBeforeThreshold() {
         for (cancel in listOf(false, true)) {
-            val parser = MarkdownParser(CommonMarkFlavour, appendCoalesceThreshold = 16)
+            val parser = MarkdownParser(MarkdownParserConfig(flavour = CommonMarkFlavour, appendCoalesceThreshold = 16))
             parser.beginStream()
             val before = parser.append("```text\nline one\n")
             assertSame(before, parser.append("tail"))
