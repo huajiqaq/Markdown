@@ -1,0 +1,87 @@
+name: macOS upstream integration
+
+on:
+  push:
+    branches: [ci/macos-upstream-integration]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-integration:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: huajiqaq/latex
+          ref: 49d087482bdc19340581a35682e8ee3b306c973c
+          path: .ci-deps/latex
+      - uses: actions/checkout@v4
+        with:
+          repository: huajiqaq/codehigh
+          ref: 59e740ae61c0e093bf57010bac27a2528b2ab9f3
+          path: .ci-deps/codehigh
+      - uses: actions/checkout@v4
+        with:
+          repository: huajiqaq/diagram
+          ref: cded83eacac98b66201a0fa62696184b2f04545d
+          path: .ci-deps/diagram
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 21
+          architecture: aarch64
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify Apple Silicon host and create temporary composite
+        run: |
+          test "$(uname -m)" = arm64
+          mkdir -p build
+          cat > build/ci-macos.init.gradle <<'GRADLE'
+          settingsEvaluated { settings ->
+              def root = new File(System.getenv("GITHUB_WORKSPACE"))
+              if (settings.settingsDir.canonicalFile != root.canonicalFile) return
+              [latex: ["latex-base", "latex-parser", "latex-renderer", "latex-fonts-katex"],
+               codehigh: ["codehighlight-parser", "codehighlight-render"],
+               diagram: ["diagram-core", "diagram-layout", "diagram-parser", "diagram-render"]].each { repository, modules ->
+                  settings.includeBuild(new File(root, ".ci-deps/${repository}")) {
+                      dependencySubstitution {
+                          modules.each { name ->
+                              substitute(module("io.github.huarangmeng:${name}")).using(project(":${name}"))
+                          }
+                      }
+                  }
+              }
+          }
+          GRADLE
+      - name: Link and run Markdown Native tests with reviewed upstream sources
+        run: |
+          chmod +x ./gradlew
+          ./gradlew -I build/ci-macos.init.gradle :markdown-parser:macosArm64Test \
+            :markdown-runtime:macosArm64Test :markdown-renderer:macosArm64Test --max-workers=2 --console=plain
+          python3 -I - <<'PYTEST'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for module in ("markdown-parser", "markdown-runtime", "markdown-renderer"):
+              reports = [ET.parse(path).getroot() for path in
+                         Path(module, "build/test-results/macosArm64Test").glob("TEST-*.xml")]
+              assert reports and sum(int(report.get("tests", 0)) for report in reports), module
+              assert not any(int(report.get(key, 0)) for report in reports for key in ("failures", "errors", "skipped")), module
+              required = {"markdown-parser": "MutationThreadTest", "markdown-renderer": "SelectionClipboardTest"}
+              if module in required:
+                  assert any(required[module] in report.get("name", "") and int(report.get("tests", 0)) > 0
+                             for report in reports), required[module]
+          PYTEST
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: markdown-native-integration-reports
+          path: |
+            markdown-parser/build/test-results/macosArm64Test/**
+            markdown-runtime/build/test-results/macosArm64Test/**
+            markdown-renderer/build/test-results/macosArm64Test/**
+            markdown-parser/build/reports/tests/macosArm64Test/**
+            markdown-runtime/build/reports/tests/macosArm64Test/**
+            markdown-renderer/build/reports/tests/macosArm64Test/**
