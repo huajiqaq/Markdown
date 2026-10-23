@@ -6,7 +6,7 @@
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.0-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Compose Multiplatform](https://img.shields.io/badge/Compose%20Multiplatform-1.11.1-4285F4?logo=jetpackcompose&logoColor=white)](https://www.jetbrains.com/lp/compose-multiplatform/)
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.huarangmeng/markdown-parser.svg?color=orange&label=Maven%20Central)](https://central.sonatype.com/search?q=io.github.huarangmeng.markdown)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.huarangmeng/markdown-renderer.svg?color=orange&label=Maven%20Central)](https://central.sonatype.com/search?q=io.github.huarangmeng.markdown)
 [![CommonMark](https://img.shields.io/badge/CommonMark%200.31.2-652%2F652%20✓-brightgreen)](https://spec.commonmark.org/0.31.2/)
 [![Android API](https://img.shields.io/badge/Android%20API-23%2B-34A853?logo=android&logoColor=white)](https://android-arsenal.com/api?level=24)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -76,8 +76,6 @@
 markdown = "1.5.0"
 
 [libraries]
-markdown-parser = { module = "io.github.huarangmeng:markdown-parser", version.ref = "markdown" }
-markdown-runtime = { module = "io.github.huarangmeng:markdown-runtime", version.ref = "markdown" }
 markdown-renderer = { module = "io.github.huarangmeng:markdown-renderer", version.ref = "markdown" }
 ```
 
@@ -85,13 +83,11 @@ markdown-renderer = { module = "io.github.huarangmeng:markdown-renderer", versio
 
 ```kotlin
 dependencies {
-    implementation(libs.markdown.parser)
-    implementation(libs.markdown.runtime)
     implementation(libs.markdown.renderer)
 }
 ```
 
-> 💡 `markdown-renderer` 会自动传递引入 Coil3 + Ktor3 图片加载能力，以及 Mermaid / PlantUML / DOT 图表所需的 `diagram-render`。
+> 💡 这一项依赖已包含语法支持、插件接口、Coil3 + Ktor3 图片加载，以及 Mermaid / PlantUML / DOT 图表渲染。
 
 ### 基本用法
 
@@ -206,19 +202,17 @@ class VideoSyntaxTransformer : MarkdownInputTransformer {
 }
 ```
 
-输入转换器默认使用 `MarkdownTransformerStreamingSupport.RestartOnRewrite` 参与流式解析。运行时会逐次
-验证新的转换结果是否完整保留上一次前缀；如果既有输出被重写，则原子重启 Parser 会话并从完整转换快照
-继续。只有在“更长的 append-only 输入经过转换后，必定完整保留上一次转换结果前缀”时，转换器才应声明
-`AppendSafe`；需要强制隔离全量解析时可显式声明 `Unsupported`。当前转换结果到原始输入的源码映射可通过
-`LocalMarkdownSourceMap` 获取。
+输入转换器默认通过 `MarkdownTransformerStreamingSupport.RestartOnRewrite` 支持流式输入。
+转换改写先前的文本时，组件会自动刷新内容。只有在追加输入必定保留此前全部转换结果时，才应声明
+`AppendSafe`；声明 `Unsupported` 可要求每次按完整内容更新。通过 `LocalMarkdownSourceMap`，
+可以将转换后的文本位置映射回原始输入。
 
 插件与转换器作为配置使用：行为不变时复用实例，修改行为时提供新实例。
-仅替换插件的渲染回调会保留解析会话；替换输入转换器会自动刷新解析结果及源码映射。
+替换插件的渲染回调会更新显示方式，不中断流式输出；替换输入转换器会刷新内容及源码映射。
 
-`DirectiveBlockRenderScope` 和 `DirectiveInlineRenderScope` 现在基于 snapshot。
-读取结构化 directive 数据时，请统一使用 `scope.directive` 作为唯一入口。
-HTML 导出侧的 `HtmlDirectiveFallback` 与 `HtmlInlineDirectiveFallback`
-也改为接收 snapshot，而不再直接暴露 parser AST 节点。
+在 `DirectiveBlockRenderScope` 和 `DirectiveInlineRenderScope` 中，
+通过 `scope.directive` 读取指令名称、参数和内容信息。
+HTML 导出使用的 `HtmlDirectiveFallback` 与 `HtmlInlineDirectiveFallback` 接收对应的指令数据。
 
 HTML 导出会走同一条 directive 运行时链路：
 
@@ -236,6 +230,8 @@ val html = MarkdownHtml.render(
 专为 AI/LLM 场景打造。启用 `isStreaming` 即可实现无闪烁的增量渲染：
 
 ```kotlin
+import com.hrm.markdown.parser.MarkdownParserConfig
+
 var text by remember { mutableStateOf("") }
 var isStreaming by remember { mutableStateOf(true) }
 
@@ -249,22 +245,20 @@ LaunchedEffect(Unit) {
 Markdown(
     markdown = text,
     isStreaming = isStreaming,
-    parserConfig = MarkdownParserConfig.LlmStreaming, // 16 字符解析合并 + UI 按显示帧提交
+    parserConfig = MarkdownParserConfig.LlmStreaming,
 )
 ```
 
-`LlmStreaming` 以 16 字符为解析合并阈值：遇换行提前提交，结束或取消时提交剩余尾部。
+`LlmStreaming` 以 16 字符为阈值合并短更新，遇到换行提前显示。
+生成结束或取消后，将 `isStreaming` 设为 `false`，即可显示全部剩余文本。
 代码正文随输出更新，未闭合的代码围栏也会显示当前内容。
 
 - 生成过程中可以重试、清空或替换全文，显示内容跟随最新输入。
 - 流式输出期间，未闭合的围栏、数学块和强调标记会获得临时显示补全。
 - 同一显示帧内的多次 token 更新合并为最新文档更新。
 
-通过 `Markdown(document = parser.document)` 渲染解析器当前提交的文档。自定义语法使用
-`MarkdownFlavour`，AST 转换在其后处理器中、文档发布前完成。已发布 AST 只读；修改文本使用解析器的
-`insert`、`delete` 或 `replace`。局部转换只需实现 `BlockPostProcessor.processBlock(block)`：返回原块、替换块，
-或返回 `null` 删除该块，增量更新由引擎自动处理。依赖全文的转换使用 `PostProcessor`。
-保留的 AST 引用是当前视图，不是不可变历史快照；每次更新后应传入解析器最新的文档。
+无论是流式生成还是编辑文档，都将最新的完整文本传给 `markdown`。
+组件会自动处理增量更新及必要的内容刷新。
 
 选择文字期间更新正文时，选区端点和正在拖动的手柄都会校正到有效的 UTF-16 字符边界。
 删除选中块会同时清除选区与拖动状态，复制不会使用已经失效的端点。
@@ -449,21 +443,7 @@ Markdown(markdown = text, state = state, components = MarkdownComponents(
 
 ## 🔍 内置语法诊断
 
-一次启用，全局检查：
-
-```kotlin
-val parser = MarkdownParser(MarkdownParserConfig(enableLinting = true))
-val document = parser.parse(markdown)
-
-document.diagnostics.forEach { diagnostic ->
-    println("第 ${diagnostic.line} 行: [${diagnostic.severity}] ${diagnostic.message}")
-}
-```
-
 **13+ 条诊断规则：**
-
-启用 Lint 后，`parser.diagnostics` 始终对应当前发布的 `parser.document`。
-`beginStream()` 同时清空文档与可见诊断；未达合并阈值的缓冲输入会保留上次已提交文档的诊断。
 
 | 规则 | 严重级别 | 描述 |
 |------|----------|------|
@@ -514,49 +494,52 @@ Compose 渲染器默认提供基础阅读语义，无需启用 `enableLinting`�
 
 ### Flavour 系统
 
-按需配置启用哪些语法特性：
+通过 `parserConfig` 选择语法配置：
 
-```kotlin
-// 严格 CommonMark — 不启用扩展
-val doc = MarkdownParser(CommonMarkFlavour).parse(input)
+| Flavour | 支持的语法 |
+|---|---|
+| `CommonMarkFlavour` | 严格 CommonMark |
+| `GFMFlavour` | CommonMark、表格、任务列表和删除线 |
+| `MarkdownExtraFlavour` | 脚注、定义列表、缩写和表格 |
+| `ExtendedFlavour` | 全部已支持扩展，默认使用此配置 |
 
-// GFM — CommonMark + 表格、删除线、自动链接
-val doc = MarkdownParser(GFMFlavour).parse(input)
-
-// 扩展模式（默认）— 启用全部功能
-val doc = MarkdownParser().parse(input)
-
-// 一键 HTML 渲染
-val html = HtmlRenderer.renderMarkdown(input, flavour = CommonMarkFlavour)
-```
-
-`MarkdownParserConfig` 位于 `com.hrm.markdown.parser`，解析器、Compose 和 HTML 导出共用同一份配置：
+组件和 HTML 导出可以共用同一份配置：
 
 ```kotlin
 import com.hrm.markdown.parser.MarkdownParserConfig
+import com.hrm.markdown.parser.flavour.GFMFlavour
+import com.hrm.markdown.renderer.Markdown
+import com.hrm.markdown.renderer.MarkdownHtml
 
-val config = MarkdownParserConfig(flavour = GFMFlavour, enableLinting = true)
-val parser = MarkdownParser(config)
-val document = parser.parse(input)
+val config = MarkdownParserConfig(flavour = GFMFlavour)
 Markdown(markdown = input, parserConfig = config)
-val html = MarkdownHtml.render(input, parserConfig = config)
+val html = MarkdownHtml.render(markdown = input, parserConfig = config)
 ```
 
-配置会复制并保护传入的 Emoji 映射，之后修改原始映射不会改变已有解析会话。
-内置 Flavour 是不可变配置；使用 `copy` 替换配置项，或使用 `with` 追加语法、处理器，其余语法设置自动保留。
-自定义块转换直接接收并返回块，库负责处理增量更新：
+配置不可变，会保留传入的 Emoji 别名。使用 `copy` 修改配置项，或通过 `with`
+追加语法、处理器，其余语法设置自动保留。例如，以下配置限制标题层级，同时适用于显示和导出：
 
 ```kotlin
-val flavour = CommonMarkFlavour.with(BlockPostProcessor { block ->
-    if (block is Heading) block.level = minOf(block.level, 3)
-    block
-})
-val doc = MarkdownParser(flavour).parse(input)
+import androidx.compose.runtime.remember
+import com.hrm.markdown.parser.MarkdownParserConfig
+import com.hrm.markdown.parser.ast.Heading
+import com.hrm.markdown.parser.block.postprocessors.BlockPostProcessor
+import com.hrm.markdown.parser.flavour.CommonMarkFlavour
+
+val config = remember {
+    MarkdownParserConfig(
+        flavour = CommonMarkFlavour.with(BlockPostProcessor { block ->
+            if (block is Heading) block.level = minOf(block.level, 3)
+            block
+        }),
+    )
+}
+Markdown(markdown = input, parserConfig = config)
 ```
 
-`BlockPostProcessor` 处理独立块，返回原块、替换块或 `null`；依赖全文的转换使用独立的
-`PostProcessor { document -> ... }`。两者均在发布前运行，调用方无需维护版本、变更范围或缓存。
-同一配置可以供多个独立解析器使用；有状态的扩展实例应由扩展自身管理并发。
+`BlockPostProcessor` 处理独立块：修改后返回原块、返回替换块，或返回 `null` 删除该块。
+依赖全文的转换使用 `PostProcessor`。内容变化时，组件会自动应用这些转换。
+配置与扩展行为不变时，复用已有实例即可。
 
 ### Compose 安全 HTML
 
@@ -588,8 +571,8 @@ CommonMark HTML 块类型明确分流：类型 2 注释可隐藏，类型 6/7 �
 HTML，不进行半截渲染。
 
 按照 CommonMark 规则，块级标签必须独占行首。`文本 <p>块</p> 文本` 不是合法的块级
-写法，会保留为行内源码；应将 `p` 独立成行。通过 `HtmlRenderer`/`MarkdownHtml`
-导出 HTML 时，所有原始 HTML 仍会继续透传。
+写法，会保留为行内源码；应将 `p` 独立成行。通过 `MarkdownHtml.render`
+导出 HTML 时，原始 HTML 仍会继续透传。
 
 ---
 

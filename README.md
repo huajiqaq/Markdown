@@ -6,7 +6,7 @@
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.0-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Compose Multiplatform](https://img.shields.io/badge/Compose%20Multiplatform-1.11.1-4285F4?logo=jetpackcompose&logoColor=white)](https://www.jetbrains.com/lp/compose-multiplatform/)
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.huarangmeng/markdown-parser.svg?color=orange&label=Maven%20Central)](https://central.sonatype.com/search?q=io.github.huarangmeng.markdown)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.huarangmeng/markdown-renderer.svg?color=orange&label=Maven%20Central)](https://central.sonatype.com/search?q=io.github.huarangmeng.markdown)
 [![CommonMark](https://img.shields.io/badge/CommonMark%200.31.2-652%2F652%20✓-brightgreen)](https://spec.commonmark.org/0.31.2/)
 [![Android API](https://img.shields.io/badge/Android%20API-23%2B-34A853?logo=android&logoColor=white)](https://android-arsenal.com/api?level=24)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -76,8 +76,6 @@ Add to your `gradle/libs.versions.toml`:
 markdown = "1.5.0"
 
 [libraries]
-markdown-parser = { module = "io.github.huarangmeng:markdown-parser", version.ref = "markdown" }
-markdown-runtime = { module = "io.github.huarangmeng:markdown-runtime", version.ref = "markdown" }
 markdown-renderer = { module = "io.github.huarangmeng:markdown-renderer", version.ref = "markdown" }
 ```
 
@@ -85,13 +83,11 @@ Then in your module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation(libs.markdown.parser)
-    implementation(libs.markdown.runtime)
     implementation(libs.markdown.renderer)
 }
 ```
 
-> 💡 `markdown-renderer` bundles Coil3 + Ktor3 for image loading, and `diagram-render` for Mermaid / PlantUML / DOT blocks, as transitive dependencies.
+> 💡 This single dependency includes syntax support, plugin APIs, Coil3 + Ktor3 image loading, and Mermaid / PlantUML / DOT rendering.
 
 ### Basic Usage
 
@@ -206,22 +202,19 @@ class VideoSyntaxTransformer : MarkdownInputTransformer {
 }
 ```
 
-Input transformers stream by default with
-`MarkdownTransformerStreamingSupport.RestartOnRewrite`. Each transformed revision is checked
-against the previous transformed prefix; if existing output changed, the parser session restarts
-atomically from the complete transformed snapshot. A transformer should declare `AppendSafe` only
-when a longer append-only input always preserves the complete previous transformed prefix, and may
-declare `Unsupported` to explicitly require isolated full parses. The active mapping back to
-original source offsets is available through `LocalMarkdownSourceMap`.
+Input transformers support streaming by default with
+`MarkdownTransformerStreamingSupport.RestartOnRewrite`. The component automatically refreshes content
+when a transformation rewrites earlier text. Declare `AppendSafe` only when appending input always
+preserves the entire previous transformed output, or `Unsupported` to request full-content updates
+instead of incremental streaming. `LocalMarkdownSourceMap` maps transformed positions back to the original input.
 
 Treat plugins and transformers as configuration: reuse instances while their behavior stays the same,
-and provide new instances when it changes. Replacing only rendering callbacks preserves the parser
-session; replacing input transformers automatically refreshes parsing and source mappings.
+and provide new instances when it changes. Replacing rendering callbacks updates the presentation
+without interrupting streaming; replacing input transformers refreshes the content and source mappings.
 
-`DirectiveBlockRenderScope` and `DirectiveInlineRenderScope` are snapshot-based.
-Use `scope.directive` as the single structured entry point for directive data.
-For HTML export, `HtmlDirectiveFallback` and `HtmlInlineDirectiveFallback` also receive
-snapshot objects instead of parser AST nodes.
+Use `scope.directive` to read directive names, arguments, and content information in
+`DirectiveBlockRenderScope` and `DirectiveInlineRenderScope`. For HTML export,
+`HtmlDirectiveFallback` and `HtmlInlineDirectiveFallback` receive the corresponding directive data.
 
 HTML export uses the same directive pipeline:
 
@@ -239,6 +232,8 @@ val html = MarkdownHtml.render(
 Purpose-built for AI/LLM scenarios. Enable `isStreaming` for flicker-free incremental rendering:
 
 ```kotlin
+import com.hrm.markdown.parser.MarkdownParserConfig
+
 var text by remember { mutableStateOf("") }
 var isStreaming by remember { mutableStateOf(true) }
 
@@ -252,24 +247,20 @@ LaunchedEffect(Unit) {
 Markdown(
     markdown = text,
     isStreaming = isStreaming,
-    parserConfig = MarkdownParserConfig.LlmStreaming, // 16-char parser coalescing + frame-coalesced UI commits
+    parserConfig = MarkdownParserConfig.LlmStreaming,
 )
 ```
 
-`LlmStreaming` uses a 16-character parser coalescing threshold; newlines commit early, and stopping
-or cancelling flushes the remaining tail. Code appears as it arrives, including inside unclosed fences.
+`LlmStreaming` batches short updates using a 16-character threshold and updates early at newlines.
+Set `isStreaming = false` when generation finishes or is cancelled to display all remaining text.
+Code appears as it arrives, including inside unclosed fences.
 
 - Retry, clear, or replace the text during generation; the displayed document follows the latest input.
 - Unclosed fences, math blocks, and emphasis receive temporary display completion during streaming.
 - Multiple token updates in one display frame are combined into the latest document update.
 
-Use `Markdown(document = parser.document)` to render the current parser publication. Build custom
-syntax through `MarkdownFlavour` and perform AST transformations in its processors before publication.
-Published ASTs are read-only; edit text through the parser's `insert`, `delete` or `replace` methods.
-For local transformations, implement `BlockPostProcessor.processBlock(block)`: return the same block,
-a replacement, or `null` to remove it. The engine handles incremental updates automatically; use
-`PostProcessor` for transformations that depend on the whole document. Retained AST references are
-current views, not immutable historical snapshots; pass the latest parser document after each update.
+Pass the latest complete text to `markdown` for both streaming output and document edits.
+The component handles incremental updates and any required refreshes automatically.
 
 When the document changes during text selection, selection endpoints and active drag handles are
 clamped to valid UTF-16 character boundaries. Removing a selected block clears the selection and
@@ -363,7 +354,7 @@ Code settings reuse codehigh's `CodeColors`, `CodeTypography`, and `CodeLayout`,
 | Source parsing: flavour, emoji, lint, append coalescing | `parserConfig = MarkdownParserConfig(...)` |
 | Soft breaks and heading numbering | `softBreakPolicy`, `enableHeadingNumbering` |
 | Internal scroll and selection | `enableScroll`, `enableSelection` |
-| Streaming lifecycle | `isStreaming` |
+| Generation in progress | `isStreaming` |
 | Link, citation, image, and code-token handlers | `interactions = MarkdownInteractions(...)` |
 | Header/footer, image renderer, code/table chrome, admonition icons | `components = MarkdownComponents(...)` |
 | Code appearance (native codehigh types) | `codeColors`, `codeTypography`, `codeLayout` |
@@ -455,21 +446,7 @@ Use `rememberMarkdownState()` to control scrolling and clear selection. Block in
 
 ## 🔍 Built-in Linting & Diagnostics
 
-Enable once, catch problems everywhere:
-
-```kotlin
-val parser = MarkdownParser(MarkdownParserConfig(enableLinting = true))
-val document = parser.parse(markdown)
-
-document.diagnostics.forEach { diagnostic ->
-    println("Line ${diagnostic.line}: [${diagnostic.severity}] ${diagnostic.message}")
-}
-```
-
 **13+ diagnostic rules:**
-
-With linting enabled, `parser.diagnostics` describes the currently published `parser.document`.
-`beginStream()` clears both; buffered chunks keep the last published diagnostics until the next parse is committed.
 
 | Rule | Severity | Description |
 |------|----------|-------------|
@@ -520,52 +497,54 @@ See the [CI results](https://github.com/huarangmeng/Markdown/actions/workflows/t
 
 ### Flavour System
 
-Configure which syntax features to enable:
+Choose a syntax profile through `parserConfig`:
 
-```kotlin
-// Strict CommonMark — no extensions
-val doc = MarkdownParser(CommonMarkFlavour).parse(input)
+| Flavour | Syntax |
+|---|---|
+| `CommonMarkFlavour` | Strict CommonMark |
+| `GFMFlavour` | CommonMark, tables, task lists, and strikethrough |
+| `MarkdownExtraFlavour` | Footnotes, definition lists, abbreviations, and tables |
+| `ExtendedFlavour` | All supported extensions; the default |
 
-// GFM — CommonMark + tables, strikethrough, autolinks
-val doc = MarkdownParser(GFMFlavour).parse(input)
-
-// Extended (default) — everything enabled
-val doc = MarkdownParser().parse(input)
-
-// One-shot HTML rendering
-val html = HtmlRenderer.renderMarkdown(input, flavour = CommonMarkFlavour)
-```
-
-`MarkdownParserConfig` lives in `com.hrm.markdown.parser`. Share one configuration across the parser,
-Compose and HTML export:
+Share one configuration between the component and HTML export:
 
 ```kotlin
 import com.hrm.markdown.parser.MarkdownParserConfig
+import com.hrm.markdown.parser.flavour.GFMFlavour
+import com.hrm.markdown.renderer.Markdown
+import com.hrm.markdown.renderer.MarkdownHtml
 
-val config = MarkdownParserConfig(flavour = GFMFlavour, enableLinting = true)
-val parser = MarkdownParser(config)
-val document = parser.parse(input)
+val config = MarkdownParserConfig(flavour = GFMFlavour)
 Markdown(markdown = input, parserConfig = config)
-val html = MarkdownHtml.render(input, parserConfig = config)
+val html = MarkdownHtml.render(markdown = input, parserConfig = config)
 ```
 
-Configuration copies and protects the supplied emoji map; later changes to that map do not change an
-existing parser session. Built-in flavours are immutable configurations. Use `copy` to replace settings
-or `with` to append syntax starters or processors while retaining the other syntax settings.
-Custom block transformations receive and return a block; the library handles incremental updates:
+Configurations are immutable and preserve the supplied emoji aliases. Use `copy` to change settings,
+or `with` to add syntax starters or processors while retaining the other syntax settings.
+For example, this configuration limits heading levels in both display and export:
 
 ```kotlin
-val flavour = CommonMarkFlavour.with(BlockPostProcessor { block ->
-    if (block is Heading) block.level = minOf(block.level, 3)
-    block
-})
-val doc = MarkdownParser(flavour).parse(input)
+import androidx.compose.runtime.remember
+import com.hrm.markdown.parser.MarkdownParserConfig
+import com.hrm.markdown.parser.ast.Heading
+import com.hrm.markdown.parser.block.postprocessors.BlockPostProcessor
+import com.hrm.markdown.parser.flavour.CommonMarkFlavour
+
+val config = remember {
+    MarkdownParserConfig(
+        flavour = CommonMarkFlavour.with(BlockPostProcessor { block ->
+            if (block is Heading) block.level = minOf(block.level, 3)
+            block
+        }),
+    )
+}
+Markdown(markdown = input, parserConfig = config)
 ```
 
-`BlockPostProcessor` transforms independent blocks, returning the input, a replacement or `null`.
-Use the separate `PostProcessor { document -> ... }` for document-wide transformations. Both run before
-publication; callers manage no revisions, changed ranges or caches. A configuration can be shared by
-independent parsers; stateful extension instances remain responsible for their own concurrency.
+`BlockPostProcessor` transforms independent blocks: return the original block after modifying it,
+a replacement block, or `null` to remove it. Use `PostProcessor` for changes that depend on the whole
+document. The component applies these transformations automatically when content changes.
+Reuse configurations and extension instances while their behavior remains unchanged.
 
 ### Safe HTML in Compose
 
@@ -602,7 +581,7 @@ atomically to visible raw HTML.
 
 A block tag must start on its own line according to CommonMark rules. In particular,
 `text <p>block</p> text` is invalid block markup and remains inline source; put the `p` element
-on its own line. `HtmlRenderer`/`MarkdownHtml` continue to pass all raw HTML through when exporting HTML.
+on its own line. `MarkdownHtml.render` continues to pass raw HTML through when exporting HTML.
 
 ---
 
