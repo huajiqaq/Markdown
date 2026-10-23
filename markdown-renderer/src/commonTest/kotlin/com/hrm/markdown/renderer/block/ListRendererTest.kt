@@ -110,10 +110,10 @@ class ListRendererTest {
                             style = TextStyle(fontSize = fontSize.sp, lineHeight = (fontSize * 1.5f).sp))
                     }
                     waitForIdle()
-                    val firstLine = onAllNodes(hasText("", substring = true), useUnmergedTree = true)
+                    val textLines = onAllNodes(hasText("", substring = true), useUnmergedTree = true)
                         .fetchSemanticsNodes()
-                        .minBy { it.boundsInRoot.top }
-                        .boundsInRoot
+                    assertTrue(textLines.size > 1, "Expected wrapped task text: font=$fontSize, checked=$checked, text=$text")
+                    val firstLine = textLines.minBy { it.boundsInRoot.top }.boundsInRoot
                     assertTrue(abs(checkboxCenterInRoot(checked) - firstLine.center.y) <= 1f,
                         "Checkbox must align with the first line: font=$fontSize, checked=$checked, text=$text")
                 }
