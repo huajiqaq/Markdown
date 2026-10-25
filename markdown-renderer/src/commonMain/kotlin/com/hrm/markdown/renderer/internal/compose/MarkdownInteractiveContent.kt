@@ -21,6 +21,7 @@ import com.hrm.markdown.renderer.MarkdownImageData
 import com.hrm.markdown.renderer.internal.LocalMarkdownInteractions
 
 internal const val CitationAnnotationTag = "markdown:citation"
+internal const val InlineElementAnnotationTag = "markdown:inline-element"
 
 /** Geometry is owned only by the visible text item and is read when an action is invoked. */
 private class CitationGeometry {
@@ -60,12 +61,15 @@ internal fun MarkdownInteractiveText(
     val citations = if (interactions?.citationEnabled == true) {
         remember(text) { text.getStringAnnotations(CitationAnnotationTag, 0, text.length) }
     } else emptyList()
-    if (citations.isEmpty()) {
+    val inlineElements = if (interactions?.inlineElementEnabled == true) {
+        remember(text) { text.getStringAnnotations(InlineElementAnnotationTag, 0, text.length) }
+    } else emptyList()
+    if (citations.isEmpty() && inlineElements.isEmpty()) {
         BasicText(text, modifier, style, maxLines = 1, softWrap = false, onTextLayout = onTextLayout)
         return
     }
     val geometry = remember { CitationGeometry() }
-    val interactiveText = remember(text, citations, interactions) {
+    val interactiveText = remember(text, citations, inlineElements, interactions) {
         AnnotatedString.Builder(text).apply {
             for (citation in citations) {
                 val id = citation.item.substringBefore(':').toLong()
@@ -76,6 +80,31 @@ internal fun MarkdownInteractiveText(
                         interactions?.citation(key, id, geometry.bounds(citation.start, citation.end))
                     },
                 ), citation.start, citation.end)
+            }
+            for (element in inlineElements) {
+                // 注解值格式：occurrenceId|kind|payloadKey1=payloadValue1\u001fpayloadKey2=...（\u001f 分隔键值对）
+                val parts = element.item.split('|')
+                val id = parts.getOrNull(0)?.toLongOrNull() ?: continue
+                val kind = parts.getOrNull(1).orEmpty()
+                val payload = parts.getOrNull(2).orEmpty()
+                    .split('\u001f')
+                    .mapNotNull { entry ->
+                        val eq = entry.indexOf('=')
+                        if (eq <= 0) null else entry.take(eq) to entry.substring(eq + 1)
+                    }
+                    .toMap()
+                addLink(LinkAnnotation.Clickable(
+                    tag = kind.ifEmpty { "inline-element" },
+                    linkInteractionListener = {
+                        interactions?.inlineElement(
+                            kind,
+                            text.subSequence(element.start, element.end).toString(),
+                            payload,
+                            id,
+                            geometry.bounds(element.start, element.end),
+                        )
+                    },
+                ), element.start, element.end)
             }
         }.toAnnotatedString()
     }

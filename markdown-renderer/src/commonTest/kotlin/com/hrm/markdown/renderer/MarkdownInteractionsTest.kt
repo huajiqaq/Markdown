@@ -28,6 +28,21 @@ class MarkdownInteractionsTest {
     }
 
     @Test
+    fun inline_element_dispatcher_tracks_latest_handler_and_disabled_state() {
+        val document = compile("Highlight ==marked== run.")
+        val controller = MarkdownInteractionController()
+        val calls = mutableListOf<String>()
+        controller.update(document, MarkdownInteractions(onInlineElementClick = { calls += "old:${it.kind}:${it.text}" }))
+        controller.inlineElement("highlight", "marked", emptyMap(), 7, null)
+        controller.update(document, MarkdownInteractions(onInlineElementClick = { calls += "new:${it.kind}:${it.text}" }))
+        controller.inlineElement("highlight", "marked", mapOf("k" to "v"), 7, null)
+        controller.update(document, MarkdownInteractions.Default)
+        controller.inlineElement("highlight", "marked", emptyMap(), 7, null)
+        assertEquals(listOf("old:highlight:marked", "new:highlight:marked"), calls)
+        assertEquals(false, controller.inlineElementEnabled)
+    }
+
+    @Test
     fun should_keep_duplicate_urls_and_nested_images_in_document_order() {
         val document = compile("""
             prefix ![first](same.png) suffix

@@ -15,11 +15,15 @@ import com.hrm.markdown.renderer.internal.core.model.*
 internal class MarkdownInteractionController {
     var citationEnabled by mutableStateOf(false)
         private set
+
     var imageEnabled by mutableStateOf(false)
         private set
     var codeTokenEnabled by mutableStateOf(false)
         private set
+    var inlineElementEnabled by mutableStateOf(false)
+        private set
     private var onCodeTokenClick: ((CodeToken) -> Unit)? = null
+    private var onInlineElementClick: ((MarkdownInlineElementClickEvent) -> Unit)? = null
     private var onCitationClick: ((MarkdownCitationClickEvent) -> Unit)? = null
     private var onImageClick: ((MarkdownImageClickEvent) -> Unit)? = null
     private var document: InternalRenderDocumentModel? = null
@@ -33,8 +37,10 @@ internal class MarkdownInteractionController {
         codeTokenEnabled = handlers.onCodeTokenClick != null
         this.onCitationClick = handlers.onCitationClick
         this.onImageClick = handlers.onImageClick
+        this.onInlineElementClick = handlers.onInlineElementClick
         citationEnabled = handlers.onCitationClick != null
         imageEnabled = handlers.onImageClick != null
+        inlineElementEnabled = handlers.onInlineElementClick != null
     }
 
     fun codeToken(token: CodeToken) {
@@ -44,6 +50,12 @@ internal class MarkdownInteractionController {
     fun citation(key: String, id: Long, bounds: Rect?) {
         onCitationClick?.invoke(MarkdownCitationClickEvent(
             key, id, document?.identity?.contentRevision ?: 0L, bounds,
+        ))
+    }
+
+    fun inlineElement(kind: String, text: String, payload: Map<String, String>, id: Long, bounds: Rect?) {
+        onInlineElementClick?.invoke(MarkdownInlineElementClickEvent(
+            kind, text, payload, id, document?.identity?.contentRevision ?: 0L, bounds,
         ))
     }
 
