@@ -75,6 +75,27 @@ class MarkdownInteractionsTest {
         assertSame(click.gallery, click.gallery)
     }
 
+    @Test
+    fun image_click_falls_back_to_inline_element_dispatch_without_dedicated_handler() {
+        val document = compile("![alt](pic.png)")
+        val controller = MarkdownInteractionController()
+        var dedicated: MarkdownImageClickEvent? = null
+        var unified: MarkdownInlineElementClickEvent? = null
+        controller.update(document, MarkdownInteractions(onImageClick = { dedicated = it }))
+        val occurrence = document.blocks.imageOccurrences().single()
+        controller.image(occurrence.image, occurrence.occurrenceId, null)
+        controller.update(document, MarkdownInteractions(onInlineElementClick = { unified = it }))
+        controller.image(occurrence.image, occurrence.occurrenceId, null)
+        controller.update(document, MarkdownInteractions(onImageClick = { dedicated = it }, onInlineElementClick = { unified = it }))
+        controller.image(occurrence.image, occurrence.occurrenceId, null)
+        assertNotNull(dedicated)
+        assertNotNull(unified)
+        assertEquals(InlineElementKinds.Image, assertNotNull(unified).kind)
+        assertEquals("alt", assertNotNull(unified).text)
+        assertEquals("pic.png", assertNotNull(unified).payload["url"])
+        assertNotNull(assertNotNull(unified).image)
+    }
+
     private fun compile(markdown: String) = DefaultRenderModelCompiler.compile(
         MarkdownParser().parse(markdown), RenderCompileEnvironment(),
     )

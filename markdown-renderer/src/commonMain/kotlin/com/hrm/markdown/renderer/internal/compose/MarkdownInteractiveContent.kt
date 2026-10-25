@@ -133,6 +133,7 @@ internal fun RenderInteractiveMarkdownImage(data: MarkdownImageData, occurrenceI
         content()
         return
     }
+    // imageEnabled 现已涵盖统一监听；controller.image 负责在两级回调间分发。
     val geometry = remember { ImageGeometry() }
     Box(Modifier
         .onGloballyPositioned { geometry.coordinates = it }

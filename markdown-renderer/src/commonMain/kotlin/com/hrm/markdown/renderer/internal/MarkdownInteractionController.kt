@@ -39,7 +39,7 @@ internal class MarkdownInteractionController {
         this.onImageClick = handlers.onImageClick
         this.onInlineElementClick = handlers.onInlineElementClick
         citationEnabled = handlers.onCitationClick != null
-        imageEnabled = handlers.onImageClick != null
+        imageEnabled = handlers.onImageClick != null || handlers.onInlineElementClick != null
         inlineElementEnabled = handlers.onInlineElementClick != null
     }
 
@@ -60,17 +60,43 @@ internal class MarkdownInteractionController {
     }
 
     fun image(data: MarkdownImageData, id: Long, bounds: Rect?) {
-        val callback = onImageClick ?: return
         val snapshot = document
-        callback(MarkdownImageClickEvent(
-            image = data,
-            occurrenceId = id,
-            documentRevision = snapshot?.identity?.contentRevision ?: 0L,
-            anchorBoundsInWindow = bounds,
-            gallery = {
-                val images = snapshot?.blocks?.imageOccurrences().orEmpty()
-                MarkdownImageGallery(images, images.indexOfFirst { it.occurrenceId == id })
+        val revision = snapshot?.identity?.contentRevision ?: 0L
+        val dedicated = onImageClick
+        if (dedicated != null) {
+            dedicated(MarkdownImageClickEvent(
+                image = data,
+                occurrenceId = id,
+                documentRevision = revision,
+                anchorBoundsInWindow = bounds,
+                gallery = {
+                    val images = snapshot?.blocks?.imageOccurrences().orEmpty()
+                    MarkdownImageGallery(images, images.indexOfFirst { it.occurrenceId == id })
+                },
+            ))
+            return
+        }
+        // 无专属回调但统一监听存在时，图片点击以 kind="image" 进入统一分发。
+        onInlineElementClick?.invoke(MarkdownInlineElementClickEvent(
+            kind = InlineElementKinds.Image,
+            text = data.altText,
+            payload = buildMap {
+                data.title?.let { put("title", it) }
+                put("url", data.url)
             },
+            occurrenceId = id,
+            documentRevision = revision,
+            anchorBoundsInWindow = bounds,
+            image = MarkdownImageClickEvent(
+                image = data,
+                occurrenceId = id,
+                documentRevision = revision,
+                anchorBoundsInWindow = bounds,
+                gallery = {
+                    val images = snapshot?.blocks?.imageOccurrences().orEmpty()
+                    MarkdownImageGallery(images, images.indexOfFirst { it.occurrenceId == id })
+                },
+            ),
         ))
     }
 }

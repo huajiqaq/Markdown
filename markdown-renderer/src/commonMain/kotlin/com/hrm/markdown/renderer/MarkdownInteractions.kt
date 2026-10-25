@@ -9,6 +9,11 @@ import com.hrm.codehigh.ast.CodeToken
 data class MarkdownInteractions(
     val onLinkClick: ((String) -> Unit)? = null,
     val onCitationClick: ((MarkdownCitationClickEvent) -> Unit)? = null,
+    /**
+     * 图片点击的专属监听：携带图集懒加载等图片特有能力，优先于
+     * [onInlineElementClick]（两者同时提供时图片走本回调）。为 null（默认）时
+     * 若提供了 [onInlineElementClick]，图片点击以 `kind = "image"` 进入统一分发。
+     */
     val onImageClick: ((MarkdownImageClickEvent) -> Unit)? = null,
     /** Matches codehigh's callback. Token ranges are relative to the containing code block. */
     val onCodeTokenClick: ((CodeToken) -> Unit)? = null,
@@ -26,6 +31,7 @@ data class MarkdownInteractions(
 
 /** 行内元素点击事件的 [MarkdownInlineElementClickEvent.kind] 取值。 */
 object InlineElementKinds {
+    const val Image = "image"
     const val Highlight = "highlight"
     const val Citation = "citation"
     const val Footnote = "footnote"
@@ -49,6 +55,8 @@ data class MarkdownInlineElementClickEvent(
     val documentRevision: Long,
     /** 窗口坐标（像素）；无几何信息（如无障碍路径）时为 null。 */
     val anchorBoundsInWindow: Rect? = null,
+    /** `kind == "image"` 时可安全转型，用于读取图集等图片特有能力。 */
+    val image: MarkdownImageClickEvent? = null,
 )
 
 /** Identifies an occurrence within the current rendered document, not a persistent database ID. */
