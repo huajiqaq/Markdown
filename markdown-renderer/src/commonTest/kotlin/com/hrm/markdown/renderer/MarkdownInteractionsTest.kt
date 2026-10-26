@@ -28,6 +28,21 @@ class MarkdownInteractionsTest {
     }
 
     @Test
+    fun inline_element_dispatcher_tracks_latest_handler_and_disabled_state() {
+        val document = compile("Highlight ==marked== run.")
+        val controller = MarkdownInteractionController()
+        val calls = mutableListOf<String>()
+        controller.update(document, MarkdownInteractions(onInlineElementClick = { calls += "old:${it.kind}:${it.text}" }))
+        controller.inlineElement("highlight", "marked", emptyMap(), 7, null)
+        controller.update(document, MarkdownInteractions(onInlineElementClick = { calls += "new:${it.kind}:${it.text}" }))
+        controller.inlineElement("highlight", "marked", mapOf("k" to "v"), 7, null)
+        controller.update(document, MarkdownInteractions.Default)
+        controller.inlineElement("highlight", "marked", emptyMap(), 7, null)
+        assertEquals(listOf("old:highlight:marked", "new:highlight:marked"), calls)
+        assertEquals(false, controller.inlineElementEnabled)
+    }
+
+    @Test
     fun should_keep_duplicate_urls_and_nested_images_in_document_order() {
         val document = compile("""
             prefix ![first](same.png) suffix
@@ -58,6 +73,27 @@ class MarkdownInteractionsTest {
         assertEquals(1, click.gallery.initialIndex)
         assertEquals(listOf("same.png", "same.png"), click.gallery.images.map { it.image.url })
         assertSame(click.gallery, click.gallery)
+    }
+
+    @Test
+    fun image_click_falls_back_to_inline_element_dispatch_without_dedicated_handler() {
+        val document = compile("![alt](pic.png)")
+        val controller = MarkdownInteractionController()
+        var dedicated: MarkdownImageClickEvent? = null
+        var unified: MarkdownInlineElementClickEvent? = null
+        controller.update(document, MarkdownInteractions(onImageClick = { dedicated = it }))
+        val occurrence = document.blocks.imageOccurrences().single()
+        controller.image(occurrence.image, occurrence.occurrenceId, null)
+        controller.update(document, MarkdownInteractions(onInlineElementClick = { unified = it }))
+        controller.image(occurrence.image, occurrence.occurrenceId, null)
+        controller.update(document, MarkdownInteractions(onImageClick = { dedicated = it }, onInlineElementClick = { unified = it }))
+        controller.image(occurrence.image, occurrence.occurrenceId, null)
+        assertNotNull(dedicated)
+        assertNotNull(unified)
+        assertEquals(InlineElementKinds.Image, assertNotNull(unified).kind)
+        assertEquals("alt", assertNotNull(unified).text)
+        assertEquals("pic.png", assertNotNull(unified).payload["url"])
+        assertNotNull(assertNotNull(unified).image)
     }
 
     private fun compile(markdown: String) = DefaultRenderModelCompiler.compile(

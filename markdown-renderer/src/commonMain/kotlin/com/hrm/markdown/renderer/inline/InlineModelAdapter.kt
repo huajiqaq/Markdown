@@ -27,6 +27,7 @@ import com.hrm.markdown.renderer.MarkdownImageData
 import com.hrm.markdown.renderer.ResolvedMarkdownStyle
 import com.hrm.markdown.renderer.internal.adapter.createDirectiveInlineRenderScope
 import com.hrm.markdown.renderer.internal.compose.CitationAnnotationTag
+import com.hrm.markdown.renderer.internal.compose.InlineElementAnnotationTag
 import com.hrm.markdown.renderer.internal.compose.RenderInteractiveMarkdownImage
 import com.hrm.markdown.renderer.internal.core.model.DirectiveInlineWidgetModel
 import com.hrm.markdown.renderer.internal.core.model.ImageWidgetModel
@@ -130,6 +131,11 @@ internal fun AnnotatedString.Builder.renderInlineModel(
     }
 }
 
+/** 参与行内元素点击分发的 mark kind（与 [InlineElementKinds] 一一对应）。 */
+private val InteractiveInlineMarkKinds = setOf(
+    "highlight", "citation", "footnote", "abbreviation", "inline_html", "kbd", "spoiler",
+)
+
 private fun normalizeTextAtomForCjkInlineMathSpacing(
     atoms: List<InlineAtom>,
     index: Int,
@@ -174,6 +180,7 @@ private fun AnnotatedString.Builder.renderTextAtom(
     val clickMark =
         atom.marks.lastOrNull { it.kind == "link" || it.kind == "footnote" || it.kind == "citation" }
     val abbreviation = atom.marks.lastOrNull { it.kind == "abbreviation" }?.payload?.get("fullText")
+    val interactiveMark = atom.marks.lastOrNull { it.kind in InteractiveInlineMarkKinds }
     val spanStyle = atom.marks.fold(SpanStyle()) { acc, mark ->
         acc.merge(spanStyleForMark(mark, theme))
     }
@@ -191,6 +198,17 @@ private fun AnnotatedString.Builder.renderTextAtom(
             if (!abbreviation.isNullOrEmpty()) {
                 pop()
             }
+        }
+        // 语义 mark（highlight/citation/footnote/abbreviation/inline_html/kbd/spoiler）统一写
+        // 行内元素注解，是否转成可点击由 MarkdownInteractiveText 按 onInlineElementClick 决定。
+        if (interactiveMark != null) {
+            val payload = interactiveMark.payload.entries.joinToString("\u001f") { "${it.key}=${it.value}" }
+            pushStringAnnotation(
+                InlineElementAnnotationTag,
+                "${atom.identity.stableId}|${interactiveMark.kind}|$payload",
+            )
+            appendText()
+            pop()
         }
 
         when (clickMark?.kind) {
