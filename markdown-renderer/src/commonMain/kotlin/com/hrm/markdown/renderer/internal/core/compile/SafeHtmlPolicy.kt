@@ -4,7 +4,6 @@ import com.hrm.markdown.parser.html.HtmlTagCategories
 import com.hrm.markdown.parser.html.HtmlTagKind
 import com.hrm.markdown.parser.html.HtmlTagToken
 import com.hrm.markdown.renderer.inline.areFullySupportedStyleClasses
-import com.hrm.markdown.renderer.inline.styleClassNames
 import com.hrm.markdown.renderer.inline.isFullySupportedCssStyle
 import com.hrm.markdown.renderer.internal.core.model.BlockTextAlignment
 import com.hrm.markdown.renderer.internal.core.model.SpanMark
@@ -133,41 +132,38 @@ internal object SafeHtmlPolicy {
 
     /**
      * 纯样式行内标签（mark/sup/sub/ins/u/code/kbd）：渲染器不解释任何属性，
-     * 因此所有属性都作为不透明数据原样挂到 mark 上交给事件使用方，不导致元素被拒绝。
+     * 因此属性原样挂到 mark 上交给事件使用方。唯一例外是事件处理器属性（onclick 等）：
+     * 它们是行为载体而非数据，出现即视为无法安全映射，整个元素退回源码。
      */
     private fun plainSpan(token: HtmlTagToken, mark: SpanMark): SafeInlineHtmlAction? =
-        if (token.kind == HtmlTagKind.OPENING) {
-            SafeInlineHtmlAction.Span(
-                listOf(if (token.attributes.isEmpty()) mark else mark.copy(attributes = token.attributes)),
-            )
-        } else {
+        if (token.kind != HtmlTagKind.OPENING) {
             null
+        } else if (token.attributes.isEmpty()) {
+            SafeInlineHtmlAction.Span(listOf(mark))
+        } else if (token.attributes.keys.any { it.lowercase().startsWith("on") }) {
+            null
+        } else {
+            SafeInlineHtmlAction.Span(listOf(mark.copy(attributes = token.attributes)))
         }
 
     private fun styledSpan(token: HtmlTagToken): SafeInlineHtmlAction? {
         if (token.kind != HtmlTagKind.OPENING) return null
         val style = token.attributes["style"]
         val classes = token.attributes["class"]
-        // 只有渲染器会解释的值需要校验；其余属性原样透传，不参与拒绝判断。
+        // 渲染器解释的属性（style/class）必须能完整映射，否则退回源码；
+        // 其余属性是不透明数据，原样透传给事件使用方。事件处理器属性（on*）
+        // 是行为载体而非数据，出现即拒绝（与 plainSpan 同一安全边界）。
         if (style != null && !isFullySupportedCssStyle(style)) return null
-        // class 拆开处理：渲染器认识的类名进样式，其余类名作为不透明数据交给使用方识别元素。
-        val opaqueClassNames = classes?.let(::styleClassNames).orEmpty()
-            .filterNot { areFullySupportedStyleClasses(it) }
-        val opaque = buildMap {
-            token.attributes.forEach { (key, value) ->
-                if (key != "style" && key != "class") put(key, value)
-            }
-            if (opaqueClassNames.isNotEmpty()) put("class", opaqueClassNames.joinToString(" "))
-        }
+        if (classes != null && !areFullySupportedStyleClasses(classes)) return null
+        if (token.attributes.keys.any { it.lowercase().startsWith("on") }) return null
+        val opaque = token.attributes.filterKeys { it != "style" && it != "class" }
         return SafeInlineHtmlAction.Span(
             listOf(
                 SpanMark(
                     kind = "styled",
                     payload = buildMap {
                         style?.let { put("style", it) }
-                        if (opaqueClassNames.any { areFullySupportedStyleClasses(it) }) {
-                            put("class", opaqueClassNames.filter { areFullySupportedStyleClasses(it) }.joinToString(" "))
-                        }
+                        classes?.let { put("class", it) }
                     },
                     attributes = opaque,
                 )

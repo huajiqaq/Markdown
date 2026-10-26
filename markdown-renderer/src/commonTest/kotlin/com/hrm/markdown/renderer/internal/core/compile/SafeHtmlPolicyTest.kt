@@ -18,6 +18,9 @@ class SafeHtmlPolicyTest {
             inlineAction("<span class='bold italic' style='color:#ff000080'>")
         )
         assertNull(inlineAction("<span style='position:fixed'>"))
+        // 事件处理器属性是行为载体而非数据，出现即拒绝。
+        assertNull(inlineAction("<strong onclick='alert(1)'>"))
+        assertNull(inlineAction("<mark onerror='alert(1)'>"))
 
         assertIs<SafeInlineHtmlAction.Image>(
             inlineAction("<img src='https://example.com/a.png' width='24Px'>")
@@ -70,10 +73,12 @@ class SafeHtmlPolicyTest {
         assertEquals("highlight", markSpan.kind)
         assertEquals(mapOf("data-a" to "b", "class" to "c"), markSpan.attributes)
 
-        val span = assertIs<SafeInlineHtmlAction.Span>(inlineAction("<span class='bold custom' data-k='v'>"))
+        // span：class 仍是渲染器解释的属性，未知类名保守拒绝；非渲染属性透传。
+        assertNull(inlineAction("<span class='bold custom'>"))
+        val span = assertIs<SafeInlineHtmlAction.Span>(inlineAction("<span class='bold' data-k='v'>"))
         val spanMark = assertNotNull(span.marks.singleOrNull())
         assertEquals("bold", spanMark.payload["class"])
-        assertEquals(mapOf("class" to "custom", "data-k" to "v"), spanMark.attributes)
+        assertEquals(mapOf("data-k" to "v"), spanMark.attributes)
 
         assertNull(inlineAction("<span style='position:fixed' data-k='v'>"))
     }
