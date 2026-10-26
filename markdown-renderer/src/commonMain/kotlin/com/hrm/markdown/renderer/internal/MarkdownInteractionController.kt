@@ -53,9 +53,22 @@ internal class MarkdownInteractionController {
         ))
     }
 
-    fun inlineElement(kind: String, text: String, payload: Map<String, String>, id: Long, bounds: Rect?) {
+    fun inlineElement(
+        kind: String,
+        text: String,
+        payload: Map<String, String>,
+        attributes: Map<String, String>,
+        id: Long,
+        bounds: Rect?,
+    ) {
         onInlineElementClick?.invoke(MarkdownInlineElementClickEvent(
-            kind, text, payload, id, document?.identity?.contentRevision ?: 0L, bounds,
+            kind = kind,
+            text = text,
+            payload = payload,
+            attributes = attributes,
+            occurrenceId = id,
+            documentRevision = document?.identity?.contentRevision ?: 0L,
+            anchorBoundsInWindow = bounds,
         ))
     }
 
@@ -84,6 +97,7 @@ internal class MarkdownInteractionController {
                 data.title?.let { put("title", it) }
                 put("url", data.url)
             },
+            attributes = data.attributes,
             occurrenceId = id,
             documentRevision = revision,
             anchorBoundsInWindow = bounds,

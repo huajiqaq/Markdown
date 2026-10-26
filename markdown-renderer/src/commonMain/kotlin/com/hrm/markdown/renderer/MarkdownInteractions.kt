@@ -51,6 +51,8 @@ data class MarkdownInlineElementClickEvent(
     val kind: String,
     val text: String,
     val payload: Map<String, String> = emptyMap(),
+    /** 元素原始属性，库不解释；使用方按自己的约定读取。 */
+    val attributes: Map<String, String> = emptyMap(),
     val occurrenceId: Long,
     val documentRevision: Long,
     /** 窗口坐标（像素）；无几何信息（如无障碍路径）时为 null。 */

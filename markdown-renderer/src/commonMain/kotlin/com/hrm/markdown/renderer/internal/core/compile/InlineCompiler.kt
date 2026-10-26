@@ -156,10 +156,30 @@ private class InlineCompiler(private val softBreakPolicy: MarkdownSoftBreakPolic
             is Emphasis -> compileInlineNodes(node.children, activeMarks + snapshotSpanMark("emphasis"), sink, stableId)
             is StrongEmphasis -> compileInlineNodes(node.children, activeMarks + snapshotSpanMark("strong"), sink, stableId)
             is Strikethrough -> compileInlineNodes(node.children, activeMarks + snapshotSpanMark("strikethrough"), sink, stableId)
-            is Highlight -> compileInlineNodes(node.children, activeMarks + snapshotSpanMark("highlight"), sink, stableId)
-            is Superscript -> compileInlineNodes(node.children, activeMarks + snapshotSpanMark("superscript"), sink, stableId)
-            is Subscript -> compileInlineNodes(node.children, activeMarks + snapshotSpanMark("subscript"), sink, stableId)
-            is InsertedText -> compileInlineNodes(node.children, activeMarks + snapshotSpanMark("inserted"), sink, stableId)
+            is Highlight -> compileInlineNodes(
+                node.children,
+                activeMarks + snapshotSpanMark("highlight").copy(attributes = node.attributes),
+                sink,
+                stableId,
+            )
+            is Superscript -> compileInlineNodes(
+                node.children,
+                activeMarks + snapshotSpanMark("superscript").copy(attributes = node.attributes),
+                sink,
+                stableId,
+            )
+            is Subscript -> compileInlineNodes(
+                node.children,
+                activeMarks + snapshotSpanMark("subscript").copy(attributes = node.attributes),
+                sink,
+                stableId,
+            )
+            is InsertedText -> compileInlineNodes(
+                node.children,
+                activeMarks + snapshotSpanMark("inserted").copy(attributes = node.attributes),
+                sink,
+                stableId,
+            )
             is StyledText -> {
                 compileInlineNodes(
                     node.children,

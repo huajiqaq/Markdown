@@ -202,10 +202,9 @@ private fun AnnotatedString.Builder.renderTextAtom(
         // 语义 mark（highlight/citation/footnote/abbreviation/inline_html/kbd/spoiler）统一写
         // 行内元素注解，是否转成可点击由 MarkdownInteractiveText 按 onInlineElementClick 决定。
         if (interactiveMark != null) {
-            val payload = interactiveMark.payload.entries.joinToString("\u001f") { "${it.key}=${it.value}" }
             pushStringAnnotation(
                 InlineElementAnnotationTag,
-                "${atom.identity.stableId}|${interactiveMark.kind}|$payload",
+                encodeInlineElementAnnotation(atom.identity.stableId, interactiveMark),
             )
             appendText()
             pop()
@@ -531,3 +530,15 @@ private fun AnnotatedString.Builder.renderRubyTextWidget(
 private fun Density?.scaledSpValueToPx(value: Float): Float {
     return this?.run { value.sp.toPx() } ?: value
 }
+
+/** 行内元素注解编码：`stableId|kind|payload|attributes`；后两段内部用 \u001f 分隔键值对。 */
+internal fun encodeInlineElementAnnotation(stableId: Long, mark: SpanMark): String =
+    listOf(
+        stableId.toString(),
+        mark.kind,
+        encodePairs(mark.payload),
+        encodePairs(mark.attributes),
+    ).joinToString("|")
+
+private fun encodePairs(map: Map<String, String>): String =
+    map.entries.joinToString("") { "${it.key}=${it.value}" }

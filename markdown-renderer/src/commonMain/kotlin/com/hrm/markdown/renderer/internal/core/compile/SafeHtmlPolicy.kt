@@ -4,6 +4,7 @@ import com.hrm.markdown.parser.html.HtmlTagCategories
 import com.hrm.markdown.parser.html.HtmlTagKind
 import com.hrm.markdown.parser.html.HtmlTagToken
 import com.hrm.markdown.renderer.inline.areFullySupportedStyleClasses
+import com.hrm.markdown.renderer.inline.styleClassNames
 import com.hrm.markdown.renderer.inline.isFullySupportedCssStyle
 import com.hrm.markdown.renderer.internal.core.model.BlockTextAlignment
 import com.hrm.markdown.renderer.internal.core.model.SpanMark
@@ -130,28 +131,45 @@ internal object SafeHtmlPolicy {
         )
     }
 
+    /**
+     * 纯样式行内标签（mark/sup/sub/ins/u/code/kbd）：渲染器不解释任何属性，
+     * 因此所有属性都作为不透明数据原样挂到 mark 上交给事件使用方，不导致元素被拒绝。
+     */
     private fun plainSpan(token: HtmlTagToken, mark: SpanMark): SafeInlineHtmlAction? =
-        if (token.kind == HtmlTagKind.OPENING && token.attributes.isEmpty()) {
-            SafeInlineHtmlAction.Span(listOf(mark))
+        if (token.kind == HtmlTagKind.OPENING) {
+            SafeInlineHtmlAction.Span(
+                listOf(if (token.attributes.isEmpty()) mark else mark.copy(attributes = token.attributes)),
+            )
         } else {
             null
         }
 
     private fun styledSpan(token: HtmlTagToken): SafeInlineHtmlAction? {
         if (token.kind != HtmlTagKind.OPENING) return null
-        if (token.attributes.keys.any { it !in SPAN_ATTRIBUTES }) return null
         val style = token.attributes["style"]
         val classes = token.attributes["class"]
+        // 只有渲染器会解释的值需要校验；其余属性原样透传，不参与拒绝判断。
         if (style != null && !isFullySupportedCssStyle(style)) return null
-        if (classes != null && !areFullySupportedStyleClasses(classes)) return null
+        // class 拆开处理：渲染器认识的类名进样式，其余类名作为不透明数据交给使用方识别元素。
+        val opaqueClassNames = classes?.let(::styleClassNames).orEmpty()
+            .filterNot { areFullySupportedStyleClasses(it) }
+        val opaque = buildMap {
+            token.attributes.forEach { (key, value) ->
+                if (key != "style" && key != "class") put(key, value)
+            }
+            if (opaqueClassNames.isNotEmpty()) put("class", opaqueClassNames.joinToString(" "))
+        }
         return SafeInlineHtmlAction.Span(
             listOf(
                 SpanMark(
                     kind = "styled",
                     payload = buildMap {
                         style?.let { put("style", it) }
-                        classes?.let { put("class", it) }
+                        if (opaqueClassNames.any { areFullySupportedStyleClasses(it) }) {
+                            put("class", opaqueClassNames.filter { areFullySupportedStyleClasses(it) }.joinToString(" "))
+                        }
                     },
+                    attributes = opaque,
                 )
             )
         )
@@ -245,7 +263,7 @@ internal object SafeHtmlPolicy {
         "ins", "u", "code", "kbd", "span", "a",
     )
     private val INLINE_TAGS = INLINE_CONTAINER_TAGS + setOf("br", "img")
-    private val SPAN_ATTRIBUTES = setOf("style", "class")
+    // SPAN_ATTRIBUTES 不再作为拒绝依据：未知属性一律作为不透明数据透传。
     private val ANCHOR_ATTRIBUTES = setOf("href")
     private val IMAGE_ATTRIBUTES = setOf("src", "alt", "title", "width", "height")
     private val BLOCK_ATTRIBUTES = setOf("align", "style")

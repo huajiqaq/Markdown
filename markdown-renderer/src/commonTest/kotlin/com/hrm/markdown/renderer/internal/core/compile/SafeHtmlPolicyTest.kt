@@ -13,12 +13,10 @@ class SafeHtmlPolicyTest {
     @Test
     fun should_accept_only_attributes_that_are_fully_mapped() {
         assertIs<SafeInlineHtmlAction.Span>(inlineAction("<strong>"))
-        assertNull(inlineAction("<strong title='not-mapped'>"))
 
         assertIs<SafeInlineHtmlAction.Span>(
             inlineAction("<span class='bold italic' style='color:#ff000080'>")
         )
-        assertNull(inlineAction("<span class='unknown'>"))
         assertNull(inlineAction("<span style='position:fixed'>"))
 
         assertIs<SafeInlineHtmlAction.Image>(
@@ -59,4 +57,24 @@ class SafeHtmlPolicyTest {
 
     private fun tag(literal: String): HtmlTagToken =
         assertNotNull(HtmlTagParser.parse(literal), literal)
+
+    @Test
+    fun should_pass_unknown_attributes_through_as_opaque_data() {
+        val strong = assertIs<SafeInlineHtmlAction.Span>(inlineAction("<strong data-x='1' title='t'>"))
+        val strongMark = assertNotNull(strong.marks.singleOrNull())
+        assertEquals("strong", strongMark.kind)
+        assertEquals(mapOf("data-x" to "1", "title" to "t"), strongMark.attributes)
+
+        val mark = assertIs<SafeInlineHtmlAction.Span>(inlineAction("<mark data-a='b' class='c'>"))
+        val markSpan = assertNotNull(mark.marks.singleOrNull())
+        assertEquals("highlight", markSpan.kind)
+        assertEquals(mapOf("data-a" to "b", "class" to "c"), markSpan.attributes)
+
+        val span = assertIs<SafeInlineHtmlAction.Span>(inlineAction("<span class='bold custom' data-k='v'>"))
+        val spanMark = assertNotNull(span.marks.singleOrNull())
+        assertEquals("bold", spanMark.payload["class"])
+        assertEquals(mapOf("class" to "custom", "data-k" to "v"), spanMark.attributes)
+
+        assertNull(inlineAction("<span style='position:fixed' data-k='v'>"))
+    }
 }

@@ -5,6 +5,8 @@ import com.hrm.markdown.renderer.internal.MarkdownInteractionController
 import com.hrm.markdown.renderer.internal.core.compile.DefaultRenderModelCompiler
 import com.hrm.markdown.renderer.internal.core.compile.RenderCompileEnvironment
 import com.hrm.markdown.renderer.internal.imageOccurrences
+import com.hrm.markdown.renderer.inline.encodeInlineElementAnnotation
+import com.hrm.markdown.renderer.internal.core.model.SpanMark
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -33,14 +35,55 @@ class MarkdownInteractionsTest {
         val controller = MarkdownInteractionController()
         val calls = mutableListOf<String>()
         controller.update(document, MarkdownInteractions(onInlineElementClick = { calls += "old:${it.kind}:${it.text}" }))
-        controller.inlineElement("highlight", "marked", emptyMap(), 7, null)
+        controller.inlineElement("highlight", "marked", emptyMap(), emptyMap(), 7, null)
         controller.update(document, MarkdownInteractions(onInlineElementClick = { calls += "new:${it.kind}:${it.text}" }))
-        controller.inlineElement("highlight", "marked", mapOf("k" to "v"), 7, null)
+        controller.inlineElement("highlight", "marked", mapOf("k" to "v"), mapOf("a" to "b"), 7, null)
         controller.update(document, MarkdownInteractions.Default)
-        controller.inlineElement("highlight", "marked", emptyMap(), 7, null)
+        controller.inlineElement("highlight", "marked", emptyMap(), emptyMap(), 7, null)
         assertEquals(listOf("old:highlight:marked", "new:highlight:marked"), calls)
         assertEquals(false, controller.inlineElementEnabled)
     }
+
+    @Test
+    fun opaque_attributes_reach_the_event_untouched() {
+        val document = compile("plain")
+        val controller = MarkdownInteractionController()
+        var event: MarkdownInlineElementClickEvent? = null
+        controller.update(document, MarkdownInteractions(onInlineElementClick = { event = it }))
+        controller.inlineElement(
+            kind = "highlight",
+            text = "marked",
+            payload = mapOf("k" to "v"),
+            attributes = mapOf("data-any" to "1", "class" to "x", "id" to "n"),
+            id = 9,
+            bounds = null,
+        )
+        val click = assertNotNull(event)
+        assertEquals(mapOf("k" to "v"), click.payload)
+        assertEquals(mapOf("data-any" to "1", "class" to "x", "id" to "n"), click.attributes)
+        assertEquals(9L, click.occurrenceId)
+    }
+
+    @Test
+    fun inline_element_annotation_round_trips_kind_payload_and_attributes() {
+        val mark = SpanMark(
+            kind = "highlight",
+            payload = mapOf("k" to "v"),
+            attributes = mapOf("data-any" to "1", "class" to "x"),
+        )
+        val encoded = encodeInlineElementAnnotation(42L, mark)
+        val parts = encoded.split('|')
+        assertEquals("42", parts[0])
+        assertEquals("highlight", parts[1])
+        assertEquals(mapOf("k" to "v"), decodePairsForTest(parts[2]))
+        assertEquals(mapOf("data-any" to "1", "class" to "x"), decodePairsForTest(parts[3]))
+    }
+
+    private fun decodePairsForTest(segment: String): Map<String, String> =
+        segment.split(0x1f.toChar()).mapNotNull { entry ->
+            val eq = entry.indexOf('=')
+            if (eq <= 0) null else entry.take(eq) to entry.substring(eq + 1)
+        }.toMap()
 
     @Test
     fun should_keep_duplicate_urls_and_nested_images_in_document_order() {
