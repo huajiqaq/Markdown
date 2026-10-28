@@ -184,37 +184,28 @@ private fun AnnotatedString.Builder.renderTextAtom(
     val spanStyle = atom.marks.fold(SpanStyle()) { acc, mark ->
         acc.merge(spanStyleForMark(mark, theme))
     }
-
-    val segment = buildAnnotatedString {
-        val appendText: AnnotatedString.Builder.() -> Unit = {
-            if (!abbreviation.isNullOrEmpty()) {
-                pushStringAnnotation(tag = "abbreviation", annotation = abbreviation)
-            }
-            if (spanStyle != SpanStyle()) {
-                withStyle(spanStyle) { append(atom.text) }
-            } else {
-                append(atom.text)
-            }
-            if (!abbreviation.isNullOrEmpty()) {
-                pop()
-            }
+    val appendText: AnnotatedString.Builder.() -> Unit = {
+        if (!abbreviation.isNullOrEmpty()) {
+            pushStringAnnotation(tag = "abbreviation", annotation = abbreviation)
         }
-        // 语义 mark（highlight/citation/footnote/abbreviation/inline_html/kbd/spoiler）统一写
-        // 行内元素注解，是否转成可点击由 MarkdownInteractiveText 按 onInlineElementClick 决定。
-        if (interactiveMark != null) {
-            pushStringAnnotation(
-                InlineElementAnnotationTag,
-                encodeInlineElementAnnotation(atom.identity.stableId, interactiveMark),
-            )
-            appendText()
+        if (spanStyle != SpanStyle()) {
+            withStyle(spanStyle) { append(atom.text) }
+        } else {
+            append(atom.text)
+        }
+        if (!abbreviation.isNullOrEmpty()) {
             pop()
         }
+    }
 
-        when (clickMark?.kind) {
-            "link" -> {
-                val target = clickMark.payload["target"].orEmpty()
-                withLink(
-                    LinkAnnotation.Clickable(
+        val segment = buildAnnotatedString {
+            // 文本只发射一次；注解与链接包裹都套在这唯一一次 append 外面。
+            // （此前 interactive 注解分支与 when 分支各 append 一次，划线等
+            //  interactive-only 元素的文本会渲染两遍。）
+            when {
+                clickMark?.kind == "link" -> {
+                    val target = clickMark.payload["target"].orEmpty()
+                    val link = LinkAnnotation.Clickable(
                         tag = clickMark.payload["tag"] ?: "link",
                         styles = TextLinkStyles(
                             style = SpanStyle(
@@ -224,34 +215,60 @@ private fun AnnotatedString.Builder.renderTextAtom(
                         ),
                         linkInteractionListener = { onLinkClick?.invoke(target) },
                     )
-                ) { appendText() }
-            }
+                    if (interactiveMark != null) {
+                        pushStringAnnotation(
+                            InlineElementAnnotationTag,
+                            encodeInlineElementAnnotation(atom.identity.stableId, interactiveMark),
+                        )
+                        withLink(link) { appendText() }
+                        pop()
+                    } else {
+                        withLink(link) { appendText() }
+                    }
+                }
 
-            "footnote" -> {
-                val label = clickMark.payload["label"].orEmpty()
-                withLink(
-                    LinkAnnotation.Clickable(
+                clickMark?.kind == "footnote" -> {
+                    val label = clickMark.payload["label"].orEmpty()
+                    val link = LinkAnnotation.Clickable(
                         tag = "footnote",
                         styles = TextLinkStyles(
                             style = SpanStyle(baselineShift = BaselineShift.Superscript).merge(theme.footnoteStyle)
                         ),
                         linkInteractionListener = { onFootnoteClick?.invoke(label) },
                     )
-                ) { appendText() }
-            }
+                    if (interactiveMark != null) {
+                        pushStringAnnotation(
+                            InlineElementAnnotationTag,
+                            encodeInlineElementAnnotation(atom.identity.stableId, interactiveMark),
+                        )
+                        withLink(link) { appendText() }
+                        pop()
+                    } else {
+                        withLink(link) { appendText() }
+                    }
+                }
 
-            "citation" -> {
-                pushStringAnnotation(
-                    CitationAnnotationTag,
-                    "${atom.identity.stableId}:${clickMark.payload["key"].orEmpty()}",
-                )
-                withStyle(SpanStyle(baselineShift = BaselineShift.Superscript).merge(theme.footnoteStyle)) { appendText() }
-                pop()
-            }
+                clickMark?.kind == "citation" -> {
+                    pushStringAnnotation(
+                        CitationAnnotationTag,
+                        "${atom.identity.stableId}:${clickMark.payload["key"].orEmpty()}",
+                    )
+                    withStyle(SpanStyle(baselineShift = BaselineShift.Superscript).merge(theme.footnoteStyle)) { appendText() }
+                    pop()
+                }
 
-            else -> appendText()
+                interactiveMark != null -> {
+                    pushStringAnnotation(
+                        InlineElementAnnotationTag,
+                        encodeInlineElementAnnotation(atom.identity.stableId, interactiveMark),
+                    )
+                    appendText()
+                    pop()
+                }
+
+                else -> appendText()
+            }
         }
-    }
     context.emitTextAtom(
         builder = this,
         segment = segment,

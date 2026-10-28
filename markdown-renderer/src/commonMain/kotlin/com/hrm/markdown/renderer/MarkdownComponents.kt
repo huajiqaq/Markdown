@@ -38,6 +38,12 @@ data class MarkdownComponents(
     /** Optional image loader/painter; image click handling is supplied through interactions. */
     val image: MarkdownImageRenderer? = null,
     val admonitionIcons: Map<String, String> = mapOf("NOTE" to "ℹ️", "TIP" to "💡", "IMPORTANT" to "❗", "WARNING" to "⚠️", "CAUTION" to "🔴"),
+    /**
+     * 自定义选区工具栏：提供后替换平台 TextToolbar（复制/全选），选区完成时以
+     * [MarkdownSelectionInfo]（文本、窗口包围盒、逐块区间）重组。宿主自行定位与
+     * 消失（[MarkdownSelectionActions.dismiss] 清除选区）。
+     */
+    val selectionToolbar: (@Composable (MarkdownSelectionInfo, MarkdownSelectionActions) -> Unit)? = null,
 ) {
     companion object {
         val Default = MarkdownComponents()

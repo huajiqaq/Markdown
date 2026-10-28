@@ -143,7 +143,7 @@ private class ImageGeometry {
     var coordinates: LayoutCoordinates? = null
 }
 
-private fun decodePairs(segment: String?): Map<String, String> =
+internal fun decodePairs(segment: String?): Map<String, String> =
     segment.orEmpty().split('').mapNotNull { entry ->
         val eq = entry.indexOf('=')
         if (eq <= 0) null else entry.take(eq) to entry.substring(eq + 1)

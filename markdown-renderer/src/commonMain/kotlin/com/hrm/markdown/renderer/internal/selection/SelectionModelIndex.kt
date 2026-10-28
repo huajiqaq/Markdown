@@ -57,6 +57,7 @@ internal data class SelectionBlockEntry(
     val order: Int,
     val totalChars: Int,
     val text: String,
+    val attributes: Map<String, String> = emptyMap(),
 )
 
 /** A visible layout run mapped back into its block's logical character space. */
@@ -132,7 +133,7 @@ internal data class SelectionIndexBuildMetrics(
  * extraction and recursive traversal are limited to changed blocks.
  */
 internal class IncrementalSelectionIndexBuilder {
-    private data class RawEntry(val stableId: Long, val text: String)
+    private data class RawEntry(val stableId: Long, val text: String, val attributes: Map<String, String>)
 
     private data class CachedFragment(
         val contentRevision: Long,
@@ -170,6 +171,7 @@ internal class IncrementalSelectionIndexBuilder {
                     order = entries.size,
                     totalChars = entry.text.length,
                     text = entry.text,
+                    attributes = entry.attributes,
                 )
             }
         }
@@ -185,13 +187,13 @@ internal class IncrementalSelectionIndexBuilder {
     private fun selectionEntriesForBlock(block: InternalRenderBlockModel): List<RawEntry> {
         val entries = ArrayList<RawEntry>()
 
-        fun add(stableId: Long, text: String) {
-            if (text.isNotEmpty()) entries += RawEntry(stableId, text)
+        fun add(stableId: Long, text: String, attributes: Map<String, String> = emptyMap()) {
+            if (text.isNotEmpty()) entries += RawEntry(stableId, text, attributes)
         }
 
         fun visit(current: InternalRenderBlockModel) {
             when (current) {
-                is ParagraphBlockModel -> add(current.identity.stableId, current.inline.plainText())
+                is ParagraphBlockModel -> add(current.identity.stableId, current.inline.plainText(), current.sourceAttributes)
                 is HtmlParagraphBlockModel -> add(current.identity.stableId, current.inline.plainText())
                 is HeadingBlockModel -> add(
                     current.identity.stableId,

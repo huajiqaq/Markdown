@@ -22,10 +22,13 @@ internal class MarkdownInteractionController {
         private set
     var inlineElementEnabled by mutableStateOf(false)
         private set
+    var decorationEnabled by mutableStateOf(false)
+        private set
     private var onCodeTokenClick: ((CodeToken) -> Unit)? = null
     private var onInlineElementClick: ((MarkdownInlineElementClickEvent) -> Unit)? = null
     private var onCitationClick: ((MarkdownCitationClickEvent) -> Unit)? = null
     private var onImageClick: ((MarkdownImageClickEvent) -> Unit)? = null
+    private var inlineDecoration: ((MarkdownInlineDecorationRequest) -> MarkdownInlineUnderline?)? = null
     private var document: InternalRenderDocumentModel? = null
 
     fun update(
@@ -38,9 +41,11 @@ internal class MarkdownInteractionController {
         this.onCitationClick = handlers.onCitationClick
         this.onImageClick = handlers.onImageClick
         this.onInlineElementClick = handlers.onInlineElementClick
+        this.inlineDecoration = handlers.inlineDecoration
         citationEnabled = handlers.onCitationClick != null
         imageEnabled = handlers.onImageClick != null || handlers.onInlineElementClick != null
         inlineElementEnabled = handlers.onInlineElementClick != null
+        decorationEnabled = handlers.inlineDecoration != null
     }
 
     fun codeToken(token: CodeToken) {
@@ -71,6 +76,9 @@ internal class MarkdownInteractionController {
             anchorBoundsInWindow = bounds,
         ))
     }
+
+    fun decorate(request: MarkdownInlineDecorationRequest): MarkdownInlineUnderline? =
+        inlineDecoration?.invoke(request)
 
     fun image(data: MarkdownImageData, id: Long, bounds: Rect?) {
         val snapshot = document

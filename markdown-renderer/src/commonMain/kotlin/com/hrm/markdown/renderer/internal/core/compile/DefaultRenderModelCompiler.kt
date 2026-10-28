@@ -212,6 +212,7 @@ private fun compileBlock(
                 identity.stableId,
                 context.softBreakPolicy,
             ),
+            sourceAttributes = node.blockAttributes,
         )
 
         is Heading -> HeadingBlockModel(

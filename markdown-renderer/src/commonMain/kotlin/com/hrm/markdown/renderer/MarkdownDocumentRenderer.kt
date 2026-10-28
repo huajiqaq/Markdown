@@ -231,7 +231,7 @@ internal fun MarkdownDocumentRenderer(
                 }
                 if (selectionController != null) {
                     SelectionHandlesHost(selectionController)
-                    SelectionToolbarHost(selectionController)
+                    SelectionToolbarHost(selectionController, components.selectionToolbar)
                 }
             }
         }
