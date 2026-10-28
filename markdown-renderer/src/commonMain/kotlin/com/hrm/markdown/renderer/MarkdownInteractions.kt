@@ -23,6 +23,11 @@ data class MarkdownInteractions(
      * [InlineElementKinds]。为 null（默认）时行内点击不产生事件。
      */
     val onInlineElementClick: ((MarkdownInlineElementClickEvent) -> Unit)? = null,
+    /**
+     * 行内元素自定义装饰（如划线的实线/虚线下划线）。与 [onInlineElementClick] 同源分发，
+     * 每个语义 run 绘制前询问一次；返回 null 表示使用默认渲染。为 null（默认）时无装饰。
+     */
+    val inlineDecoration: ((MarkdownInlineDecorationRequest) -> MarkdownInlineUnderline?)? = null,
 ) {
     companion object {
         val Default = MarkdownInteractions()
@@ -51,6 +56,8 @@ data class MarkdownInlineElementClickEvent(
     val kind: String,
     val text: String,
     val payload: Map<String, String> = emptyMap(),
+    /** 元素原始属性，库不解释；使用方按自己的约定读取。 */
+    val attributes: Map<String, String> = emptyMap(),
     val occurrenceId: Long,
     val documentRevision: Long,
     /** 窗口坐标（像素）；无几何信息（如无障碍路径）时为 null。 */

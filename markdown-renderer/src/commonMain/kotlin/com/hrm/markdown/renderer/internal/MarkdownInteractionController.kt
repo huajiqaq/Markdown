@@ -22,10 +22,13 @@ internal class MarkdownInteractionController {
         private set
     var inlineElementEnabled by mutableStateOf(false)
         private set
+    var decorationEnabled by mutableStateOf(false)
+        private set
     private var onCodeTokenClick: ((CodeToken) -> Unit)? = null
     private var onInlineElementClick: ((MarkdownInlineElementClickEvent) -> Unit)? = null
     private var onCitationClick: ((MarkdownCitationClickEvent) -> Unit)? = null
     private var onImageClick: ((MarkdownImageClickEvent) -> Unit)? = null
+    private var inlineDecoration: ((MarkdownInlineDecorationRequest) -> MarkdownInlineUnderline?)? = null
     private var document: InternalRenderDocumentModel? = null
 
     fun update(
@@ -38,9 +41,11 @@ internal class MarkdownInteractionController {
         this.onCitationClick = handlers.onCitationClick
         this.onImageClick = handlers.onImageClick
         this.onInlineElementClick = handlers.onInlineElementClick
+        this.inlineDecoration = handlers.inlineDecoration
         citationEnabled = handlers.onCitationClick != null
         imageEnabled = handlers.onImageClick != null || handlers.onInlineElementClick != null
         inlineElementEnabled = handlers.onInlineElementClick != null
+        decorationEnabled = handlers.inlineDecoration != null
     }
 
     fun codeToken(token: CodeToken) {
@@ -53,11 +58,27 @@ internal class MarkdownInteractionController {
         ))
     }
 
-    fun inlineElement(kind: String, text: String, payload: Map<String, String>, id: Long, bounds: Rect?) {
+    fun inlineElement(
+        kind: String,
+        text: String,
+        payload: Map<String, String>,
+        attributes: Map<String, String>,
+        id: Long,
+        bounds: Rect?,
+    ) {
         onInlineElementClick?.invoke(MarkdownInlineElementClickEvent(
-            kind, text, payload, id, document?.identity?.contentRevision ?: 0L, bounds,
+            kind = kind,
+            text = text,
+            payload = payload,
+            attributes = attributes,
+            occurrenceId = id,
+            documentRevision = document?.identity?.contentRevision ?: 0L,
+            anchorBoundsInWindow = bounds,
         ))
     }
+
+    fun decorate(request: MarkdownInlineDecorationRequest): MarkdownInlineUnderline? =
+        inlineDecoration?.invoke(request)
 
     fun image(data: MarkdownImageData, id: Long, bounds: Rect?) {
         val snapshot = document
@@ -84,6 +105,7 @@ internal class MarkdownInteractionController {
                 data.title?.let { put("title", it) }
                 put("url", data.url)
             },
+            attributes = data.attributes,
             occurrenceId = id,
             documentRevision = revision,
             anchorBoundsInWindow = bounds,

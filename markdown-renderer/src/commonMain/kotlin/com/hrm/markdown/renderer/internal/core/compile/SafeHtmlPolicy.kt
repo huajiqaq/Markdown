@@ -130,20 +130,33 @@ internal object SafeHtmlPolicy {
         )
     }
 
+    /**
+     * 纯样式行内标签（mark/sup/sub/ins/u/code/kbd）：渲染器不解释任何属性，
+     * 因此属性原样挂到 mark 上交给事件使用方。唯一例外是事件处理器属性（onclick 等）：
+     * 它们是行为载体而非数据，出现即视为无法安全映射，整个元素退回源码。
+     */
     private fun plainSpan(token: HtmlTagToken, mark: SpanMark): SafeInlineHtmlAction? =
-        if (token.kind == HtmlTagKind.OPENING && token.attributes.isEmpty()) {
-            SafeInlineHtmlAction.Span(listOf(mark))
-        } else {
+        if (token.kind != HtmlTagKind.OPENING) {
             null
+        } else if (token.attributes.isEmpty()) {
+            SafeInlineHtmlAction.Span(listOf(mark))
+        } else if (token.attributes.keys.any { it.lowercase().startsWith("on") }) {
+            null
+        } else {
+            SafeInlineHtmlAction.Span(listOf(mark.copy(attributes = token.attributes)))
         }
 
     private fun styledSpan(token: HtmlTagToken): SafeInlineHtmlAction? {
         if (token.kind != HtmlTagKind.OPENING) return null
-        if (token.attributes.keys.any { it !in SPAN_ATTRIBUTES }) return null
         val style = token.attributes["style"]
         val classes = token.attributes["class"]
+        // 渲染器解释的属性（style/class）必须能完整映射，否则退回源码；
+        // 其余属性是不透明数据，原样透传给事件使用方。事件处理器属性（on*）
+        // 是行为载体而非数据，出现即拒绝（与 plainSpan 同一安全边界）。
         if (style != null && !isFullySupportedCssStyle(style)) return null
         if (classes != null && !areFullySupportedStyleClasses(classes)) return null
+        if (token.attributes.keys.any { it.lowercase().startsWith("on") }) return null
+        val opaque = token.attributes.filterKeys { it != "style" && it != "class" }
         return SafeInlineHtmlAction.Span(
             listOf(
                 SpanMark(
@@ -152,6 +165,7 @@ internal object SafeHtmlPolicy {
                         style?.let { put("style", it) }
                         classes?.let { put("class", it) }
                     },
+                    attributes = opaque,
                 )
             )
         )
@@ -245,7 +259,7 @@ internal object SafeHtmlPolicy {
         "ins", "u", "code", "kbd", "span", "a",
     )
     private val INLINE_TAGS = INLINE_CONTAINER_TAGS + setOf("br", "img")
-    private val SPAN_ATTRIBUTES = setOf("style", "class")
+    // SPAN_ATTRIBUTES 不再作为拒绝依据：未知属性一律作为不透明数据透传。
     private val ANCHOR_ATTRIBUTES = setOf("href")
     private val IMAGE_ATTRIBUTES = setOf("src", "alt", "title", "width", "height")
     private val BLOCK_ATTRIBUTES = setOf("align", "style")

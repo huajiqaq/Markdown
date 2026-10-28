@@ -10,6 +10,13 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.AlignmentLine
 import androidx.compose.ui.layout.HorizontalAlignmentLine
 import androidx.compose.ui.layout.Layout
@@ -26,6 +33,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
+import com.hrm.markdown.renderer.MarkdownInlineDecorationRequest
+import com.hrm.markdown.renderer.MarkdownInlineUnderline
+import com.hrm.markdown.renderer.internal.LocalMarkdownInteractions
 import com.hrm.markdown.renderer.internal.layout.inline.LayoutInlineRunPlacement
 import com.hrm.markdown.renderer.internal.layout.inline.runPlacements
 import com.hrm.markdown.renderer.internal.layout.inline.textMeasurementStyle
@@ -79,16 +89,26 @@ internal fun PaintInlineLayoutContent(
                         item.stableKey,
                         onTextLayout != null || onTextItemLayout != null,
                     ) {
+                        val underlines = rememberMarkdownInlineUnderlines(item.text)
+                        val decorationGeometry = remember(item.stableKey) { InlineDecorationGeometry() }
+                        val needsTextLayout = onTextLayout != null || onTextItemLayout != null || underlines.isNotEmpty()
                         MarkdownInteractiveText(
                             text = item.text,
-                            modifier = Modifier.clipToBounds().semantics {
+                            modifier = (if (underlines.isEmpty()) {
+                                Modifier
+                            } else {
+                                Modifier.drawBehind {
+                                    drawInlineUnderlines(underlines, decorationGeometry.layout)
+                                }
+                            }).clipToBounds().semantics {
                                 traversalIndex = itemIndex.toFloat()
                             },
                             // InlineFlowLayout owns line spacing. Paint with the same
                             // line-height-free style used to measure the fixed run bounds.
                             style = textPaintStyle,
-                            onTextLayout = if (onTextLayout != null || onTextItemLayout != null) {
+                            onTextLayout = if (needsTextLayout) {
                                 { result ->
+                                    decorationGeometry.layout = result
                                     onTextLayout?.invoke(result)
                                     onTextItemLayout?.invoke(item.placements, result)
                                 }
@@ -302,4 +322,135 @@ private fun List<LayoutInlineRunPlacement>.joinText(): AnnotatedString {
             append((placement.run as LayoutTextRun).text)
         }
     }
+}
+
+private class InlineDecorationGeometry {
+    var layout: TextLayoutResult? = null
+}
+
+private class InlineUnderlineRange(
+    val start: Int,
+    val end: Int,
+    val underline: MarkdownInlineUnderline,
+)
+
+/**
+ * 收集该行内文本项的装饰请求。注解列表按文本缓存，装饰回调在每次重组时重新执行——
+ * 宿主回调内部读取的状态（如点赞态）变化会触发重组并刷新装饰。
+ */
+@Composable
+private fun rememberMarkdownInlineUnderlines(text: AnnotatedString): List<InlineUnderlineRange> {
+    val interactions = LocalMarkdownInteractions.current
+    if (interactions?.decorationEnabled != true) return emptyList()
+    val annotations = remember(text) {
+        text.getStringAnnotations(InlineElementAnnotationTag, 0, text.length)
+    }
+    return annotations.mapNotNull { annotation ->
+        val parts = annotation.item.split('|')
+        val kind = parts.getOrNull(1).orEmpty()
+        if (kind.isEmpty()) return@mapNotNull null
+        val underline = interactions.decorate(
+            MarkdownInlineDecorationRequest(
+                kind = kind,
+                text = text.subSequence(annotation.start, annotation.end).toString(),
+                payload = decodePairs(parts.getOrNull(2)),
+                attributes = decodePairs(parts.getOrNull(3)),
+            ),
+        ) ?: return@mapNotNull null
+        InlineUnderlineRange(annotation.start, annotation.end, underline)
+    }
+}
+
+private fun DrawScope.drawInlineUnderlines(
+    underlines: List<InlineUnderlineRange>,
+    layout: TextLayoutResult?,
+) {
+    if (layout == null || underlines.isEmpty()) return
+    val textLength = layout.layoutInput.text.length
+    for (range in underlines) {
+        val start = range.start.coerceIn(0, textLength)
+        val end = range.end.coerceIn(0, textLength)
+        if (end <= start) continue
+        val underline = range.underline
+        val strokeWidth = underline.strokeWidth.toPx()
+        val dashWidth = underline.dashWidth?.toPx()
+        val gapWidth = underline.gapWidth?.toPx()
+        val dotDiameter = underline.dotDiameter?.toPx()
+        val dotGap = underline.dotGap.toPx()
+        val offset = underline.offset.toPx()
+        val startLine = layout.getLineForOffset(start)
+        val endLine = layout.getLineForOffset((end - 1).coerceAtLeast(start))
+        for (line in startLine..endLine) {
+            val lineStart = if (line == startLine) start else layout.getLineStart(line)
+            val lineEnd = if (line == endLine) end else layout.getLineEnd(line)
+            if (lineEnd <= lineStart) continue
+            val left = layout.getHorizontalPosition(lineStart, usePrimaryDirection = true)
+            val right = layout.getHorizontalPosition(lineEnd, usePrimaryDirection = true)
+            val x1 = minOf(left, right)
+            val x2 = maxOf(left, right)
+            if (x2 - x1 <= 0f) continue
+            val y = layout.getLineBottom(line) - offset
+            val isLastLine = line == endLine
+            when {
+                dotDiameter != null && dotDiameter > 0f -> {
+                    // 点线：沿行内字符区间等距铺圆点，两端各留半个点，避免首尾被裁。
+                    val step = dotDiameter + dotGap.coerceAtLeast(0f)
+                    var x = x1 + dotDiameter / 2f
+                    while (x <= x2 - dotDiameter / 2f + 0.01f) {
+                        drawCircle(
+                            color = underline.color,
+                            radius = dotDiameter / 2f,
+                            center = Offset(x, y),
+                        )
+                        x += step
+                    }
+                    drawEndMarker(underline, x2, y, isLastLine)
+                }
+
+                dashWidth != null && gapWidth != null -> {
+                    drawPath(
+                        path = Path().apply {
+                            moveTo(x1, y)
+                            lineTo(x2, y)
+                        },
+                        color = underline.color,
+                        style = Stroke(
+                            width = strokeWidth,
+                            cap = StrokeCap.Round,
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(dashWidth, gapWidth)),
+                        ),
+                    )
+                    drawEndMarker(underline, x2, y, isLastLine)
+                }
+
+                else -> {
+                    drawLine(
+                        color = underline.color,
+                        start = Offset(x1, y),
+                        end = Offset(x2, y),
+                        strokeWidth = strokeWidth,
+                        cap = StrokeCap.Round,
+                    )
+                    drawEndMarker(underline, x2, y, isLastLine)
+                }
+            }
+        }
+    }
+}
+
+/** 在装饰线最后一行右端绘制标记点（如“有评论”提示）。 */
+private fun DrawScope.drawEndMarker(
+    underline: MarkdownInlineUnderline,
+    lineRight: Float,
+    baselineY: Float,
+    isLastLine: Boolean,
+) {
+    val marker = underline.endMarker ?: return
+    if (!isLastLine) return
+    val radius = marker.diameter.toPx() / 2f
+    drawCircle(
+        color = marker.color,
+        radius = radius,
+        center = Offset(lineRight + marker.gap.toPx() + radius, baselineY),
+    )
 }

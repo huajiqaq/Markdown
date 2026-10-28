@@ -20,6 +20,8 @@ enum class BlockTextAlignment {
 data class ParagraphBlockModel(
     override val identity: RenderIdentity,
     val inline: InlineModel,
+    /** 源块节点的 blockAttributes 透传（如 `data-*` 标识），库不解释。 */
+    val sourceAttributes: Map<String, String> = emptyMap(),
 ) : InternalRenderBlockModel
 
 data class HtmlParagraphBlockModel(

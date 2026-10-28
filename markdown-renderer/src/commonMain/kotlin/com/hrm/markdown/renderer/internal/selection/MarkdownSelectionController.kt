@@ -15,6 +15,8 @@ import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.Constraints
+import com.hrm.markdown.renderer.MarkdownSelectionBlockRange
+import com.hrm.markdown.renderer.MarkdownSelectionInfo
 import com.hrm.markdown.renderer.internal.core.model.CodeBlockModel
 import com.hrm.markdown.renderer.internal.core.model.InternalRenderBlockModel
 import com.hrm.markdown.renderer.internal.layout.inline.LayoutInlineRunPlacement
@@ -455,6 +457,38 @@ internal class MarkdownSelectionController(
         }
         if (!found) return null
         return Rect(left, top, right, bottom)
+    }
+
+    /**
+     * 当前选区的公开快照：纯文本、窗口包围盒与逐块字符区间（携带块源属性）。
+     * 供自定义选区工具栏消费；无选区或无可见几何时返回 null。
+     */
+    fun selectionInfo(): MarkdownSelectionInfo? {
+        val range = state.range ?: return null
+        val bounds = selectionBoundsInWindow() ?: return null
+        val startOrder = index.orderOf(range.start.blockStableId)
+        val endOrder = index.orderOf(range.end.blockStableId)
+        val ranges = ArrayList<MarkdownSelectionBlockRange>()
+        for (entry in index.entries) {
+            if (startOrder != null && entry.order < startOrder) continue
+            if (endOrder != null && entry.order > endOrder) continue
+            val from = if (entry.stableId == range.start.blockStableId) range.start.charInBlock else 0
+            val to = if (entry.stableId == range.end.blockStableId) range.end.charInBlock else entry.totalChars
+            if (to <= from) continue
+            ranges += MarkdownSelectionBlockRange(
+                blockStableId = entry.stableId,
+                blockText = entry.text,
+                startInBlock = from,
+                endInBlock = to,
+                blockAttributes = entry.attributes,
+            )
+        }
+        if (ranges.isEmpty()) return null
+        return MarkdownSelectionInfo(
+            text = selectedText,
+            boundsInWindow = bounds,
+            ranges = ranges,
+        )
     }
 
     /**

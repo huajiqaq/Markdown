@@ -236,30 +236,54 @@ class InlineMath(
 }
 
 /**
- * 高亮：`==text==`。
+ * 高亮：`==text==`，或带属性的 `<mark>`。
+ *
+ * [attributes] 与 [Link]/[Image] 一致：承载使用方的扩展属性，渲染层会把这些属性
+ * 原样透传给行内元素点击事件，不参与样式或布局计算。
  */
-class Highlight : ContainerNode() {
+class Highlight(
+    /** 自定义属性映射，如 data-*、class、id 等 */
+    attributes: Map<String, String> = emptyMap(),
+) : ContainerNode() {
+    var attributes: Map<String, String> = immutableMapCopy(attributes)
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitHighlight(this)
 }
 
 /**
  * 上标：`^text^`。
  */
-class Superscript : ContainerNode() {
+class Superscript(
+    attributes: Map<String, String> = emptyMap(),
+) : ContainerNode() {
+    var attributes: Map<String, String> = immutableMapCopy(attributes)
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitSuperscript(this)
 }
 
 /**
  * 下标：`~text~`。
  */
-class Subscript : ContainerNode() {
+class Subscript(
+    attributes: Map<String, String> = emptyMap(),
+) : ContainerNode() {
+    var attributes: Map<String, String> = immutableMapCopy(attributes)
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitSubscript(this)
 }
 
 /**
  * 插入文本：`++text++`。
  */
-class InsertedText : ContainerNode() {
+class InsertedText(
+    attributes: Map<String, String> = emptyMap(),
+) : ContainerNode() {
+    var attributes: Map<String, String> = immutableMapCopy(attributes)
+        set(value) { checkMutation(); field = immutableMapCopy(value) }
+
     override fun <R> accept(visitor: NodeVisitor<R>): R = visitor.visitInsertedText(this)
 }
 

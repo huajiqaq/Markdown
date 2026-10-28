@@ -82,17 +82,12 @@ internal fun MarkdownInteractiveText(
                 ), citation.start, citation.end)
             }
             for (element in inlineElements) {
-                // 注解值格式：occurrenceId|kind|payloadKey1=payloadValue1\u001fpayloadKey2=...（\u001f 分隔键值对）
+                // 注解值：occurrenceId|kind|payload|attributes，后两段各自用 \u001f 分隔键值对
                 val parts = element.item.split('|')
                 val id = parts.getOrNull(0)?.toLongOrNull() ?: continue
                 val kind = parts.getOrNull(1).orEmpty()
-                val payload = parts.getOrNull(2).orEmpty()
-                    .split('\u001f')
-                    .mapNotNull { entry ->
-                        val eq = entry.indexOf('=')
-                        if (eq <= 0) null else entry.take(eq) to entry.substring(eq + 1)
-                    }
-                    .toMap()
+                val payload = decodePairs(parts.getOrNull(2))
+                val attributes = decodePairs(parts.getOrNull(3))
                 addLink(LinkAnnotation.Clickable(
                     tag = kind.ifEmpty { "inline-element" },
                     linkInteractionListener = {
@@ -100,6 +95,7 @@ internal fun MarkdownInteractiveText(
                             kind,
                             text.subSequence(element.start, element.end).toString(),
                             payload,
+                            attributes,
                             id,
                             geometry.bounds(element.start, element.end),
                         )
@@ -146,3 +142,9 @@ internal fun RenderInteractiveMarkdownImage(data: MarkdownImageData, occurrenceI
 private class ImageGeometry {
     var coordinates: LayoutCoordinates? = null
 }
+
+internal fun decodePairs(segment: String?): Map<String, String> =
+    segment.orEmpty().split('').mapNotNull { entry ->
+        val eq = entry.indexOf('=')
+        if (eq <= 0) null else entry.take(eq) to entry.substring(eq + 1)
+    }.toMap()
