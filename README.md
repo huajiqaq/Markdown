@@ -310,6 +310,62 @@ Keep slot content within its declared height; toolbar text is excluded from Mark
 
 Set `enableScroll = false` when a parent container handles vertical scrolling.
 
+### Find text in a document
+
+Both `Markdown(markdown = ...)` and `Markdown(document = ...)` accept an optional
+`textSearchState`. The renderer supplies matches and scrolling; your app owns the query field,
+result counter, and previous/next buttons. Search does not change selection, open its toolbar,
+or reparse the document.
+
+```kotlin
+import com.hrm.markdown.renderer.rememberMarkdownTextSearchState
+import kotlinx.coroutines.launch
+
+val search = rememberMarkdownTextSearchState()
+val scope = rememberCoroutineScope()
+Column {
+    TextField(value = search.query, onValueChange = { search.setQuery(it) })
+    Button(
+        enabled = search.matches.isNotEmpty(),
+        onClick = {
+            val results = search.matches
+            if (results.isNotEmpty()) {
+                val next = (results.indexOf(search.activeMatch) + 1) % results.size
+                scope.launch { search.reveal(results[next]) }
+            }
+        },
+    ) { Text("Next (${search.matches.size})") }
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+        Markdown(markdown = text, enableScroll = false, textSearchState = search)
+    }
+}
+```
+
+The outer `Column` must have a bounded height. Internal scrolling also works: omit the inner
+scrolling `Column` and use `Markdown(..., modifier = Modifier.weight(1f), textSearchState = search)`.
+`reveal(match)` brings the first matching text line into view, including offscreen internal-lazy
+blocks, and returns whether usable rendered geometry was found. Calling it again reveals the
+same match again, even after the user scrolls away.
+
+- Matches are literal, non-overlapping, and in document order. Inline emphasis/link boundaries
+  can be crossed, but blocks, table cells, and inline widgets cannot.
+- Unicode whitespace is trimmed/collapsed for matching. `setQuery(query, ignoreCase = false)`
+  enables case-sensitive matching; the default uses Kotlin's simple case-insensitive comparison
+  (not locale-specific folding or Unicode normalization).
+- Each match exposes `excerpt`, `blockStableId`, `documentRevision`, and the half-open UTF-16
+  range `startInBlock ..< endInBlock` in rendered logical text, not source Markdown offsets.
+- Paragraphs, headings, nested prose, and table-cell text are searchable. Image alt text,
+  math/diagram sources, inline widgets, and code blocks are excluded. CodeHigh's current public
+  code-block API does not expose text-layout geometry; search does not estimate it. Hidden tab
+  content may have a logical match but cannot be revealed until the tab is shown.
+- The active match has a yellow background at 30% opacity. Set `highlightActiveMatch = false`
+  to disable it or customize `highlightColor`. This is independent of `enableSelection`.
+- Use one state per Markdown instance, on the UI thread. `clear()` clears query/results/highlight
+  and cancels pending reveal. New queries, document revisions, detachment, or newer reveal calls
+  invalidate pending requests; caller cancellation still propagates. Do not retain old matches.
+- When the search panel is closed, pass `textSearchState = null` to avoid search indexing,
+  geometry callbacks, and requesters. A query set before reattachment is matched on attachment.
+
 Soft breaks default to `Space`. Use `LineBreak` to preserve line breaks in display and copy. HTML export also accepts `softBreakPolicy`.
 
 ---

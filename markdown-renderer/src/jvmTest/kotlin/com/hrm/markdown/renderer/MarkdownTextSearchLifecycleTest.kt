@@ -1,0 +1,406 @@
+package com.hrm.markdown.renderer
+
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.unit.dp
+import com.hrm.markdown.parser.MarkdownParser
+import com.hrm.markdown.renderer.internal.selection.LocalMarkdownSelectionController
+import com.hrm.markdown.renderer.internal.selection.MarkdownSelectionController
+import com.hrm.markdown.renderer.internal.selection.SelectionActiveHandle
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
+
+@OptIn(ExperimentalTestApi::class)
+class MarkdownTextSearchLifecycleTest {
+    @Test
+    fun should_reveal_real_match_line_in_external_scroll_and_reveal_it_again() = runComposeUiTest {
+        val page = SearchPage("![prefix image](image.png =240x500) " +
+            "intro ".repeat(250) + "针**叶**[林](https://example.invalid) " +
+            "middle ".repeat(250) + "针叶林 " + "tail ".repeat(60))
+        setContent { page.Content() }
+        waitForIdle()
+        val original = page.document
+        runOnIdle { page.search.setQuery("针叶林") }
+        waitForIdle()
+        val matches = page.search.matches
+        assertEquals(2, matches.size)
+        assertEquals(matches[0].blockStableId, matches[1].blockStableId)
+        assertTrue(matches[0].startInBlock > 1000)
+
+        assertTrue(reveal(page, matches[0]))
+        runOnIdle {
+            assertTrue(page.scroll.value > 500)
+            page.assertMatchVisible(matches[0])
+            assertNull(page.controller.state.range)
+            assertEquals(SelectionActiveHandle.None, page.controller.state.activeHandle)
+            assertEquals(0, page.menuCalls)
+            assertSame(original, page.document)
+            assertEquals(0L, page.controller.fallbackTextMeasurementCount)
+        }
+        val firstScroll = page.scroll.value
+        assertTrue(reveal(page, matches[1]))
+        runOnIdle {
+            page.assertMatchVisible(matches[1])
+            assertTrue(page.scroll.value > firstScroll + 300)
+        }
+        assertTrue(reveal(page, matches[0]))
+        page.assertMatchVisible(matches[0])
+        var reset: Deferred<Float>? = null
+        runOnIdle { reset = page.scope.async { page.scroll.scrollTo(0) } }
+        waitUntil { reset?.isCompleted == true }
+        assertEquals(0, page.scroll.value)
+        assertTrue(reveal(page, matches[0]))
+        page.assertMatchVisible(matches[0])
+    }
+
+    @Test
+    fun should_paint_optional_yellow_background_without_selection_or_reparse() = runComposeUiTest {
+        val page = SearchPage("before needle after", enableSelection = true)
+        setContent { page.Content() }
+        waitForIdle()
+        runOnIdle { page.search.setQuery("needle") }
+        assertTrue(reveal(page, page.search.matches.single()))
+        val highlighted = onNodeWithTag("viewport").captureToImage().toPixelMap()
+        var yellowPixels = 0
+        for (y in 0 until highlighted.height) for (x in 0 until highlighted.width) {
+            val c = highlighted[x, y]
+            if (c.red > 0.9f && c.green > 0.9f && c.blue in 0.55f..0.85f) yellowPixels++
+        }
+        assertTrue(yellowPixels > 10, "Actual body pixels must contain the active yellow range")
+        runOnIdle {
+            assertNull(page.controller.state.range)
+            assertEquals(0, page.menuCalls)
+            page.search.highlightActiveMatch = false
+        }
+        val hidden = onNodeWithTag("viewport").captureToImage().toPixelMap()
+        var hiddenYellow = 0
+        for (y in 0 until hidden.height) for (x in 0 until hidden.width) {
+            val c = hidden[x, y]
+            if (c.red > 0.9f && c.green > 0.9f && c.blue in 0.55f..0.85f) hiddenYellow++
+        }
+        assertEquals(0, hiddenYellow)
+        runOnIdle { page.controller.selectAll() }
+        val selectedRange = page.controller.state.range
+        val toolbarKey = page.controller.state.toolbarRequestKey
+        runOnIdle { page.search.setQuery("after") }
+        assertTrue(reveal(page, page.search.matches.single()))
+        runOnIdle {
+            assertEquals(selectedRange, page.controller.state.range)
+            assertEquals(toolbarKey, page.controller.state.toolbarRequestKey)
+            page.search.clear()
+            assertEquals(selectedRange, page.controller.state.range)
+            assertNull(page.search.activeMatch)
+        }
+    }
+
+    @Test
+    fun should_reject_old_matches_after_query_document_or_binding_changes() = runComposeUiTest {
+        val page = SearchPage("needle old")
+        setContent { page.Content() }
+        waitForIdle()
+        runOnIdle { page.search.setQuery("needle") }
+        val old = page.search.matches.single()
+        assertTrue(reveal(page, old))
+        runOnIdle { page.search.setQuery("old") }
+        assertFalse(reveal(page, old))
+        runOnIdle {
+            page.search.setQuery("needle")
+            page.document = MarkdownParser().parse("needle new")
+        }
+        waitForIdle()
+        assertFalse(reveal(page, old))
+        val replacement = page.search.matches.single()
+        assertTrue(reveal(page, replacement))
+        runOnIdle { page.shown = false }
+        waitForIdle()
+        assertTrue(page.search.matches.isEmpty())
+        assertFalse(reveal(page, replacement))
+    }
+
+    @Test
+    fun should_cancel_pending_parent_scroll_when_cleared_or_document_replaced() = runComposeUiTest {
+        val page = SearchPage("prefix ".repeat(600) + "needle " + "tail ".repeat(60))
+        setContent { page.Content() }
+        waitForIdle()
+        runOnIdle { page.search.setQuery("needle") }
+        lateinit var pending: Deferred<Boolean>
+        runOnIdle {
+            pending = page.scope.async(start = CoroutineStart.UNDISPATCHED) {
+                page.search.reveal(page.search.matches.single())
+            }
+            page.search.clear()
+        }
+        waitUntil { pending.isCompleted }
+        assertFalse(runBlocking { pending.await() })
+        runOnIdle {
+            assertEquals("", page.search.query)
+            assertTrue(page.search.matches.isEmpty())
+            assertNull(page.search.activeMatch)
+            page.search.setQuery("needle")
+        }
+        runOnIdle {
+            pending = page.scope.async(start = CoroutineStart.UNDISPATCHED) {
+                page.search.reveal(page.search.matches.single())
+            }
+            page.document = MarkdownParser().parse("replacement")
+        }
+        waitForIdle()
+        waitUntil { pending.isCompleted }
+        assertFalse(runBlocking { pending.await() })
+        assertNull(page.search.activeMatch)
+        assertTrue(page.search.matches.isEmpty())
+    }
+
+    @Test
+    fun should_attach_preexisting_query_and_release_search_only_resources_when_detached() = runComposeUiTest {
+        val page = SearchPage("needle body", initiallyAttached = false)
+        setContent { page.Content() }
+        waitForIdle()
+        runOnIdle {
+            assertNull(page.observedController)
+            page.search.setQuery("needle")
+            assertTrue(page.search.matches.isEmpty())
+            page.searchAttached = true
+        }
+        waitForIdle()
+        val match = page.search.matches.single()
+        assertTrue(reveal(page, match))
+        runOnIdle {
+            page.search.clear()
+            page.searchAttached = false
+        }
+        waitForIdle()
+        assertNull(page.observedController)
+        assertTrue(page.search.matches.isEmpty())
+        assertFalse(reveal(page, match))
+        runOnIdle {
+            page.search.setQuery("needle")
+            page.searchAttached = true
+        }
+        waitForIdle()
+        assertFalse(reveal(page, match))
+        assertTrue(reveal(page, page.search.matches.single()))
+    }
+
+    @Test
+    fun should_remove_search_metadata_and_requesters_without_disrupting_selection() = runComposeUiTest {
+        val page = SearchPage("needle body", enableSelection = true)
+        setContent { page.Content() }
+        waitForIdle()
+        runOnIdle {
+            page.controller.selectAll()
+            page.search.setQuery("needle")
+        }
+        val match = page.search.matches.single()
+        assertTrue(reveal(page, match))
+        val selection = page.controller.state.range
+        runOnIdle { page.searchAttached = false }
+        waitForIdle()
+        runOnIdle {
+            assertEquals(selection, page.controller.state.range)
+            assertTrue(page.controller.index.entries.all { it.searchableRanges.isEmpty() })
+            assertNull(page.controller.registry.requesterOf(match.geometryStableId))
+            assertTrue(page.search.matches.isEmpty())
+        }
+    }
+
+    @Test
+    fun should_reveal_offscreen_lazy_nested_blocks_using_top_level_index_with_header() = runComposeUiTest {
+        val page = SearchPage(
+            (0 until 80).joinToString("\n\n") { "Filler paragraph $it" } +
+                "\n\n> " + "intro ".repeat(250) + "needle " + "tail ".repeat(60),
+            internalScroll = true,
+        )
+        setContent { page.Content() }
+        waitForIdle()
+        runOnIdle { page.search.setQuery("needle") }
+        val match = page.search.matches.single()
+        assertNull(page.controller.registry.coordinatesOf(match.geometryStableId))
+        assertTrue(reveal(page, match))
+        runOnIdle {
+            assertTrue(page.markdownState.firstVisibleBlockIndex > 50)
+            page.assertMatchVisible(match)
+            assertEquals(0L, page.controller.fallbackTextMeasurementCount)
+        }
+        lateinit var reset: Deferred<Boolean>
+        runOnIdle { reset = page.scope.async { page.markdownState.scrollToBlock(0) } }
+        waitUntil { reset.isCompleted }
+        waitForIdle()
+        assertTrue(reveal(page, match))
+        page.assertMatchVisible(match)
+    }
+
+    @Test
+    fun should_reveal_actual_table_cell_line_and_preserve_table_selection_text() = runComposeUiTest {
+        val source = "| Left | Right |\n| --- | --- |\n" +
+            (0 until 35).joinToString("\n") { "| row $it | filler $it |" } +
+            "\n| end | ![prefix](image.png =30x30)针**叶**林 |"
+        val page = SearchPage(source, enableSelection = true)
+        setContent { page.Content() }
+        waitForIdle()
+        runOnIdle { page.search.setQuery("针叶林") }
+        val match = page.search.matches.single()
+        assertTrue(reveal(page, match))
+        runOnIdle {
+            page.assertMatchVisible(match)
+            assertTrue(page.scroll.value > 500)
+            assertNotNull(page.controller.registry.coordinatesOf(match.geometryStableId))
+            assertEquals(0L, page.controller.fallbackTextMeasurementCount)
+            page.controller.selectAll()
+            assertTrue(page.controller.selectedText.contains("end\tprefix针叶林"))
+        }
+    }
+
+    @Test
+    fun should_reject_forged_match_metadata_and_old_query_epoch_even_after_query_returns() = runComposeUiTest {
+        val page = SearchPage("needle body")
+        setContent { page.Content() }
+        waitForIdle()
+        runOnIdle { page.search.setQuery("needle") }
+        val old = page.search.matches.single()
+        assertFalse(reveal(page, old.copy(startInBlock = old.startInBlock + 1)))
+        assertFalse(reveal(page, old.copy(blockStableId = old.blockStableId + 1)))
+        assertFalse(reveal(page, old.copy(geometryStart = 1)))
+        runOnIdle { page.search.setQuery("body"); page.search.setQuery("needle") }
+        assertFalse(reveal(page, old))
+        assertTrue(reveal(page, page.search.matches.single()))
+    }
+
+    @Test
+    fun should_supersede_pending_reveal_and_propagate_caller_cancellation() = runComposeUiTest {
+        val page = SearchPage("prefix ".repeat(600) + "needle " + "middle ".repeat(200) + "target")
+        setContent { page.Content() }
+        waitForIdle()
+        runOnIdle { page.search.setQuery("needle") }
+        lateinit var first: Deferred<Boolean>
+        lateinit var second: Deferred<Boolean>
+        runOnIdle {
+            first = page.scope.async(start = CoroutineStart.UNDISPATCHED) {
+                page.search.reveal(page.search.matches.single())
+            }
+            second = page.scope.async(start = CoroutineStart.UNDISPATCHED) {
+                page.search.reveal(page.search.matches.single())
+            }
+        }
+        waitUntil(timeoutMillis = 10_000) { first.isCompleted && second.isCompleted }
+        assertFalse(runBlocking { first.await() })
+        assertTrue(runBlocking { second.await() })
+        runOnIdle {
+            page.search.setQuery("target")
+            first = page.scope.async(start = CoroutineStart.UNDISPATCHED) {
+                page.search.reveal(page.search.matches.single())
+            }
+            first.cancel()
+        }
+        waitUntil { first.isCompleted }
+        assertTrue(first.isCancelled)
+        assertNull(page.search.activeMatch)
+    }
+
+    private fun ComposeUiTest.reveal(page: SearchPage, match: MarkdownTextSearchMatch): Boolean {
+        lateinit var result: Deferred<Boolean>
+        runOnIdle { result = page.scope.async { page.search.reveal(match) } }
+        waitUntil(timeoutMillis = 10_000) { result.isCompleted }
+        waitForIdle()
+        return runBlocking { result.await() }
+    }
+
+    private class SearchPage(
+        source: String,
+        val enableSelection: Boolean = false,
+        val internalScroll: Boolean = false,
+        initiallyAttached: Boolean = true,
+    ) {
+        var document by mutableStateOf(MarkdownParser().parse(source))
+        var shown by mutableStateOf(true)
+        var searchAttached by mutableStateOf(initiallyAttached)
+        lateinit var search: MarkdownTextSearchState
+        lateinit var markdownState: MarkdownState
+        lateinit var scroll: ScrollState
+        lateinit var scope: CoroutineScope
+        lateinit var controller: MarkdownSelectionController
+        var observedController: MarkdownSelectionController? = null
+        lateinit var viewport: LayoutCoordinates
+        var menuCalls = 0
+
+        @Composable
+        fun Content() {
+            val state = rememberMarkdownTextSearchState()
+            val navigation = rememberMarkdownState()
+            val externalScroll = rememberScrollState()
+            val coroutineScope = rememberCoroutineScope()
+            SideEffect { search = state; markdownState = navigation; scroll = externalScroll; scope = coroutineScope }
+            Box(Modifier.size(320.dp, 240.dp).background(Color.White).testTag("viewport")
+                .onGloballyPositioned { viewport = it }) {
+                val content: @Composable () -> Unit = {
+                    if (shown) Markdown(
+                        document = document,
+                        textSearchState = if (searchAttached) state else null,
+                        state = navigation,
+                        enableScroll = internalScroll,
+                        enableSelection = enableSelection,
+                        components = MarkdownComponents(
+                            header = {
+                                val current = LocalMarkdownSelectionController.current
+                                SideEffect {
+                                    observedController = current
+                                    if (current != null) controller = current
+                                }
+                                Box(Modifier.height(32.dp))
+                            },
+                            image = { _, modifier -> Box(modifier.height(500.dp).background(Color.Blue)) },
+                            selectionToolbar = { _, _ -> SideEffect { menuCalls++ } },
+                        ),
+                    )
+                }
+                if (internalScroll) content()
+                else Column(Modifier.fillMaxWidth().verticalScroll(externalScroll)) { content() }
+            }
+        }
+
+        fun assertMatchVisible(match: MarkdownTextSearchMatch) {
+            val box = controller.highlightBoxesFor(match.geometryStableId, match.logicalRange, textOnly = true).first()
+            val block = assertNotNull(controller.registry.coordinatesOf(match.geometryStableId))
+            val top = viewport.windowToLocal(block.localToWindow(box.topLeft)).y
+            val bottom = viewport.windowToLocal(block.localToWindow(Offset(box.left, box.bottom))).y
+            assertTrue(top >= -1f, "Match line top=$top must be inside viewport")
+            assertTrue(bottom <= viewport.size.height + 1f, "Match line bottom=$bottom must be inside viewport")
+            assertEquals(match, search.activeMatch)
+        }
+    }
+}
